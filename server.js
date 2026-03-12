@@ -31,6 +31,13 @@ app.get('/api/search', (req, res) => {
     res.json({ status: "success", target: apiCountry, terms: finalQuery });
 });
 
+
+// Healthcheck route for Railway
+app.get('/health', (req, res) => {
+    res.status(200).send('OK');
+});
+
 app.listen(PORT, '0.0.0.0', () => {
     console.log('Server is live on port ' + PORT);
 });
+
