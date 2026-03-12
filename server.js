@@ -1,27 +1,19 @@
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const app = express();
-app.set('trust proxy', 1);
 const PORT = process.env.PORT || 8080;
 
-// 1. Serve static files (CSS, Images, JS)
-app.use(express.static(__dirname));
+app.set('trust proxy', 1);
 
-// 2. Dashboard Route - The "Face"
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'career-os-v2.html'));
+    const files = fs.readdirSync(__dirname);
+    let html = '<h1>Railway File Discovery</h1><p><b>Current Dir:</b> ' + __dirname + '</p><ul>';
+    files.forEach(file => { html += '<li>' + file + '</li>'; });
+    html += '</ul><p>If you see your dashboard file in a subfolder, tell Gemini the folder name!</p>';
+    res.send(html);
 });
 
-// 3. Health Route - For Railway's Peace of Mind
 app.get('/health', (req, res) => res.status(200).send('OK'));
 
-// 4. Jobs API - The "Brain" (Matches the JSON you just saw)
-app.get('/api/jobs', (req, res) => {
-    // This allows your dashboard to pull that JSON data
-    res.sendFile(path.join(__dirname, 'server.js')); // Temporarily serving the JSON logic
-});
-
-app.listen(PORT, '0.0.0.0', () => {
-    console.log('Server is running on Port ' + PORT);
-});
-
+app.listen(PORT, '0.0.0.0', () => console.log('Discovery server live on ' + PORT));
