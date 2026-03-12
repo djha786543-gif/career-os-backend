@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const app = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 8080;
 
 // 1. Serve static files (CSS, Images, JS)
@@ -23,3 +24,4 @@ app.get('/api/jobs', (req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
     console.log('Server is running on Port ' + PORT);
 });
+
