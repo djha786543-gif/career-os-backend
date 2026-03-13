@@ -8,6 +8,11 @@
  *   Frontend style:  ?profile=dj&country=United States
  *   Backend style:   ?candidate=deobrat&region=US
  *
+ * POOJA DUAL-TRACK (fix v2):
+ *   When no ?track= param is supplied for Pooja, BOTH Industry and Academic
+ *   tracks are fetched in parallel and merged.  Each job is tagged with
+ *   category: 'INDUSTRY' | 'ACADEMIA' so the frontend tabs work correctly.
+ *
  * Returns jobs in the shape the frontend job cards expect:
  *   { status, jobs: [{ id, title, company, location, salary, snippet,
  *                      applyUrl, fitScore, workMode, isRemote, source,
@@ -28,10 +33,10 @@ const VALID_REGIONS = ['US', 'Europe', 'India'];
 
 // ─── Map frontend "profile" shortcodes → candidateId ─────────────────────────
 const PROFILE_MAP: Record<string, string> = {
-  dj:       'deobrat',
-  pj:       'pooja',
-  deobrat:  'deobrat',
-  pooja:    'pooja',
+  dj:      'deobrat',
+  pj:      'pooja',
+  deobrat: 'deobrat',
+  pooja:   'pooja',
 };
 
 // ─── Map frontend "country" display names → region codes ─────────────────────
@@ -42,8 +47,17 @@ const COUNTRY_TO_REGION: Record<string, string> = {
   'united kingdom': 'Europe',
   'uk':             'Europe',
   'europe':         'Europe',
+  'germany':        'Europe',
+  'netherlands':    'Europe',
+  'switzerland':    'Europe',
+  'sweden':         'Europe',
+  'denmark':        'Europe',
   'india':          'India',
   'in':             'India',
+  'canada':         'US',      // Adzuna CA → closest to US profile
+  'australia':      'US',      // Adzuna AU → closest to US profile
+  'singapore':      'India',   // Adzuna SG → closest to IN profile
+  'japan':          'US',      // Adzuna JP → closest to US profile
 };
 
 function resolveRegion(country?: string, region?: string): string | undefined {
@@ -56,13 +70,11 @@ function resolveRegion(country?: string, region?: string): string | undefined {
 }
 
 // ─── Transform internal Job → frontend-ready shape ───────────────────────────
-function toFrontendJob(job: Job & { fitScore?: number; matchScore?: number }) {
+function toFrontendJob(job: Job & { fitScore?: number; matchScore?: number; category?: string }) {
   const fit = job.fitScore ?? job.matchScore ?? 65;
 
-  // Work mode string
   const workMode = job.remote ? 'Remote' : job.hybrid ? 'Hybrid' : 'On-site';
 
-  // Salary display string
   let salary = '';
   if (job.salaryRange) {
     const { min, max, currency } = job.salaryRange;
@@ -73,38 +85,36 @@ function toFrontendJob(job: Job & { fitScore?: number; matchScore?: number }) {
     salary = min === max ? fmt(min) : `${fmt(min)}–${fmt(max)}`;
   }
 
-  // Snippet: first 200 chars of description
   const snippet = (job.description || '')
-    .replace(/<[^>]+>/g, '')   // strip any HTML
+    .replace(/<[^>]+>/g, '')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 220)
     + (job.description && job.description.length > 220 ? '…' : '');
 
-  // Fit reason (generic but informative)
   let fitReason = '';
-  if (fit >= 80) fitReason = 'Strong alignment with your experience, skills, and target role level.';
+  if (fit >= 80)      fitReason = 'Strong alignment with your experience, skills, and target role level.';
   else if (fit >= 65) fitReason = 'Good match on core skills — a few areas to address.';
   else if (fit >= 50) fitReason = 'Partial match — transferable skills apply but gaps exist.';
-  else fitReason = 'Low keyword overlap — consider only if expanding search scope.';
+  else                fitReason = 'Low keyword overlap — consider only if expanding search scope.';
 
   return {
-    id:          job.id,
-    title:       job.title,
-    company:     job.company,
-    location:    job.location,
-    salary:      salary || 'Market Rate',
+    id:         job.id,
+    title:      job.title,
+    company:    job.company,
+    location:   job.location,
+    salary:     salary || 'Market Rate',
     snippet,
-    applyUrl:    job.applyUrl,
-    fitScore:    Math.round(fit),
+    applyUrl:   job.applyUrl,
+    fitScore:   Math.round(fit),
     workMode,
-    isRemote:    job.remote,
-    source:      job.jobBoard || 'Adzuna',
-    postedDate:  job.postedDate || 'Recent',
-    keySkills:   (job.skills || []).slice(0, 6),
+    isRemote:   job.remote,
+    source:     job.jobBoard || 'Adzuna',
+    postedDate: job.postedDate || 'Recent',
+    keySkills:  (job.skills || []).slice(0, 6),
     fitReason,
-    category:    (job as any).category,   // present on Pooja jobs after classification
-    region:      job.region,
+    category:   job.category,   // 'INDUSTRY' | 'ACADEMIA' | undefined
+    region:     job.region,
   };
 }
 
@@ -114,8 +124,8 @@ router.get('/', async (req, res) => {
     const q = req.query as Record<string, string | undefined>;
 
     // Resolve candidateId (accept both ?profile= and ?candidate=)
-    const rawProfile    = q.profile || q.candidate || '';
-    const candidateId   = PROFILE_MAP[rawProfile.toLowerCase().trim()] || rawProfile;
+    const rawProfile  = q.profile || q.candidate || '';
+    const candidateId = PROFILE_MAP[rawProfile.toLowerCase().trim()] || rawProfile;
 
     const candidate = candidates.find(c => c.id === candidateId);
     if (!candidate) {
@@ -126,26 +136,13 @@ router.get('/', async (req, res) => {
       });
     }
 
-    // Resolve track
-    let resolvedTrack: Track | undefined;
-    if (candidate.id === 'pooja') {
-      const t = q.track;
-      resolvedTrack = t && VALID_TRACKS.includes(t as Track) ? (t as Track) : 'Industry';
-    }
-
-    // Resolve regions
+    // Resolve region(s)
     const resolvedRegion  = resolveRegion(q.country, q.region);
     const resolvedRegions = resolvedRegion
       ? [resolvedRegion]
       : (candidate.regions as string[]);
 
-    // Build candidate with track for scoring
-    const candidateWithTrack = resolvedTrack
-      ? { ...candidate, track: resolvedTrack }
-      : { ...candidate };
-
-    // Fetch, filter, score
-    const rawJobs = await ingestJobs(candidate.id, resolvedRegions, resolvedTrack);
+    // Common filters
     const filters: JobFilters = {
       remote:          q.remote,
       hybrid:          q.hybrid,
@@ -154,9 +151,59 @@ router.get('/', async (req, res) => {
       salaryMin:       q.salaryMin,
       salaryMax:       q.salaryMax,
     };
-    const scored = filterAndScoreJobs(rawJobs, candidateWithTrack as any, filters);
 
-    const jobs = scored.map(toFrontendJob);
+    // ── POOJA DUAL-TRACK: fetch Industry + Academic in parallel ───────────────
+    // When the frontend sends no ?track= param (normal PJ job search),
+    // we fetch both tracks so the Industry / Academia category tabs are populated.
+    if (candidate.id === 'pooja' && !q.track) {
+      const [industryRaw, academiaRaw] = await Promise.all([
+        ingestJobs(candidate.id, resolvedRegions, 'Industry'),
+        ingestJobs(candidate.id, resolvedRegions, 'Academic'),
+      ]);
+
+      // Score each set with its own track so the track-aware filter runs correctly
+      const industryScored = filterAndScoreJobs(
+        industryRaw,
+        { ...candidate, track: 'Industry' as Track } as any,
+        filters,
+      ).map(j => ({ ...j, category: 'INDUSTRY' }));
+
+      const academiaScored = filterAndScoreJobs(
+        academiaRaw,
+        { ...candidate, track: 'Academic' as Track } as any,
+        filters,
+      ).map(j => ({ ...j, category: 'ACADEMIA' }));
+
+      // Merge and sort by fitScore descending
+      const allScored = [...industryScored, ...academiaScored]
+        .sort((a, b) => (b.fitScore ?? 0) - (a.fitScore ?? 0));
+
+      return res.json({
+        status:       'success',
+        candidate:    candidate.name,
+        candidateId:  candidate.id,
+        track:        null,
+        regions:      resolvedRegions,
+        totalResults: allScored.length,
+        source:       'live',
+        jobs:         allScored.map(toFrontendJob),
+      });
+    }
+
+    // ── SINGLE TRACK: Pooja with explicit ?track=, or DJ ─────────────────────
+    let resolvedTrack: Track | undefined;
+    if (candidate.id === 'pooja') {
+      const t = q.track;
+      resolvedTrack = t && VALID_TRACKS.includes(t as Track) ? (t as Track) : 'Industry';
+    }
+
+    const candidateWithTrack = resolvedTrack
+      ? { ...candidate, track: resolvedTrack }
+      : { ...candidate };
+
+    const rawJobs = await ingestJobs(candidate.id, resolvedRegions, resolvedTrack);
+    const scored  = filterAndScoreJobs(rawJobs, candidateWithTrack as any, filters);
+    const jobs    = scored.map(toFrontendJob);
 
     return res.json({
       status:       'success',
@@ -165,7 +212,7 @@ router.get('/', async (req, res) => {
       track:        resolvedTrack ?? null,
       regions:      resolvedRegions,
       totalResults: jobs.length,
-      source:       jobs.length > 0 ? 'live' : 'mock',
+      source:       'live',          // ← fix: was `jobs.length > 0 ? 'live' : 'mock'`
       jobs,
     });
 
