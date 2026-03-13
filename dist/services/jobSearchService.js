@@ -9,10 +9,29 @@ function toBool(v) { if (v === undefined)
     return v; return v === 'true'; }
 function toNum(v) { if (v === undefined)
     return undefined; const n = Number(v); return isNaN(n) ? undefined : n; }
-// Deobrat: 10yr Manager — hard-block intern/junior/entry
-const DJ_BLOCK = ['intern', 'internship', 'trainee', 'apprentice', 'entry level', 'entry-level', 'junior', 'jr.', 'graduate program', 'new grad', 'co-op', 'coop', 'assistant auditor', 'audit clerk', 'audit assistant', 'staff accountant', 'bookkeeper'];
-// Pooja: postdoc researcher — hard-block undergrad/tech/student roles
-const PJ_BLOCK = ['intern', 'internship', 'trainee', 'undergraduate', 'undergrad', 'lab aide', 'lab assistant', 'lab technician', 'research technician', 'research technologist', 'laboratory technician', 'laboratory assistant', 'junior researcher', 'junior scientist', 'research associate i', 'student researcher', 'phd student', 'graduate student', 'visiting student', 'co-op', 'coop'];
+// Word-boundary regex — 'intern' must not match 'internal'
+function makeBlockRegex(keywords) {
+    const escaped = keywords.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    return new RegExp('(?<![a-z])(' + escaped.join('|') + ')(?![a-z])', 'i');
+}
+// Deobrat: 10yr Manager — block intern/junior/entry level (word-boundary safe)
+const DJ_BLOCK_REGEX = makeBlockRegex([
+    'intern', 'internship', 'trainee', 'apprentice',
+    'entry level', 'entry-level', 'junior', 'jr\\.',
+    'graduate program', 'new grad', 'co-op', 'coop',
+    'assistant auditor', 'audit clerk', 'audit assistant',
+    'staff accountant', 'bookkeeper',
+]);
+// Pooja: postdoc researcher — block undergrad/tech/student roles
+const PJ_BLOCK_REGEX = makeBlockRegex([
+    'intern', 'internship', 'trainee', 'undergraduate', 'undergrad',
+    'lab aide', 'lab assistant', 'lab technician',
+    'research technician', 'research technologist',
+    'laboratory technician', 'laboratory assistant',
+    'junior researcher', 'junior scientist',
+    'student researcher', 'phd student', 'graduate student',
+    'visiting student', 'co-op', 'coop',
+]);
 const MIN_FIT = 40;
 function filterAndScoreJobs(jobs, candidate, filters) {
     let scoringProfile = candidate;
@@ -26,11 +45,16 @@ function filterAndScoreJobs(jobs, candidate, filters) {
     const wantSalMin = toNum(filters.salaryMin), wantSalMax = toNum(filters.salaryMax);
     const isDJ = candidate.id === 'deobrat', isPJ = candidate.id === 'pooja';
     const filtered = jobs.filter(job => {
-        const t = (job.title || '').toLowerCase();
-        if (isDJ && DJ_BLOCK.some(k => t.includes(k)))
+        const title = job.title || '';
+        // Word-boundary safe blocking — 'intern' won't match 'internal'
+        if (isDJ && DJ_BLOCK_REGEX.test(title)) {
+            console.log(`[Filter] Blocking DJ title: "${title}"`);
             return false;
-        if (isPJ && PJ_BLOCK.some(k => t.includes(k)))
+        }
+        if (isPJ && PJ_BLOCK_REGEX.test(title)) {
+            console.log(`[Filter] Blocking PJ title: "${title}"`);
             return false;
+        }
         if (isPJ && candidate.track && (0, classifyAcademicIndustry_1.classifyAcademicIndustry)(job) !== candidate.track)
             return false;
         if (wantRemote === true && !job.remote)
