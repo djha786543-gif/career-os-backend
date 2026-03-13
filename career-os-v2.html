@@ -859,11 +859,11 @@ a.key-link:hover{text-decoration:underline}
 // ═══════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════
 // BACKEND CONFIG — change this to your deployed backend URL
-// Local dev:  http://localhost:3001
+// Local dev:  https://career-os-backend-production.up.railway.app
 // Railway:    https://your-app.up.railway.app
 // Render:     https://your-app.onrender.com
 // ═══════════════════════════════════════════════════════════════
-const BACKEND_URL = (window.CAREER_OS_BACKEND || 'http://localhost:3001').replace(/\/$/, '');
+const BACKEND_URL = (window.CAREER_OS_BACKEND || 'https://career-os-backend-production.up.railway.app').replace(/\/$/, '');
 
 const PROFILES = {
   dj: {
@@ -1035,7 +1035,7 @@ const PROFILES = {
     ]
   },
   pj: {
-    name: "Dr. Pooja Choubey", title: "Postdoctoral Researcher", initials: "PJ",
+    name: "Pooja Jha", title: "Postdoctoral Researcher", initials: "PJ",
     domain: "Cardiovascular Research, Molecular Biology, Genomics, Cell Biology",
     color: "#ec4899", colorDim: "rgba(236,72,153,.15)", colorBorder: "rgba(236,72,153,.35)",
     currentRole: "Postdoctoral Researcher — Cardiovascular Biology Lab",
@@ -1399,20 +1399,6 @@ function escHtml(t) { return t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replac
 // ═══════════════════════════════════════════
 // PROFILE SWITCH
 // ═══════════════════════════════════════════
-function refreshAll() {
-  // Re-render every section with the current profile
-  const view = document.querySelector('.view.active');
-  const name = view ? view.id.replace('view-', '') : 'heatmap';
-  renderHeatmap();
-  renderVault();
-  renderTracks();
-  renderTrends();
-  renderPrepVault();
-  renderJobHub();
-  renderTracker();
-  renderCareerAI();
-}
-
 function switchProfile(id) {
   currentProfile = id;
   document.querySelectorAll('.psw').forEach(b => b.classList.remove('active'));

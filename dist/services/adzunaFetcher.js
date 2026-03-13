@@ -4,14 +4,17 @@
  * ─────────────────────────────────────────────────────────────────────────────
  * Fetches real-time job listings from the Adzuna API.
  *
- * Isolation contract:
- *   - This module is stateless. All isolation is enforced by the caller
- *     (jobIngestionService) via separate cache keys per candidate+track+region.
- *   - This module never touches candidate state or Pooja/Deobrat business logic.
+ * Key fixes (v2):
+ *   - title_only=1 added to all queries: only matches jobs where search terms
+ *     appear in the TITLE, eliminating intern/junior roles that merely mention
+ *     SOX/ITGC in their description.
+ *   - Company-level deduplication: max 1 result per company per query batch,
+ *     preventing the same job posted at 50 billboard/branch locations from
+ *     flooding results.
  *
  * Environment variables required:
- *   ADZUNA_APP_ID   — from developer.adzuna.com
- *   ADZUNA_APP_KEY  — from developer.adzuna.com
+ *   ADZUNA_APP_ID   – from developer.adzuna.com
+ *   ADZUNA_APP_KEY  – from developer.adzuna.com
  * ─────────────────────────────────────────────────────────────────────────────
  */
 var __importDefault = (this && this.__importDefault) || function (mod) {
@@ -25,19 +28,16 @@ const ADZUNA_BASE = 'https://api.adzuna.com/v1/api/jobs';
 const RESULTS_PER_PAGE = 50;
 const REQUEST_TIMEOUT_MS = 8000;
 const RETRY_DELAY_MS = 1200;
-// ─── Currency by country ─────────────────────────────────────────────────────
-const COUNTRY_CURRENCY = {
-    us: 'USD',
-    gb: 'GBP',
-    in: 'INR',
-};
-// ─── Region label for the Job model ─────────────────────────────────────────
-const COUNTRY_REGION = {
-    us: 'US',
-    gb: 'Europe',
-    in: 'India',
-};
-// ─── Normalise one Adzuna result into our Job interface ──────────────────────
+// ─── Currency / region maps ───────────────────────────────────────────────────
+const COUNTRY_CURRENCY = { us: 'USD', gb: 'GBP', in: 'INR' };
+const COUNTRY_REGION = { us: 'US', gb: 'Europe', in: 'India' };
+// ─── Seniority keywords that disqualify a job for senior candidates ───────────
+const JUNIOR_TITLE_KEYWORDS = [
+    'intern', 'internship', 'trainee', 'apprentice',
+    'entry level', 'entry-level', 'junior', 'jr.',
+    'graduate program', 'new grad', 'co-op', 'coop',
+];
+// ─── Normalise one Adzuna result → our Job model ──────────────────────────────
 function normalizeAdzunaJob(raw, country) {
     const title = raw.title || '';
     const description = raw.description || '';
@@ -47,7 +47,6 @@ function normalizeAdzunaJob(raw, country) {
     const region = COUNTRY_REGION[country];
     const { remote, hybrid, visaSponsorship } = (0, inferJobFlags_1.inferJobFlags)(title, description);
     const skills = (0, inferJobFlags_1.extractSkillsFromText)(title, description);
-    // Build salary range only when both values are non-trivially present
     let salaryRange;
     if (raw.salary_min && raw.salary_max && raw.salary_min > 0) {
         salaryRange = { min: raw.salary_min, max: raw.salary_max, currency };
@@ -55,9 +54,9 @@ function normalizeAdzunaJob(raw, country) {
     else if (raw.salary_min && raw.salary_min > 0) {
         salaryRange = { min: raw.salary_min, max: raw.salary_min, currency };
     }
-    // Experience level — inferred from title keywords
-    let experienceLevel = '';
     const titleLower = title.toLowerCase();
+    // Experience level inferred from title
+    let experienceLevel = '';
     if (['director', 'vp ', 'vice president', 'chief', 'head of'].some(k => titleLower.includes(k))) {
         experienceLevel = 'Director';
     }
@@ -67,17 +66,19 @@ function normalizeAdzunaJob(raw, country) {
     else if (['manager', 'mgr'].some(k => titleLower.includes(k))) {
         experienceLevel = 'Senior';
     }
-    else if (['postdoc', 'postdoctoral', 'associate', 'junior', 'ii', 'iii'].some(k => titleLower.includes(k))) {
-        experienceLevel = titleLower.includes('postdoc') ? 'Postdoctoral' : 'Associate';
+    else if (['postdoc', 'postdoctoral'].some(k => titleLower.includes(k))) {
+        experienceLevel = 'Postdoctoral';
+    }
+    else if (['associate', 'junior', 'ii', 'iii', 'intern', 'trainee', 'entry'].some(k => titleLower.includes(k))) {
+        experienceLevel = 'Associate';
     }
     else {
         experienceLevel = 'Mid';
     }
-    const employmentType = raw.contract_time === 'full_time' ? 'Full-time'
-        : raw.contract_time === 'part_time' ? 'Part-time'
-            : raw.contract_type === 'permanent' ? 'Full-time'
-                : raw.contract_type === 'contract' ? 'Contract'
-                    : 'Full-time';
+    const employmentType = raw.contract_time === 'full_time' ? 'Full-time' :
+        raw.contract_time === 'part_time' ? 'Part-time' :
+            raw.contract_type === 'permanent' ? 'Full-time' :
+                raw.contract_type === 'contract' ? 'Contract' : 'Full-time';
     return {
         id: `adzuna-${raw.id}`,
         title,
@@ -102,14 +103,14 @@ function normalizeAdzunaJob(raw, country) {
 async function fetchPage(country, query, page, categoryTag) {
     const appId = process.env.ADZUNA_APP_ID;
     const appKey = process.env.ADZUNA_APP_KEY;
-    if (!appId || !appKey) {
+    if (!appId || !appKey)
         throw new Error('ADZUNA_APP_ID or ADZUNA_APP_KEY not set');
-    }
     const params = {
         app_id: appId,
         app_key: appKey,
         results_per_page: RESULTS_PER_PAGE,
         what: query,
+        title_only: 1, // ← KEY FIX: only match terms in job title
         'content-type': 'application/json',
     };
     if (categoryTag)
@@ -127,7 +128,6 @@ async function fetchPage(country, query, page, categoryTag) {
         catch (err) {
             const axErr = err;
             const status = axErr.response?.status;
-            // Don't retry on auth or client errors
             if (status && status >= 400 && status < 500) {
                 console.error(`[Adzuna] ${status} error for query "${query}" (${country}):`, axErr.message);
                 return [];
@@ -136,28 +136,42 @@ async function fetchPage(country, query, page, categoryTag) {
                 console.error(`[Adzuna] Failed after 2 attempts for query "${query}" (${country}):`, axErr.message);
                 return [];
             }
-            // Wait before retry
             await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
         }
     }
     return [];
 }
-// ─── Public API: fetch all jobs for a given country + search profile ─────────
+// ─── Public API ───────────────────────────────────────────────────────────────
 async function fetchAdzunaJobs(country, profile) {
     const allRaw = [];
     const seenIds = new Set();
+    const seenCompanies = new Set(); // ← company-level dedup
     for (const query of profile.queries) {
         for (let page = 1; page <= profile.pages; page++) {
             const results = await fetchPage(country, query, page, profile.categoryTag);
             for (const r of results) {
-                if (!seenIds.has(r.id)) {
-                    seenIds.add(r.id);
-                    allRaw.push(r);
+                // Skip if we've already seen this exact listing
+                if (seenIds.has(r.id))
+                    continue;
+                // ── Company dedup: skip if we already have a job from this company ──
+                const companyKey = (r.company?.display_name || '').toLowerCase().trim();
+                if (companyKey && seenCompanies.has(companyKey))
+                    continue;
+                // ── Hard-block junior/intern titles ──────────────────────────────────
+                const titleLower = (r.title || '').toLowerCase();
+                if (JUNIOR_TITLE_KEYWORDS.some(kw => titleLower.includes(kw))) {
+                    console.log(`[Adzuna] Skipping junior/intern title: "${r.title}"`);
+                    continue;
                 }
+                seenIds.add(r.id);
+                if (companyKey)
+                    seenCompanies.add(companyKey);
+                allRaw.push(r);
             }
         }
-        // Brief pause between queries to be polite to the API
+        // Brief pause between queries
         await new Promise(r => setTimeout(r, 250));
     }
+    console.log(`[Adzuna] ${country}: fetched ${allRaw.length} unique jobs across ${profile.queries.length} queries`);
     return allRaw.map(r => normalizeAdzunaJob(r, country));
 }
