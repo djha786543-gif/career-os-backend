@@ -110,7 +110,7 @@ async function fetchPage(country, query, page, categoryTag) {
         app_key: appKey,
         results_per_page: RESULTS_PER_PAGE,
         what: query,
-        title_only: 1, // ← KEY FIX: only match terms in job title
+        
         'content-type': 'application/json',
     };
     if (categoryTag)

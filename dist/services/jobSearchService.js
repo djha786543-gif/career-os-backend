@@ -32,7 +32,7 @@ const PJ_BLOCK_REGEX = makeBlockRegex([
     'student researcher', 'phd student', 'graduate student',
     'visiting student', 'co-op', 'coop',
 ]);
-const MIN_FIT = 40;
+const MIN_FIT = 20;
 function filterAndScoreJobs(jobs, candidate, filters) {
     let scoringProfile = candidate;
     if (candidate.id === 'pooja' && candidate.track) {
