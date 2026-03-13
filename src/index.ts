@@ -1,3 +1,5 @@
+import path from 'path';
+app.use(express.static(path.join(__dirname, '../public')));
 import express from 'express';
 import dotenv from 'dotenv';
 import alertsRouter from './api/alerts';
@@ -17,6 +19,11 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json());
+
+// ── Root route ────────────────────────────────────────────────────────────
+app.get('/', (req, res) => {
+  res.send('Career OS Backend is running. Use /api/jobs or /api/alerts for API endpoints.');
+});
 
 // ── Routes ────────────────────────────────────────────────────────────────
 app.use('/api/jobs', jobsRouter);
