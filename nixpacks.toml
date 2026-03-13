@@ -5,7 +5,7 @@ cmds = ["npm install"]
 [phases.build]
 cmds = ["npm run build"]
 [phases.setup]
-nixPkgs = ["chromium"]
+nixPkgs = ["chromium", "nodejs"]
 
 [start]
 cmd = "node dist/index.js"
