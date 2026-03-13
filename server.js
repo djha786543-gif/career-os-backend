@@ -13,37 +13,41 @@ app.get('/health', (req, res) => res.status(200).send('OK'));
 app.get('/api/jobs', async (req, res) => {
     const appId = process.env.ADZUNA_APP_ID;
     const appKey = process.env.ADZUNA_APP_KEY;
+    const country = req.query.country ? req.query.country.toLowerCase() : 'us';
+    const what = req.query.what || 'audit';
+    const page = req.query.page || 1;
+
+    if (!appId || !appKey) {
+        return res.status(500).json({ status: 'error', message: 'Missing Adzuna credentials' });
+    }
 
     try {
-        // Simplified URL with NO special characters or complex encoding
-        const url = `https://api.adzuna.com/v1/api/jobs/us/search/1`;
-        
+        const url = `https://api.adzuna.com/v1/api/jobs/${country}/search/${page}`;
         const response = await axios.get(url, {
             params: {
                 app_id: appId,
                 app_key: appKey,
                 results_per_page: 5,
-                what: "audit", // Bare minimum keyword to test
+                what,
                 content_type: "application/json"
             }
         });
 
-        const jobs = response.data.results.map(job => ({
+        const jobs = (response.data.results || []).map(job => ({
             id: job.id,
             title: job.title,
-            company: job.company.display_name,
-            location: job.location.display_name,
+            company: job.company ? job.company.display_name : "N/A",
+            location: job.location ? job.location.display_name : "N/A",
             salary: job.salary_min ? `$${Math.round(job.salary_min/1000)}k` : "N/A",
-            snippet: job.description.substring(0, 150) + "...",
+            snippet: job.description ? job.description.substring(0, 150) + "..." : "",
             applyUrl: job.redirect_url,
             fitScore: 92
         }));
 
         res.json({ status: 'success', jobs: jobs });
     } catch (error) {
-        // This will print the EXACT error from Adzuna's server to your Railway logs
         console.error('[Final Audit Error]:', error.response ? error.response.data : error.message);
-        res.status(500).json({ status: 'error', message: 'Adzuna rejection' });
+        res.status(500).json({ status: 'error', message: 'Adzuna rejection', details: error.response ? error.response.data : error.message });
     }
 });
 
