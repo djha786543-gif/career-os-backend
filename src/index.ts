@@ -1,31 +1,15 @@
-/**
- * index.ts — Career-OS Backend Entry Point
- * ─────────────────────────────────────────────────────────────────────────────
- * Routes:
- *   GET  /health                → liveness check
- *   GET  /api/candidates        → list of supported candidate profiles
- *   GET  /api/jobs              → search jobs (see api/jobs.ts for params)
- *   POST /api/jobs/refresh      → force cache invalidation
- *   POST /api/alerts            → register a job alert
- *   GET  /api/alerts/check      → list registered alerts
- *
- * All other portal pages and functions are unaffected by job-search changes.
- * ─────────────────────────────────────────────────────────────────────────────
- */
-
-import express, { Request, Response, NextFunction } from 'express';
+import express from 'express';
 import dotenv from 'dotenv';
-import jobsRouter    from './api/jobs';
-import alertsRouter  from './api/alerts';
-import { candidates } from './models/CandidatesData';
+import alertsRouter from './api/alerts';
+import jobsRouter from './api/jobs';
 
 dotenv.config();
 
 const app = express();
 
-// ─── CORS — allow all origins (restrict in production if needed) ──────────────
-app.use((req: Request, res: Response, next: NextFunction) => {
-  res.setHeader('Access-Control-Allow-Origin',  '*');
+// ── CORS ──────────────────────────────────────────────────────────────────
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(204).end();
@@ -34,46 +18,78 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
 app.use(express.json());
 
-// ─── Routes ───────────────────────────────────────────────────────────────────
-app.use('/api/jobs',    jobsRouter);
-app.use('/api/alerts',  alertsRouter);
+// ── Routes ────────────────────────────────────────────────────────────────
+app.use('/api/jobs', jobsRouter);
+app.use('/api/alerts', alertsRouter);
 
-// Candidates list — lets the frontend know which profiles are available
-app.get('/api/candidates', (_req: Request, res: Response) => {
-  res.json(candidates.map(c => ({
-    id:             c.id,
-    name:           c.name,
-    specialization: c.specialization,
-    regions:        c.regions,
-  })));
+// ── Claude proxy ──────────────────────────────────────────────────────────
+// Keeps the Anthropic key server-side; frontend sends messages/system/max_tokens
+app.post('/api/claude', async (req, res) => {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured on server' });
+  }
+
+  const { messages, system, max_tokens = 1000, model = 'claude-sonnet-4-20250514' } = req.body;
+
+  if (!messages || !Array.isArray(messages)) {
+    return res.status(400).json({ error: 'messages array is required' });
+  }
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens,
+        ...(system ? { system } : {}),
+        messages,
+      }),
+    });
+
+    const data = await response.json() as any;
+
+    if (!response.ok) {
+      return res.status(response.status).json({
+        error: data.error?.message || 'Anthropic API error',
+        detail: data
+      });
+    }
+
+    return res.json(data);
+  } catch (err: any) {
+    console.error('Claude proxy error:', err);
+    return res.status(500).json({ error: 'Failed to reach Anthropic API', detail: err.message });
+  }
 });
 
-// Liveness + readiness check
-app.get('/health', (_req: Request, res: Response) => {
+// ── Health ────────────────────────────────────────────────────────────────
+app.get('/health', (_req, res) => {
   res.json({
-    status:    'ok',
+    status: 'ok',
     timestamp: new Date().toISOString(),
-    adzuna:    !!(process.env.ADZUNA_APP_ID && process.env.ADZUNA_APP_KEY),
+    adzuna: !!(process.env.ADZUNA_APP_ID && process.env.ADZUNA_APP_KEY),
+    claude: !!process.env.ANTHROPIC_API_KEY
   });
 });
 
-// ─── 404 handler ─────────────────────────────────────────────────────────────
-app.use((_req: Request, res: Response) => {
-  res.status(404).json({ error: 'Not found' });
+// ── Candidates ────────────────────────────────────────────────────────────
+app.get('/api/candidates', (_req, res) => {
+  res.json([
+    { id: 'deobrat', name: 'Deobrat Jha',       role: 'IT Audit Manager' },
+    { id: 'pooja',   name: 'Dr. Pooja Choubey', role: 'Research Scientist' }
+  ]);
 });
 
-// ─── Global error handler ─────────────────────────────────────────────────────
-app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-  console.error('[Server] Unhandled error:', err.message);
-  res.status(500).json({ error: 'Internal server error' });
-});
-
-// ─── Start ────────────────────────────────────────────────────────────────────
+// ── Start ─────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
-  const adzunaStatus = (process.env.ADZUNA_APP_ID && process.env.ADZUNA_APP_KEY)
-    ? '✅ Adzuna LIVE'
-    : '⚠️  Adzuna not configured — mock fallback active';
   console.log(`✅  Career-OS backend running on port ${PORT}`);
-  console.log(`    ${adzunaStatus}`);
+  console.log(`   Claude proxy: ${process.env.ANTHROPIC_API_KEY ? '✅ ready' : '❌ ANTHROPIC_API_KEY missing'}`);
+  console.log(`   Adzuna:       ${process.env.ADZUNA_APP_ID ? '✅ ready' : '❌ ADZUNA keys missing'}`);
 });

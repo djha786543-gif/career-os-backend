@@ -847,7 +847,7 @@ a.key-link:hover{text-decoration:underline}
     <button class="btn btn-outline btn-sm" onclick="document.getElementById('apiKeyBanner').classList.add('hidden')">✕</button>
   </div>
   <div id="apiKeyNote" style="width:100%;font-size:10px;color:var(--text-muted)">
-    Start backend: <strong style="color:var(--accent-cyan);font-family:monospace">cd career-os-backend &amp;&amp; npm install &amp;&amp; npm start</strong>
+    Backend: <strong style="color:var(--accent-cyan);font-family:monospace">career-os-backend-production.up.railway.app</strong>
     &nbsp;·&nbsp; Deploy free: <a class="key-link" href="https://railway.app" target="_blank">Railway</a> or <a class="key-link" href="https://render.com" target="_blank">Render</a>
     &nbsp;·&nbsp; <span id="backendUrlDisplay" style="font-family:monospace;color:var(--accent-indigo)"></span>
   </div>
@@ -863,7 +863,7 @@ a.key-link:hover{text-decoration:underline}
 // Railway:    https://your-app.up.railway.app
 // Render:     https://your-app.onrender.com
 // ═══════════════════════════════════════════════════════════════
-const BACKEND_URL = (window.CAREER_OS_BACKEND || 'http://localhost:3001').replace(/\/$/, '');
+const BACKEND_URL = (window.CAREER_OS_BACKEND || 'https://career-os-backend-production.up.railway.app').replace(/\/$/, '');
 
 const PROFILES = {
   dj: {
@@ -2595,7 +2595,10 @@ async function searchJobs(){
     ?`Searching Adzuna for real positions in ${country}…`
     :'Searching Adzuna for real remote IT Audit jobs…';
   try{
-    const data = await backendGet('/api/jobs', { profile: currentProfile, country, page: state.page });
+    const candidateId = isPJ ? 'pooja' : 'deobrat';
+    const countryToRegion = {'United States':'US','United Kingdom':'GB','Canada':'CA','Germany':'DE','Australia':'AU','Netherlands':'NL','Switzerland':'CH','Sweden':'SE','Denmark':'DK','Singapore':'SG','Japan':'JP'};
+    const region = countryToRegion[country] || 'US';
+    const data = await backendGet('/api/jobs', { candidate: candidateId, region, page: state.page });
     if(!data.jobs||data.jobs.length===0){
       throw new Error(data.message||'No results found — try a different country or search again');
     }
@@ -2605,7 +2608,7 @@ async function searchJobs(){
     populateCaiJobSelect();
   }catch(e){
     let msg=e.message;
-    if(msg.includes('Cannot reach backend')) msg='⚠ Backend not running — start it: cd career-os-backend && npm start';
+    if(msg.includes('Cannot reach backend')) msg='⚠ Backend offline — check Railway deployment at career-os-backend-production.up.railway.app';
     document.getElementById('jh-error').textContent=msg;
     document.getElementById('jh-error').style.display='block';
     showToast('⚠ '+msg.slice(0,70));
