@@ -11,9 +11,9 @@ const jobs_1 = __importDefault(require("./api/jobs"));
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const PORT = Number(process.env.PORT) || 8080;
-app.use((0, cors_1.default)());
+app.use((0, cors_1.default)({ origin: '*', methods: ['GET','POST','OPTIONS'], allowedHeaders: ['Content-Type','Authorization'] }));
+app.options('*', (0, cors_1.default)());
 app.use(express_1.default.json());
-app.use(express_1.default.static(path_1.default.join(__dirname, '../public')));
 app.get('/health', (req, res) => {
     res.status(200).json({
         status: 'ok',
@@ -23,7 +23,7 @@ app.get('/health', (req, res) => {
     });
 });
 app.get('/', (req, res) => {
-    res.send('<h1>Career OS API</h1><p>Backend is Live</p>');
+    res.json({ status: 'ok', message: 'Career OS API is live' });
 });
 app.use('/api/jobs', jobs_1.default);
 app.post('/api/claude', async (req, res) => {
@@ -47,15 +47,6 @@ app.post('/api/claude', async (req, res) => {
         res.json(data);
     } catch (err) {
         res.status(500).json({ error: err.message });
-    }
-});
-app.get('*', (req, res) => {
-    const indexPath = path_1.default.join(__dirname, '../public/index.html');
-    const fs = require('fs');
-    if (fs.existsSync(indexPath)) {
-        res.sendFile(indexPath);
-    } else {
-        res.status(404).json({ error: 'Not found' });
     }
 });
 app.listen(PORT, '0.0.0.0', () => {
