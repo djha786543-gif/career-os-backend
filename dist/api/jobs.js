@@ -1,12 +1,9 @@
 "use strict";
 /**
- * dist/api/jobs.js  ← compiled from src/api/jobs.ts (v2 fix)
- *
- * Changes vs original:
- *   1. Pooja dual-track: when no ?track= param, fetches Industry + Academic
- *      in parallel and merges results. Each job gets category: 'INDUSTRY' | 'ACADEMIA'.
- *   2. source field: always 'live' (removed stale 'mock' fallback label).
- *   3. Extended COUNTRY_TO_REGION map for all 11 frontend country options.
+ * dist/api/jobs.js  ← PATCH v2: compiled from src/api/jobs.ts
+ * - Dual-track fix: Pooja gets both Industry & Academic jobs in parallel if no ?track= param
+ * - source field: always 'live' (never 'mock' if 0 results)
+ * - COUNTRY_TO_REGION: covers all frontend options
  */
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
@@ -101,7 +98,6 @@ function toFrontendJob(job) {
     };
 }
 
-// ─── GET /api/jobs ────────────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
     try {
         const q = req.query;
@@ -115,12 +111,10 @@ router.get('/', async (req, res) => {
                 example: '/api/jobs?candidate=deobrat&region=US  OR  /api/jobs?profile=dj&country=United%20States',
             });
         }
-
         const resolvedRegion  = resolveRegion(q.country, q.region);
         const resolvedRegions = resolvedRegion
             ? [resolvedRegion]
             : candidate.regions;
-
         const filters = {
             remote:          q.remote,
             hybrid:          q.hybrid,
@@ -129,29 +123,24 @@ router.get('/', async (req, res) => {
             salaryMin:       q.salaryMin,
             salaryMax:       q.salaryMax,
         };
-
-        // ── POOJA DUAL-TRACK: Industry + Academic in parallel ─────────────────
+        // Dual-track: Industry + Academic in parallel
         if (candidate.id === 'pooja' && !q.track) {
             const [industryRaw, academiaRaw] = await Promise.all([
                 jobIngestionService_1.ingestJobs(candidate.id, resolvedRegions, 'Industry'),
                 jobIngestionService_1.ingestJobs(candidate.id, resolvedRegions, 'Academic'),
             ]);
-
             const industryScored = jobSearchService_1.filterAndScoreJobs(
                 industryRaw,
                 Object.assign({}, candidate, { track: 'Industry' }),
                 filters
             ).map(j => Object.assign({}, j, { category: 'INDUSTRY' }));
-
             const academiaScored = jobSearchService_1.filterAndScoreJobs(
                 academiaRaw,
                 Object.assign({}, candidate, { track: 'Academic' }),
                 filters
             ).map(j => Object.assign({}, j, { category: 'ACADEMIA' }));
-
             const allScored = [...industryScored, ...academiaScored]
                 .sort((a, b) => (b.fitScore != null ? b.fitScore : 0) - (a.fitScore != null ? a.fitScore : 0));
-
             return res.json({
                 status:       'success',
                 candidate:    candidate.name,
@@ -163,22 +152,18 @@ router.get('/', async (req, res) => {
                 jobs:         allScored.map(toFrontendJob),
             });
         }
-
-        // ── SINGLE TRACK: Pooja with explicit ?track=, or DJ ─────────────────
+        // Single track: Pooja with ?track=, or DJ
         let resolvedTrack;
         if (candidate.id === 'pooja') {
             const t = q.track;
             resolvedTrack = (t && VALID_TRACKS.includes(t)) ? t : 'Industry';
         }
-
         const candidateWithTrack = resolvedTrack
             ? Object.assign({}, candidate, { track: resolvedTrack })
             : Object.assign({}, candidate);
-
         const rawJobs = await jobIngestionService_1.ingestJobs(candidate.id, resolvedRegions, resolvedTrack);
         const scored  = jobSearchService_1.filterAndScoreJobs(rawJobs, candidateWithTrack, filters);
         const jobs    = scored.map(toFrontendJob);
-
         return res.json({
             status:       'success',
             candidate:    candidate.name,
@@ -189,7 +174,6 @@ router.get('/', async (req, res) => {
             source:       'live',
             jobs,
         });
-
     } catch (err) {
         const message = err instanceof Error ? err.message : 'Unknown error';
         console.error('[/api/jobs] Error:', message);
@@ -197,7 +181,6 @@ router.get('/', async (req, res) => {
     }
 });
 
-// ─── POST /api/jobs/refresh ───────────────────────────────────────────────────
 router.post('/refresh', (req, res) => {
     const { candidate: candidateId, track } = req.body;
     if (!candidateId || !['deobrat', 'pooja'].includes(candidateId)) {
@@ -208,7 +191,6 @@ router.post('/refresh', (req, res) => {
         status:    'cache_invalidated',
         candidate: candidateId,
         track:     track != null ? track : 'all',
-        message:   'Next GET /api/jobs will fetch fresh results from Adzuna.',
     });
 });
 
