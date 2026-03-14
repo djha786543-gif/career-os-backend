@@ -16,7 +16,7 @@ const pool = new Pool({
 pool.query('SELECT NOW()', (err, res) => {
     if (err) {
         console.error('❌ DB Connection Error:', err.message);
-        console.log('TIP: Check if DATABASE_PRIVATE_URL is set in Railway Variables.');
+        console.log('TIP: Ensure DATABASE_PRIVATE_URL is set in Railway Variables.');
     } else {
         console.log('🐘 PostgreSQL connected successfully via Railway internal network');
     }
