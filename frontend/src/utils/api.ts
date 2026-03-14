@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const BASE = (process.env.NEXT_PUBLIC_API_URL || 'https://career-os-backend-production.up.railway.app').replace(/\/$/, '');
+export const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'https://career-os-portal-production.up.railway.app').replace(/\/$/, '');
+const BASE = API_BASE;
 
 // ── Job Hub ───────────────────────────────────────────────────────────────────
 export interface FrontendJob {

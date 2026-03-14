@@ -13,7 +13,11 @@
       "Bash(railway:*)",
       "Bash(\"C:\\\\Program Files\\\\PostgreSQL\\\\17\\\\bin\\\\psql\" \"postgresql://postgres:RZENXndmOMxgMZxlaKtIwzosuAIsartk@caboose.proxy.rlwy.net:29794/railway\" -f \"C:\\\\Users\\\\DJ\\\\Desktop\\\\career\\\\files \\(33\\)\\\\career-os-backend\\\\scripts\\\\railway_schema.sql\" 2>&1)",
       "Bash(\"C:\\\\Program Files\\\\PostgreSQL\\\\17\\\\bin\\\\psql\" \"postgresql://postgres:RZENXndmOMxgMZxlaKtIwzosuAIsartk@caboose.proxy.rlwy.net:29794/railway\" -f \"C:\\\\Users\\\\DJ\\\\Desktop\\\\career\\\\files \\(33\\)\\\\career-os-backend\\\\scripts\\\\patch_columns.sql\" 2>&1)",
-      "Bash(\"C:\\\\Program Files\\\\PostgreSQL\\\\17\\\\bin\\\\psql\" \"postgresql://postgres:RZENXndmOMxgMZxlaKtIwzosuAIsartk@caboose.proxy.rlwy.net:29794/railway\" -c \"SELECT profile_id, stage, title, company FROM kanban_cards ORDER BY profile_id, id;\" 2>&1)"
+      "Bash(\"C:\\\\Program Files\\\\PostgreSQL\\\\17\\\\bin\\\\psql\" \"postgresql://postgres:RZENXndmOMxgMZxlaKtIwzosuAIsartk@caboose.proxy.rlwy.net:29794/railway\" -c \"SELECT profile_id, stage, title, company FROM kanban_cards ORDER BY profile_id, id;\" 2>&1)",
+      "Bash(curl:*)",
+      "Bash(echo:*)",
+      "Bash(cat:*)",
+      "Bash(sleep:*)"
     ]
   }
 }

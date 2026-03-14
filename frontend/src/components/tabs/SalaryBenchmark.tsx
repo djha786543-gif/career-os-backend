@@ -1,84 +1,134 @@
 import React from 'react';
 import { useProfile } from '../../context/ProfileContext';
+import { useFetch } from '../../hooks/useFetch';
+import { DEMO_SALARY_FALLBACK } from '../../data/fallbacks';
+import { SourceBadge } from '../SourceBadge';
 
-const TIER_STYLE: Record<string, { bg: string; color: string }> = {
-  S: { bg: 'rgba(244,63,94,.12)',  color: '#f43f5e' },
-  A: { bg: 'rgba(245,158,11,.12)', color: '#f59e0b' },
-  B: { bg: 'rgba(99,102,241,.12)', color: '#6366f1' },
-  C: { bg: 'rgba(16,185,129,.12)', color: '#10b981' },
-};
+interface SalaryData {
+  title: string;
+  low: number;
+  mid: number;
+  high: number;
+  remote_premium: string;
+}
+
+interface SalaryResponse {
+  data: SalaryData[];
+  source: string;
+}
 
 export function SalaryBenchmark() {
-  const { profile, theme } = useProfile();
+  const { profile, metadata } = useProfile();
+  const { data, loading, source } = useFetch<SalaryResponse>('/api/salary', DEMO_SALARY_FALLBACK as SalaryResponse);
+
+  const salaryData = data?.data || [];
+  const sectionTitle = profile === 'dj' ? 'IT Audit salary ranges' : 'Life sciences salary ranges';
+
+  const formatCurrency = (val: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      maximumFractionDigits: 0,
+    }).format(val);
+  };
+
+  const getPercentage = (val: number, min: number, max: number) => {
+    return ((val - min) / (max - min)) * 100;
+  };
+
+  // Find global min/max for scale consistency
+  const allValues = salaryData.flatMap(d => [d.low, d.high]);
+  const globalMin = Math.min(...allValues) * 0.9;
+  const globalMax = Math.max(...allValues) * 1.1;
 
   return (
-    <div>
-      <div style={{ marginBottom: 24 }}>
-        <div style={s.secLabel}>COMPENSATION INTELLIGENCE</div>
-        <div style={s.secTitle}>Salary Benchmark</div>
-        <div style={s.secSub}>Cert ROI analysis · Market salary ranges</div>
+    <div className="salary-intel-section" style={{ padding: '24px', background: 'rgba(15, 23, 42, 0.3)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)', position: 'relative' }}>
+      <div style={{ position: 'absolute', top: '24px', right: '24px' }}>
+        <SourceBadge source={source} />
       </div>
 
-      {/* Summary strip */}
-      <div className="glass" style={{ padding: 20, marginBottom: 24, display: 'flex', alignItems: 'center', gap: 24 }}>
-        <div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>CURRENT YOE</div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 800, color: theme.glow }}>{profile.yoe}</div>
-        </div>
-        <div style={{ width: 1, height: 40, background: 'var(--border-subtle)' }} />
-        <div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>DOMAIN</div>
-          <div style={{ fontSize: 13, fontWeight: 600, maxWidth: 400 }}>{profile.domain}</div>
-        </div>
-      </div>
+      <header style={{ marginBottom: '32px' }}>
+        <h2 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0 }}>{sectionTitle}</h2>
+        <p style={{ color: 'rgba(255,255,255,0.6)', marginTop: '4px' }}>Current market benchmarks for {metadata.role}</p>
+      </header>
 
-      {/* Salary table */}
-      <div className="glass" style={{ padding: 24, marginBottom: 24 }}>
-        <div style={s.cardLabel}>💰 CERT SALARY IMPACT</div>
-        <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {profile.salary.map(row => {
-            const ts = TIER_STYLE[row.tier] ?? TIER_STYLE.C;
+      {loading ? (
+        <div style={{ padding: '40px', textAlign: 'center', color: 'rgba(255,255,255,0.4)' }}>
+          Analyzing salary data...
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          {salaryData.map((item, idx) => {
+            const lowPct = getPercentage(item.low, globalMin, globalMax);
+            const highPct = getPercentage(item.high, globalMin, globalMax);
+            const midPct = getPercentage(item.mid, globalMin, globalMax);
+            
+            const isRemotePositive = item.remote_premium !== 'N/A' && !item.remote_premium.startsWith('-');
+
             return (
-              <div key={row.skill} style={s.salaryRow}>
-                <span style={{ ...s.tierBadge, background: ts.bg, color: ts.color }}>
-                  {row.tier}
-                </span>
-                <span style={{ fontSize: 14, fontWeight: 600, flex: 1 }}>{row.skill}</span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 800, color: '#10b981' }}>
-                  {row.impact}
-                </span>
+              <div key={idx} style={{ 
+                paddingBottom: '24px', 
+                borderBottom: '1px solid rgba(255,255,255,0.05)',
+                display: 'grid',
+                gridTemplateColumns: '1fr 2fr 120px',
+                gap: '24px',
+                alignItems: 'center'
+              }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '1rem', marginBottom: '4px' }}>{item.title}</div>
+                  <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)', fontWeight: 600 }}>ANNUAL TOTAL COMP</div>
+                </div>
+
+                <div style={{ position: 'relative', height: '40px', display: 'flex', alignItems: 'center' }}>
+                  {/* Range Bar */}
+                  <div style={{ 
+                    position: 'absolute', 
+                    left: `${lowPct}%`, 
+                    width: `${highPct - lowPct}%`, 
+                    height: '6px', 
+                    background: 'var(--profile-color)', 
+                    borderRadius: '3px',
+                    opacity: 0.3
+                  }} />
+                  
+                  {/* Low point */}
+                  <div style={{ position: 'absolute', left: `${lowPct}%`, textAlign: 'center', transform: 'translateX(-50%)' }}>
+                     <div style={{ width: '10px', height: '10px', background: 'rgba(255,255,255,0.2)', borderRadius: '50%', margin: '0 auto 4px' }} />
+                     <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)' }}>{formatCurrency(item.low)}</div>
+                  </div>
+
+                  {/* High point */}
+                  <div style={{ position: 'absolute', left: `${highPct}%`, textAlign: 'center', transform: 'translateX(-50%)' }}>
+                     <div style={{ width: '10px', height: '10px', background: 'rgba(255,255,255,0.2)', borderRadius: '50%', margin: '0 auto 4px' }} />
+                     <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)' }}>{formatCurrency(item.high)}</div>
+                  </div>
+
+                  {/* Mid point (Bold) */}
+                  <div style={{ position: 'absolute', left: `${midPct}%`, textAlign: 'center', transform: 'translateX(-50%)' }}>
+                     <div style={{ width: '4px', height: '14px', background: 'var(--profile-color)', borderRadius: '2px', margin: '0 auto 2px', boxShadow: '0 0 10px var(--profile-color)' }} />
+                     <div style={{ fontSize: '0.85rem', color: 'white', fontWeight: 800 }}>{formatCurrency(item.mid)}</div>
+                  </div>
+                </div>
+
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ 
+                    display: 'inline-block',
+                    padding: '4px 10px', 
+                    borderRadius: '12px', 
+                    background: isRemotePositive ? 'rgba(34, 197, 94, 0.1)' : 'rgba(255,255,255,0.05)', 
+                    color: isRemotePositive ? '#22c55e' : 'rgba(255,255,255,0.4)',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    border: isRemotePositive ? '1px solid rgba(34, 197, 94, 0.2)' : '1px solid rgba(255,255,255,0.05)'
+                  }}>
+                    {item.remote_premium === 'N/A' ? 'NO REMOTE PREM.' : `${item.remote_premium} REMOTE`}
+                  </div>
+                </div>
               </div>
             );
           })}
         </div>
-      </div>
-
-      {/* Timing strategy */}
-      <div className="glass" style={{ padding: 24 }}>
-        <div style={s.cardLabel}>⏱ ACQUISITION STRATEGY</div>
-        <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {profile.timing.map(t => (
-            <div key={t.skill} style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '12px 16px', background: 'var(--bg-secondary)', borderRadius: 10, border: `1px solid ${t.color}33` }}>
-              <div style={{ padding: '4px 12px', borderRadius: 7, fontSize: 11, fontWeight: 800, background: t.color + '22', color: t.color, flexShrink: 0, letterSpacing: '.04em' }}>
-                {t.status}
-              </div>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>{t.skill}</div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6 }}>{t.reason}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      )}
     </div>
   );
 }
-
-const s: Record<string, React.CSSProperties> = {
-  secLabel:  { fontSize: 10, fontWeight: 700, letterSpacing: '.12em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 },
-  secTitle:  { fontSize: 22, fontWeight: 800, marginBottom: 4 },
-  secSub:    { fontSize: 13, color: 'var(--text-secondary)' },
-  cardLabel: { fontSize: 10, fontWeight: 700, letterSpacing: '.1em', color: 'var(--text-muted)', textTransform: 'uppercase' },
-  salaryRow: { display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px', background: 'var(--bg-secondary)', borderRadius: 10, border: '1px solid var(--border-subtle)' },
-  tierBadge: { fontSize: 12, fontWeight: 800, padding: '3px 10px', borderRadius: 5, minWidth: 30, textAlign: 'center' },
-};

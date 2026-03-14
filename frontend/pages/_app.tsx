@@ -1,10 +1,12 @@
 import type { AppProps } from 'next/app';
 import { ProfileProvider } from '../src/context/ProfileContext';
+import { HealthBanner } from '../src/components/HealthBanner';
 import '../styles/globals.css';
 
 export default function App({ Component, pageProps }: AppProps) {
   return (
     <ProfileProvider>
+      <HealthBanner />
       {/* Ambient background orbs */}
       <div className="amb">
         <div className="orb o1" />

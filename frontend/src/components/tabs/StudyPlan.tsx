@@ -1,67 +1,136 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useProfile } from '../../context/ProfileContext';
+import { SourceBadge } from '../SourceBadge';
+
+interface Week {
+  lbl: string;
+  tasks: string[];
+}
+
+const DJ_SCHEDULE: Week[] = [
+  { lbl: 'Week 1-2', tasks: ['AI fundamentals + LLM risk concepts', 'Read NIST AI RMF'] },
+  { lbl: 'Week 3', tasks: ['AI governance frameworks (NIST AI RMF, EU AI Act)'] },
+  { lbl: 'Week 4', tasks: ['AI audit methodology + ISACA guidance'] },
+  { lbl: 'Week 5', tasks: ['Practical labs — evaluating AI systems'] },
+  { lbl: 'Week 6-7', tasks: ['Practice exams + weak area review'] },
+  { lbl: 'Week 8', tasks: ['Final prep + exam readiness check'] }
+];
+
+const POOJA_SCHEDULE: Week[] = [
+  { lbl: 'Week 1-2', tasks: ['Molecular diagnostics + PCR methods'] },
+  { lbl: 'Week 3', tasks: ['Hematology + coagulation'] },
+  { lbl: 'Week 4', tasks: ['Blood banking + immunology'] },
+  { lbl: 'Week 5', tasks: ['Clinical chemistry + urinalysis'] },
+  { lbl: 'Week 6', tasks: ['Microbiology'] },
+  { lbl: 'Week 7', tasks: ['Full practice exams (timed x2)'] },
+  { lbl: 'Week 8', tasks: ['Weak area review + mental prep'] }
+];
 
 export function StudyPlan() {
-  const { profile, theme } = useProfile();
-  const [activeTrack, setActiveTrack] = useState(0);
-  const track = profile.tracks[activeTrack];
+  const { profile } = useProfile();
+  const schedule = profile === 'dj' ? DJ_SCHEDULE : POOJA_SCHEDULE;
+  
+  const [checkedTasks, setCheckedTasks] = useState<Record<string, boolean>>({});
+
+  // Load from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem(`study_plan_${profile}`);
+    if (saved) {
+      setCheckedTasks(JSON.parse(saved));
+    } else {
+      setCheckedTasks({});
+    }
+  }, [profile]);
+
+  const toggleTask = (weekIdx: number, taskIdx: number) => {
+    const key = `${weekIdx}-${taskIdx}`;
+    const newChecked = { ...checkedTasks, [key]: !checkedTasks[key] };
+    setCheckedTasks(newChecked);
+    localStorage.setItem(`study_plan_${profile}`, JSON.stringify(newChecked));
+  };
+
+  // Heuristic for "Current Week" - based on March 14, 2026
+  const today = new Date('2026-03-14');
 
   return (
-    <div>
-      <div style={{ marginBottom: 24 }}>
-        <div style={s.secLabel}>STUDY TRACKS</div>
-        <div style={s.secTitle}>Study Plan</div>
-        <div style={s.secSub}>Week-by-week preparation sprints</div>
+    <div className="study-plan-section" style={{ padding: '24px', background: 'rgba(15, 23, 42, 0.3)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)', position: 'relative' }}>
+      <div style={{ position: 'absolute', top: '24px', right: '24px' }}>
+        <SourceBadge source="static" />
       </div>
-
-      {/* Track selector */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 28, flexWrap: 'wrap' }}>
-        {profile.tracks.map((t, i) => (
-          <button key={t.title} onClick={() => setActiveTrack(i)} style={{
-            ...s.trackBtn,
-            background: activeTrack === i ? t.color + '22' : 'var(--bg-secondary)',
-            color:      activeTrack === i ? t.color : 'var(--text-muted)',
-            border:     `1px solid ${activeTrack === i ? t.color + '55' : 'var(--border-subtle)'}`,
-          }}>
-            <span style={{ marginRight: 8, fontSize: 18 }}>{t.icon}</span>
-            <div style={{ textAlign: 'left' }}>
-              <div style={{ fontWeight: 700, fontSize: 13 }}>{t.title}</div>
-              <div style={{ fontSize: 11, opacity: .7 }}>{t.desc}</div>
-            </div>
-          </button>
-        ))}
-      </div>
-
-      {/* Week timeline */}
-      {track && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {track.weeks.map((week, wi) => (
-            <div key={week.lbl} className="glass" style={{ padding: 24, borderLeft: `3px solid ${track.color}` }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
-                <div style={{ width: 32, height: 32, borderRadius: '50%', background: track.color + '22', border: `1.5px solid ${track.color}55`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: track.color, flexShrink: 0 }}>
-                  {wi + 1}
-                </div>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: track.color }}>{week.lbl}</span>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {week.tasks.map((task, ti) => (
-                  <div key={ti} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: track.color, marginTop: 6, flexShrink: 0 }} />
-                    <span style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>{task}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
+      
+      <header style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0 }}>8-Week Study Plan</h2>
+          <p style={{ color: 'rgba(255,255,255,0.6)', marginTop: '4px' }}>Target: {profile === 'dj' ? 'AAIA Certification' : 'ASCP MB Certification'}</p>
         </div>
-      )}
+        <div style={{ fontSize: '0.8rem', background: 'var(--profile-color)22', color: 'var(--profile-color)', padding: '4px 12px', borderRadius: '12px', fontWeight: 700 }}>
+          Today: March 14, 2026
+        </div>
+      </header>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {schedule.map((week, wIdx) => {
+          const isCurrent = (wIdx === 1); // Mock: Week 1-2 is current for March 14
+          
+          return (
+            <div key={wIdx} style={{ 
+              padding: '20px', 
+              borderRadius: '12px', 
+              background: isCurrent ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.02)', 
+              border: isCurrent ? `1px solid var(--profile-color)` : '1px solid rgba(255,255,255,0.05)',
+              boxShadow: isCurrent ? `0 0 20px var(--profile-color)11` : 'none'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0, color: isCurrent ? 'var(--profile-color)' : 'white' }}>
+                  {week.lbl}
+                </h3>
+                {isCurrent && (
+                  <span style={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', background: 'var(--profile-color)', color: 'white', padding: '2px 8px', borderRadius: '4px' }}>
+                    Current Week
+                  </span>
+                )}
+              </div>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {week.tasks.map((task, tIdx) => {
+                  const isChecked = !!checkedTasks[`${wIdx}-${tIdx}`];
+                  return (
+                    <label key={tIdx} style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '12px', 
+                      cursor: 'pointer',
+                      padding: '8px',
+                      borderRadius: '6px',
+                      background: isChecked ? 'rgba(255,255,255,0.02)' : 'transparent',
+                      transition: 'background 0.2s'
+                    }}>
+                      <input 
+                        type="checkbox" 
+                        checked={isChecked}
+                        onChange={() => toggleTask(wIdx, tIdx)}
+                        style={{ 
+                          width: '18px', 
+                          height: '18px', 
+                          accentColor: 'var(--profile-color)',
+                          cursor: 'pointer'
+                        }}
+                      />
+                      <span style={{ 
+                        fontSize: '0.95rem', 
+                        color: isChecked ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.8)',
+                        textDecoration: isChecked ? 'line-through' : 'none'
+                      }}>
+                        {task}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
-
-const s: Record<string, React.CSSProperties> = {
-  secLabel: { fontSize: 10, fontWeight: 700, letterSpacing: '.12em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 },
-  secTitle: { fontSize: 22, fontWeight: 800, marginBottom: 4 },
-  secSub:   { fontSize: 13, color: 'var(--text-secondary)' },
-  trackBtn: { display: 'flex', alignItems: 'center', gap: 0, padding: '14px 20px', borderRadius: 12, cursor: 'pointer', transition: 'all .2s', minWidth: 260 },
-};

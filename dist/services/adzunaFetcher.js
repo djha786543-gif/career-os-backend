@@ -110,7 +110,7 @@ async function fetchPage(country, query, page, categoryTag) {
         app_key: appKey,
         results_per_page: RESULTS_PER_PAGE,
         what: query,
-        
+        title_only: 1, // ← KEY FIX: only match terms in job title
         'content-type': 'application/json',
     };
     if (categoryTag)
@@ -118,12 +118,15 @@ async function fetchPage(country, query, page, categoryTag) {
     const url = `${ADZUNA_BASE}/${country}/search/${page}`;
     for (let attempt = 1; attempt <= 2; attempt++) {
         try {
-            const { data } = await axios_1.default.get(url, {
+            const { data, status } = await axios_1.default.get(url, {
                 params,
                 timeout: REQUEST_TIMEOUT_MS,
                 headers: { Accept: 'application/json' },
             });
-            return data.results || [];
+            const results = data.results || [];
+            // ─── Task 4: Print status code and length ───
+            console.log(`console.log: Adzuna response: ${status}, length: ${results.length}`);
+            return results;
         }
         catch (err) {
             const axErr = err;
@@ -145,17 +148,40 @@ async function fetchPage(country, query, page, categoryTag) {
 async function fetchAdzunaJobs(country, profile) {
     const allRaw = [];
     const seenIds = new Set();
-    const seenCompanies = new Set(); // ← company-level dedup
     for (const query of profile.queries) {
         for (let page = 1; page <= profile.pages; page++) {
-            const results = await fetchPage(country, query, page, profile.categoryTag);
+            let results = await fetchPage(country, query, page, profile.categoryTag);
+            // ─── Broad-First Fallback Logic: Niche → Broad Retries ───
+            if (results.length === 0) {
+                const FALLBACK_MAP = {
+                    'CISA': 'IT Audit',
+                    'SOX': 'IT Audit',
+                    'ITGC': 'IT Audit',
+                    'AuditBoard': 'IT Audit',
+                    'SAP ERP': 'Internal Audit',
+                };
+                let broaderQuery = '';
+                const upperQuery = query.toUpperCase();
+                for (const [niche, broad] of Object.entries(FALLBACK_MAP)) {
+                    if (upperQuery.includes(niche.toUpperCase())) {
+                        broaderQuery = query.replace(new RegExp(niche, 'gi'), broad);
+                        break;
+                    }
+                }
+                if (!broaderQuery) {
+                    const words = query.split(' ');
+                    if (words.length > 2) {
+                        broaderQuery = words.slice(0, 2).join(' ');
+                    }
+                }
+                if (broaderQuery && broaderQuery !== query) {
+                    console.log(`[Adzuna] 0 results for "${query}". Retrying with broader keywords: "${broaderQuery}"`);
+                    results = await fetchPage(country, broaderQuery, page, profile.categoryTag);
+                }
+            }
             for (const r of results) {
                 // Skip if we've already seen this exact listing
                 if (seenIds.has(r.id))
-                    continue;
-                // ── Company dedup: skip if we already have a job from this company ──
-                const companyKey = (r.company?.display_name || '').toLowerCase().trim();
-                if (companyKey && seenCompanies.has(companyKey))
                     continue;
                 // ── Hard-block junior/intern titles ──────────────────────────────────
                 const titleLower = (r.title || '').toLowerCase();
@@ -164,8 +190,6 @@ async function fetchAdzunaJobs(country, profile) {
                     continue;
                 }
                 seenIds.add(r.id);
-                if (companyKey)
-                    seenCompanies.add(companyKey);
                 allRaw.push(r);
             }
         }

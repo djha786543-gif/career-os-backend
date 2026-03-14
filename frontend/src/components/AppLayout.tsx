@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useProfile, ProfileId } from '../context/ProfileContext';
 
 export type TabId =
@@ -31,38 +31,40 @@ interface Props {
 }
 
 export function AppLayout({ activeTab, onTabChange, children }: Props) {
-  const { activeId, profile, theme, setActiveId } = useProfile();
+  const { profile: activeProfile, setProfile, metadata } = useProfile();
 
   return (
-    <div style={{ position: 'relative', zIndex: 1, minHeight: '100vh' }}>
+    <div style={{ position: 'relative', zIndex: 1, minHeight: '100vh', background: '#0a0b14', color: 'white' }}>
       {/* ── Header ── */}
       <header style={styles.header}>
         <div style={styles.headerInner}>
           {/* Brand */}
           <div style={styles.brand}>
-            CAREER<span style={{ color: 'var(--accent-indigo)' }}>OS</span>
+            CAREER<span style={{ color: 'var(--profile-color, #6366f1)' }}>OS</span>
           </div>
 
           {/* Profile toggle */}
           <div style={styles.profileSwitch}>
             <button
-              onClick={() => setActiveId('dj')}
+              onClick={() => setProfile('dj')}
               style={{
                 ...styles.psw,
-                color:      activeId === 'dj' ? '#22d3ee' : 'var(--text-muted)',
-                background: activeId === 'dj' ? 'rgba(34,211,238,.12)' : 'transparent',
-                boxShadow:  activeId === 'dj' ? '0 0 0 1px rgba(34,211,238,.3)' : 'none',
+                background: activeProfile === 'dj' ? '#0F6E56' : 'transparent',
+                color: activeProfile === 'dj' ? 'white' : 'rgba(255,255,255,0.4)',
+                border: activeProfile === 'dj' ? '1px solid #0F6E56' : '1px solid rgba(255,255,255,0.1)',
+                boxShadow: activeProfile === 'dj' ? '0 0 15px rgba(15,110,86,0.4)' : 'none',
               }}
             >
               DJ
             </button>
             <button
-              onClick={() => setActiveId('pj')}
+              onClick={() => setProfile('pj')}
               style={{
                 ...styles.psw,
-                color:      activeId === 'pj' ? '#f472b6' : 'var(--text-muted)',
-                background: activeId === 'pj' ? 'rgba(244,114,182,.12)' : 'transparent',
-                boxShadow:  activeId === 'pj' ? '0 0 0 1px rgba(244,114,182,.3)' : 'none',
+                background: activeProfile === 'pj' ? '#534AB7' : 'transparent',
+                color: activeProfile === 'pj' ? 'white' : 'rgba(255,255,255,0.4)',
+                border: activeProfile === 'pj' ? '1px solid #534AB7' : '1px solid rgba(255,255,255,0.1)',
+                boxShadow: activeProfile === 'pj' ? '0 0 15px rgba(83,74,183,0.4)' : 'none',
               }}
             >
               PJ
@@ -73,15 +75,15 @@ export function AppLayout({ activeTab, onTabChange, children }: Props) {
           <div style={styles.userPill}>
             <div style={{
               ...styles.avatar,
-              background: theme.dim,
-              border: `1.5px solid ${theme.border}`,
-              color: theme.glow,
+              background: metadata.color + '22',
+              border: `1.5px solid ${metadata.color}44`,
+              color: metadata.color,
             }}>
-              {profile.initials}
+              {metadata.initials}
             </div>
-            <div>
-              <div style={styles.userName}>{profile.name}</div>
-              <div style={styles.userTitle}>{profile.title}</div>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <div style={styles.userName}>{metadata.name}</div>
+              <div style={styles.userTitle}>{metadata.role}</div>
             </div>
           </div>
 
@@ -93,12 +95,12 @@ export function AppLayout({ activeTab, onTabChange, children }: Props) {
                 onClick={() => onTabChange(tab.id)}
                 style={{
                   ...styles.ntab,
-                  color:      activeTab === tab.id ? theme.glow : 'var(--text-muted)',
-                  background: activeTab === tab.id ? theme.dim   : 'transparent',
-                  borderColor:activeTab === tab.id ? theme.border: 'transparent',
+                  color:      activeTab === tab.id ? 'white' : 'rgba(255,255,255,0.4)',
+                  background: activeTab === tab.id ? 'rgba(255,255,255,0.05)' : 'transparent',
+                  borderColor:activeTab === tab.id ? 'var(--profile-color)' : 'transparent',
                 }}
               >
-                <span style={{ marginRight: 4 }}>{tab.icon}</span>{tab.label}
+                <span style={{ marginRight: 6 }}>{tab.icon}</span>{tab.label}
               </button>
             ))}
           </nav>
@@ -115,81 +117,83 @@ export function AppLayout({ activeTab, onTabChange, children }: Props) {
   );
 }
 
-// ── Inline styles (mirrors tokens.css) ────────────────────────────────────────
 const styles: Record<string, React.CSSProperties> = {
   header: {
     position:       'sticky',
     top:            0,
     zIndex:         100,
-    background:     'rgba(10,11,20,.92)',
-    backdropFilter: 'blur(16px)',
-    borderBottom:   '1px solid var(--border-subtle)',
+    background:     'rgba(10,11,20,0.8)',
+    backdropFilter: 'blur(20px)',
+    borderBottom:   '1px solid rgba(255,255,255,0.05)',
   },
   headerInner: {
     display:       'flex',
     alignItems:    'center',
-    gap:           16,
-    height:        64,
-    maxWidth:      1280,
+    gap:           24,
+    height:        72,
+    maxWidth:      1400,
     margin:        '0 auto',
     padding:       '0 24px',
   },
   brand: {
-    fontSize:      15,
-    fontWeight:    800,
-    letterSpacing: '.08em',
-    color:         'var(--text-secondary)',
+    fontSize:      18,
+    fontWeight:    900,
+    letterSpacing: '0.1em',
+    color:         'white',
     flexShrink:    0,
   },
   profileSwitch: {
     display:       'flex',
-    gap:           4,
-    background:    'var(--bg-secondary)',
-    borderRadius:  10,
+    gap:           8,
+    background:    'rgba(255,255,255,0.03)',
+    borderRadius:  12,
     padding:       4,
-    border:        '1px solid var(--border-subtle)',
+    border:        '1px solid rgba(255,255,255,0.05)',
     flexShrink:    0,
   },
   psw: {
-    padding:       '5px 16px',
-    borderRadius:  7,
+    padding:       '6px 16px',
+    borderRadius:  8,
     fontSize:      12,
-    fontWeight:    700,
-    letterSpacing: '.04em',
-    transition:    'all .2s',
+    fontWeight:    800,
+    transition:    'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
     cursor:        'pointer',
   },
   userPill: {
     display:    'flex',
     alignItems: 'center',
-    gap:        10,
+    gap:        12,
     flexShrink: 0,
+    padding:    '0 16px',
+    borderLeft: '1px solid rgba(255,255,255,0.05)',
   },
   avatar: {
-    width:         34,
-    height:        34,
+    width:         38,
+    height:        38,
     borderRadius:  '50%',
     display:       'flex',
     alignItems:    'center',
     justifyContent:'center',
-    fontSize:      12,
+    fontSize:      13,
     fontWeight:    800,
   },
-  userName:  { fontSize: 13, fontWeight: 700 },
-  userTitle: { fontSize: 10, color: 'var(--text-muted)' },
+  userName:  { fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap' },
+  userTitle: { fontSize: 11, color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap' },
   navTabs: {
     display:    'flex',
-    gap:        2,
+    gap:        4,
     marginLeft: 'auto',
     overflowX:  'auto',
+    padding:    '4px 0',
+    scrollbarWidth: 'none',
   },
   ntab: {
-    padding:       '7px 14px',
-    borderRadius:  8,
-    fontSize:      11,
-    fontWeight:    600,
+    padding:       '8px 16px',
+    borderRadius:  10,
+    fontSize:      12,
+    fontWeight:    700,
     cursor:        'pointer',
-    transition:    'all .2s',
+    transition:    'all 0.2s',
     whiteSpace:    'nowrap',
     border:        '1px solid transparent',
     display:       'flex',
@@ -200,8 +204,8 @@ const styles: Record<string, React.CSSProperties> = {
     zIndex:   1,
   },
   wrap: {
-    maxWidth: 1280,
+    maxWidth: 1400,
     margin:   '0 auto',
-    padding:  '28px 24px 60px',
+    padding:  '32px 24px 80px',
   },
 };

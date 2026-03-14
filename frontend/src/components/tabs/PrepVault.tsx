@@ -1,210 +1,226 @@
 import React, { useState, useEffect } from 'react';
 import { useProfile } from '../../context/ProfileContext';
-import { VaultSection } from '../../data/prepVault';
+import { SourceBadge } from '../SourceBadge';
 
-type Mode = 'accordion' | 'flashcards';
+interface Topic {
+  name: string;
+  weight: number;
+}
 
-const WEIGHT_COLOR: Record<string, string> = {
-  critical: '#f43f5e',
-  high:     '#f59e0b',
-  medium:   '#6366f1',
-  low:      '#10b981',
+interface Resource {
+  name: string;
+  url: string;
+}
+
+interface Term {
+  q: string;
+  a: string;
+}
+
+const POOJA_DATA = {
+  exam: "ASCP MB — Molecular Biology",
+  overview: "100 questions · 2.5 hours · Pass ~400/500",
+  targetDate: new Date('2026-05-15'),
+  topics: [
+    { name: "Blood Banking", weight: 20 },
+    { name: "Molecular Diagnostics", weight: 18 },
+    { name: "Hematology", weight: 16 },
+    { name: "Clinical Chemistry", weight: 15 },
+    { name: "Immunology", weight: 12 },
+    { name: "Microbiology", weight: 12 },
+    { name: "Urinalysis", weight: 7 }
+  ],
+  resources: [
+    { name: "ASCP BOC", url: "https://www.ascp.org/content/board-of-certification" },
+    { name: "Labce.com", url: "https://www.labce.com/" },
+    { name: "MLS Study Guide", url: "https://www.amazon.com/Medical-Laboratory-Science-Review-Robert/dp/0803628285" }
+  ],
+  terms: [
+    { q: "PCR", a: "Polymerase Chain Reaction - technique to amplify DNA." },
+    { q: "Ct Value", a: "Cycle Threshold - intersection between amplification curve and threshold line." },
+    { q: "Haplotype", a: "A group of genes inherited together from a single parent." },
+    { q: "Western Blot", a: "Technique to detect specific proteins in a sample." },
+    { q: "CRISPR", a: "Clustered Regularly Interspaced Short Palindromic Repeats - gene editing tool." }
+  ]
 };
 
-const TAG_STYLE: Record<string, React.CSSProperties> = {
-  formula: { background: 'rgba(99,102,241,.12)', color: '#6366f1',  border: '1px solid rgba(99,102,241,.25)' },
-  trap:    { background: 'rgba(244,63,94,.12)',   color: '#f43f5e', border: '1px solid rgba(244,63,94,.25)' },
-  concept: { background: 'rgba(16,185,129,.12)',  color: '#10b981', border: '1px solid rgba(16,185,129,.25)' },
+const DJ_DATA = {
+  exam: "ISACA AAIA — AI Auditing",
+  overview: "75 questions · 2 hours · Focus on AI Governance & Risk",
+  targetDate: new Date('2026-06-30'),
+  topics: [
+    { name: "AI Fundamentals", weight: 25 },
+    { name: "AI Governance", weight: 20 },
+    { name: "AI Risk Management", weight: 20 },
+    { name: "Audit Methodology", weight: 20 },
+    { name: "Ethics & Compliance", weight: 15 }
+  ],
+  resources: [
+    { name: "ISACA AAIA Guide", url: "https://www.isaca.org/credentialing/ai-fundamentals" },
+    { name: "NIST AI RMF", url: "https://www.nist.gov/itl/ai-risk-management-framework" },
+    { name: "EU AI Act", url: "https://artificialintelligenceact.eu/" }
+  ],
+  terms: [
+    { q: "Hallucination", a: "AI output that is confident but factually incorrect." },
+    { q: "RLHF", a: "Reinforcement Learning from Human Feedback." },
+    { q: "AI RMF", a: "NIST's framework for managing AI-related risks." },
+    { q: "Model Bias", a: "Systematic errors in an AI model due to biased training data." },
+    { q: "Audit Trail", a: "Chronological record providing evidence of AI system activities." }
+  ]
+};
+
+const FlipCard = ({ term }: { term: Term }) => {
+  const [flipped, setFlipped] = useState(false);
+  return (
+    <div 
+      onClick={() => setFlipped(!flipped)}
+      style={{
+        height: '120px',
+        perspective: '1000px',
+        cursor: 'pointer'
+      }}
+    >
+      <div style={{
+        position: 'relative',
+        width: '100%',
+        height: '100%',
+        textAlign: 'center',
+        transition: 'transform 0.6s',
+        transformStyle: 'preserve-3d',
+        transform: flipped ? 'rotateY(180deg)' : 'rotateY(0deg)'
+      }}>
+        {/* Front */}
+        <div style={{
+          position: 'absolute',
+          width: '100%',
+          height: '100%',
+          backfaceVisibility: 'hidden',
+          background: 'rgba(255,255,255,0.05)',
+          border: '1px solid rgba(255,255,255,0.1)',
+          borderRadius: '12px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '16px',
+          fontWeight: 700
+        }}>
+          {term.q}
+        </div>
+        {/* Back */}
+        <div style={{
+          position: 'absolute',
+          width: '100%',
+          height: '100%',
+          backfaceVisibility: 'hidden',
+          background: 'var(--profile-color)',
+          color: 'white',
+          borderRadius: '12px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '16px',
+          fontSize: '0.85rem',
+          transform: 'rotateY(180deg)'
+        }}>
+          {term.a}
+        </div>
+      </div>
+    </div>
+  );
 };
 
 export function PrepVault() {
-  const { vault, theme } = useProfile();
-  const [mode,     setMode]     = useState<Mode>('accordion');
-  const [openId,   setOpenId]   = useState<string | null>(null);
-  const [openSubs, setOpenSubs] = useState<Record<string, boolean>>({});
-  const [cardIdx,  setCardIdx]  = useState(0);
-  const [flipped,  setFlipped]  = useState(false);
-  const [mastered, setMastered] = useState<Set<number>>(new Set());
+  const { profile } = useProfile();
+  const data = profile === 'dj' ? DJ_DATA : POOJA_DATA;
+  
+  const [daysLeft, setDaysLeft] = useState(0);
 
-  // Reset card index when vault changes (profile switch)
-  useEffect(() => { setCardIdx(0); setFlipped(false); setMastered(new Set()); }, [vault]);
-
-  const toggleSection = (id: string) =>
-    setOpenId(prev => prev === id ? null : id);
-
-  const toggleSub = (key: string) =>
-    setOpenSubs(prev => ({ ...prev, [key]: !prev[key] }));
-
-  const card = vault.flashcards[cardIdx];
-  const remaining = vault.flashcards.filter((_, i) => !mastered.has(i));
+  useEffect(() => {
+    const calcDays = () => {
+      const diff = data.targetDate.getTime() - new Date().getTime();
+      return Math.ceil(diff / (1000 * 60 * 60 * 24));
+    };
+    setDaysLeft(calcDays());
+  }, [data.targetDate]);
 
   return (
-    <div>
-      {/* ── Header ── */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
-        <div>
-          <div style={s.secLabel}>PREP VAULT</div>
-          <div style={s.secTitle}>{vault.title}</div>
-          <div style={s.secSub}>{vault.sub}</div>
+    <div className="prep-vault-section" style={{ display: 'grid', gap: '32px', position: 'relative' }}>
+      <div style={{ position: 'absolute', top: '-10px', right: '0' }}>
+        <SourceBadge source="static" />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '24px' }}>
+        
+        {/* Exam Overview Card */}
+        <div style={{ padding: '24px', background: 'rgba(15, 23, 42, 0.3)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)' }}>
+          <h2 style={{ fontSize: '1.3rem', fontWeight: 800, marginBottom: '8px' }}>{data.exam}</h2>
+          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.9rem', marginBottom: '24px' }}>{data.overview}</p>
+          
+          <div style={{ marginBottom: '24px', padding: '16px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', textAlign: 'center' }}>
+            <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px' }}>Exam Countdown</div>
+            <div style={{ fontSize: '2rem', fontWeight: 900, color: 'var(--profile-color)' }}>{daysLeft} Days</div>
+            <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)' }}>Target: {data.targetDate.toLocaleDateString()}</div>
+          </div>
+
+          <h3 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '12px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)' }}>Topic Weightage</h3>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {data.topics.map((topic, idx) => (
+              <span key={idx} style={{ 
+                padding: '6px 12px', 
+                borderRadius: '20px', 
+                background: 'rgba(255,255,255,0.05)', 
+                border: '1px solid rgba(255,255,255,0.1)',
+                fontSize: '0.8rem',
+                fontWeight: 600
+              }}>
+                {topic.name} ({topic.weight}%)
+              </span>
+            ))}
+          </div>
         </div>
-        {/* Mode toggle */}
-        <div style={{ display: 'flex', gap: 4, background: 'var(--bg-secondary)', borderRadius: 10, padding: 4, border: '1px solid var(--border-subtle)', flexShrink: 0 }}>
-          {(['accordion', 'flashcards'] as Mode[]).map(m => (
-            <button key={m} onClick={() => setMode(m)} style={{
-              ...s.modeBtn,
-              background: mode === m ? theme.dim : 'transparent',
-              color:      mode === m ? theme.glow : 'var(--text-muted)',
-              border:     `1px solid ${mode === m ? theme.border : 'transparent'}`,
-            }}>
-              {m === 'accordion' ? '📖 Reference' : '🃏 Flashcards'}
-            </button>
-          ))}
+
+        {/* Resources & Quick Recall */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <div style={{ padding: '24px', background: 'rgba(15, 23, 42, 0.3)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)' }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '16px' }}>Study Resources</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {data.resources.map((res, idx) => (
+                <a 
+                  key={idx} 
+                  href={res.url} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  style={{ 
+                    padding: '12px', 
+                    borderRadius: '8px', 
+                    background: 'rgba(255,255,255,0.03)', 
+                    border: '1px solid rgba(255,255,255,0.05)',
+                    color: 'white',
+                    textDecoration: 'none',
+                    fontSize: '0.9rem',
+                    fontWeight: 600,
+                    display: 'flex',
+                    justifyContent: 'space-between'
+                  }}
+                >
+                  {res.name}
+                  <span style={{ color: 'var(--profile-color)' }}>↗</span>
+                </a>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* ── Quick Topics ── */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 28 }}>
-        {vault.quickTopics.map(t => (
-          <span key={t} style={s.quickChip}>{t}</span>
-        ))}
-      </div>
-
-      {/* ════════════════════════════════════ ACCORDION MODE ══════════════════ */}
-      {mode === 'accordion' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {vault.sections.map((sec: VaultSection) => (
-            <div key={sec.id} className="glass" style={{ overflow: 'hidden' }}>
-              {/* Section header */}
-              <button
-                onClick={() => toggleSection(sec.id)}
-                style={{ ...s.sectionBtn, borderBottom: openId === sec.id ? '1px solid var(--border-subtle)' : 'none' }}
-              >
-                <span style={s.secIcon}>{sec.icon}</span>
-                <div style={{ flex: 1, textAlign: 'left' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={s.sectionTitle}>{sec.title}</span>
-                    <span style={{ ...s.weightBadge, background: WEIGHT_COLOR[sec.weight] + '22', color: WEIGHT_COLOR[sec.weight] }}>
-                      {sec.weight}
-                    </span>
-                    <span style={{ ...s.tagBadge, ...TAG_STYLE[sec.tag] }}>{sec.tag}</span>
-                  </div>
-                  <div style={s.sectionSub}>{sec.subtitle}</div>
-                </div>
-                <span style={{ color: 'var(--text-muted)', fontSize: 18, transition: 'transform .2s', transform: openId === sec.id ? 'rotate(180deg)' : 'none' }}>⌄</span>
-              </button>
-
-              {/* Section body */}
-              {openId === sec.id && (
-                <div style={{ padding: '0 20px 20px' }}>
-                  {sec.subsections.map((sub, i) => {
-                    const subKey = `${sec.id}-${i}`;
-                    return (
-                      <div key={i} style={{ marginTop: 16 }}>
-                        <button onClick={() => toggleSub(subKey)} style={s.subBtn}>
-                          <span style={s.subHeading}>{sub.heading}</span>
-                          <span style={{ color: 'var(--text-muted)', fontSize: 14 }}>
-                            {openSubs[subKey] ? '−' : '+'}
-                          </span>
-                        </button>
-                        {openSubs[subKey] && (
-                          <div
-                            style={{ marginTop: 12 }}
-                            // pv-formula, pv-trap, pv-tree, pv-table etc. are styled via globals.css
-                            dangerouslySetInnerHTML={{ __html: sub.content }}
-                          />
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+      {/* Quick Recall Section */}
+      <div style={{ padding: '24px', background: 'rgba(15, 23, 42, 0.3)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)' }}>
+        <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '20px' }}>Quick Recall (Flashcards)</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '16px' }}>
+          {data.terms.map((term, idx) => (
+            <FlipCard key={idx} term={term} />
           ))}
         </div>
-      )}
-
-      {/* ════════════════════════════════════ FLASHCARD MODE ══════════════════ */}
-      {mode === 'flashcards' && (
-        <div>
-          {/* Progress */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
-            <div style={{ flex: 1, height: 6, background: 'rgba(255,255,255,.06)', borderRadius: 3, overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${(mastered.size / vault.flashcards.length) * 100}%`, background: '#10b981', borderRadius: 3, transition: 'width .5s' }} />
-            </div>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>
-              {mastered.size}/{vault.flashcards.length} mastered
-            </span>
-          </div>
-
-          {/* Card */}
-          <div
-            onClick={() => setFlipped(f => !f)}
-            style={{
-              ...s.flashcard,
-              background:  flipped ? theme.dim : 'var(--bg-secondary)',
-              borderColor: flipped ? theme.border : 'var(--border-subtle)',
-              cursor:      'pointer',
-            }}
-          >
-            <div style={s.cardSide}>{flipped ? 'ANSWER' : 'QUESTION'}</div>
-            <div style={s.cardText}>{flipped ? card.a : card.q}</div>
-            <div style={s.cardHint}>{flipped ? 'Click to see question' : 'Click to reveal answer'}</div>
-          </div>
-
-          {/* Controls */}
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 20 }}>
-            <button
-              onClick={() => { setCardIdx(i => Math.max(0, i - 1)); setFlipped(false); }}
-              disabled={cardIdx === 0}
-              style={s.navBtn}
-            >
-              ← Prev
-            </button>
-            <button
-              onClick={() => { setMastered(m => { const n = new Set(m); n.has(cardIdx) ? n.delete(cardIdx) : n.add(cardIdx); return n; }); }}
-              style={{
-                ...s.navBtn,
-                background: mastered.has(cardIdx) ? 'rgba(16,185,129,.12)' : 'rgba(99,102,241,.1)',
-                color:      mastered.has(cardIdx) ? '#10b981' : 'var(--text-secondary)',
-                border:     `1px solid ${mastered.has(cardIdx) ? 'rgba(16,185,129,.3)' : 'var(--border-subtle)'}`,
-              }}
-            >
-              {mastered.has(cardIdx) ? '✓ Mastered' : 'Mark Mastered'}
-            </button>
-            <button
-              onClick={() => { setCardIdx(i => Math.min(vault.flashcards.length - 1, i + 1)); setFlipped(false); }}
-              disabled={cardIdx === vault.flashcards.length - 1}
-              style={s.navBtn}
-            >
-              Next →
-            </button>
-          </div>
-          <div style={{ textAlign: 'center', marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>
-            Card {cardIdx + 1} of {vault.flashcards.length}
-          </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 }
-
-const s: Record<string, React.CSSProperties> = {
-  secLabel:     { fontSize: 10, fontWeight: 700, letterSpacing: '.12em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 },
-  secTitle:     { fontSize: 22, fontWeight: 800, marginBottom: 4 },
-  secSub:       { fontSize: 13, color: 'var(--text-secondary)', maxWidth: 600 },
-  modeBtn:      { padding: '6px 16px', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer', transition: 'all .2s' },
-  quickChip:    { fontSize: 11, fontWeight: 600, padding: '4px 12px', borderRadius: 6, background: 'rgba(99,102,241,.08)', border: '1px solid rgba(99,102,241,.15)', color: 'var(--text-secondary)', cursor: 'default' },
-  sectionBtn:   { display: 'flex', alignItems: 'center', gap: 14, width: '100%', padding: '16px 20px', background: 'transparent', cursor: 'pointer', transition: 'background .2s', borderRadius: 0 },
-  secIcon:      { fontSize: 20, flexShrink: 0 },
-  sectionTitle: { fontSize: 15, fontWeight: 700 },
-  weightBadge:  { fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4, letterSpacing: '.04em', textTransform: 'uppercase' },
-  tagBadge:     { fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4, letterSpacing: '.04em' },
-  sectionSub:   { fontSize: 12, color: 'var(--text-muted)', marginTop: 3 },
-  subBtn:       { display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', padding: '10px 0', background: 'transparent', cursor: 'pointer', borderBottom: '1px solid var(--border-subtle)' },
-  subHeading:   { fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', textAlign: 'left' },
-  flashcard:    { minHeight: 220, padding: 36, borderRadius: 16, border: '1px solid', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', transition: 'all .3s', userSelect: 'none' },
-  cardSide:     { fontSize: 10, fontWeight: 700, letterSpacing: '.12em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 16 },
-  cardText:     { fontSize: 17, fontWeight: 600, textAlign: 'center', lineHeight: 1.6, maxWidth: 640 },
-  cardHint:     { marginTop: 20, fontSize: 11, color: 'var(--text-muted)' },
-  navBtn:       { padding: '8px 20px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)', transition: 'all .2s' },
-};

@@ -1,6 +1,14 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useProfile } from '../../context/ProfileContext';
-import { fetchKanbanCards, updateKanbanCard, deleteKanbanCard, KanbanCard } from '../../utils/api';
+
+interface KanbanCard {
+  id: string;
+  title: string;
+  company: string;
+  stage: 'wishlist' | 'applied' | 'phone_screen' | 'interview' | 'offer' | 'rejected' | 'archived';
+  match_score?: number;
+  apply_url?: string;
+}
 
 const STAGES: KanbanCard['stage'][] = [
   'wishlist', 'applied', 'phone_screen', 'interview', 'offer', 'rejected', 'archived',
@@ -17,149 +25,178 @@ const STAGE_META: Record<KanbanCard['stage'], { label: string; color: string; ic
 };
 
 export function Tracker() {
-  const { activeId, theme } = useProfile();
-  const [cards,   setCards]   = useState<KanbanCard[]>([]);
+  const { profile } = useProfile();
+  const [cards, setCards] = useState<KanbanCard[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  // Load from localStorage
+  useEffect(() => {
     setLoading(true);
-    setError(null);
-    try {
-      const data = await fetchKanbanCards(activeId);
-      setCards(data);
-    } catch (e) {
-      setError('Could not load tracker. Ensure the backend is running and DATABASE_URL is set.');
-    } finally {
-      setLoading(false);
+    const storageKey = `tracker_${profile}`;
+    const saved = localStorage.getItem(storageKey);
+    if (saved) {
+      setCards(JSON.parse(saved));
+    } else {
+      // Default empty state or mock data
+      setCards([]);
     }
-  }, [activeId]);
+    setLoading(false);
+  }, [profile]);
 
-  useEffect(() => { load(); }, [load]);
-
-  const moveCard = async (card: KanbanCard, stage: KanbanCard['stage']) => {
-    if (!card.id) return;
-    try {
-      const updated = await updateKanbanCard(card.id, { stage });
-      setCards(prev => prev.map(c => c.id === card.id ? updated : c));
-    } catch (e) {
-      console.error('[Tracker] move failed:', e);
-    }
+  // Save to localStorage
+  const saveCards = (newCards: KanbanCard[]) => {
+    setCards(newCards);
+    localStorage.setItem(`tracker_${profile}`, JSON.stringify(newCards));
   };
 
-  const deleteCard = async (id: string) => {
-    try {
-      await deleteKanbanCard(id);
-      setCards(prev => prev.filter(c => c.id !== id));
-    } catch (e) {
-      console.error('[Tracker] delete failed:', e);
-    }
+  const moveCard = (cardId: string, stage: KanbanCard['stage']) => {
+    const newCards = cards.map(c => c.id === cardId ? { ...c, stage } : c);
+    saveCards(newCards);
+  };
+
+  const deleteCard = (id: string) => {
+    const newCards = cards.filter(c => c.id !== id);
+    saveCards(newCards);
   };
 
   const columnCards = (stage: KanbanCard['stage']) =>
     cards.filter(c => c.stage === stage);
 
   return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+    <div className="tracker-section" style={{ padding: '24px', background: 'rgba(15, 23, 42, 0.3)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)' }}>
+      <header style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <div style={s.secLabel}>APPLICATION TRACKER</div>
-          <div style={s.secTitle}>Kanban Board</div>
-          <div style={s.secSub}>{cards.length} applications tracked</div>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0 }}>Application Tracker</h2>
+          <p style={{ color: 'rgba(255,255,255,0.6)', marginTop: '4px' }}>Managing {cards.length} active opportunities</p>
         </div>
-        <button onClick={load} style={{ ...s.refreshBtn, background: theme.dim, color: theme.glow, border: `1px solid ${theme.border}` }}>
-          ↻ Refresh
-        </button>
-      </div>
+      </header>
 
-      {loading && (
-        <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)' }}>Loading tracker…</div>
-      )}
+      <div style={{ display: 'flex', gap: '16px', overflowX: 'auto', paddingBottom: '16px' }}>
+        {STAGES.map(stage => {
+          const meta = STAGE_META[stage];
+          const stageCards = columnCards(stage);
+          
+          return (
+            <div key={stage} style={{ 
+              flex: '0 0 280px', 
+              background: 'rgba(255,255,255,0.02)', 
+              borderRadius: '12px', 
+              padding: '16px',
+              border: '1px solid rgba(255,255,255,0.05)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              minHeight: '400px'
+            }}>
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '8px', 
+                paddingBottom: '12px', 
+                borderBottom: `2px solid ${meta.color}33`,
+                marginBottom: '4px'
+              }}>
+                <span style={{ fontSize: '1.2rem' }}>{meta.icon}</span>
+                <span style={{ fontWeight: 800, fontSize: '0.85rem', color: meta.color, textTransform: 'uppercase' }}>
+                  {meta.label}
+                </span>
+                <span style={{ 
+                  marginLeft: 'auto', 
+                  background: 'rgba(255,255,255,0.05)', 
+                  padding: '2px 8px', 
+                  borderRadius: '10px', 
+                  fontSize: '0.75rem', 
+                  fontWeight: 700 
+                }}>
+                  {stageCards.length}
+                </span>
+              </div>
 
-      {error && (
-        <div style={{ padding: 20, borderRadius: 12, background: 'rgba(244,63,94,.08)', border: '1px solid rgba(244,63,94,.25)', color: '#f43f5e', fontSize: 13 }}>
-          ⚠ {error}
-        </div>
-      )}
+              {stageCards.length === 0 && (
+                <div style={{ 
+                  padding: '24px', 
+                  textAlign: 'center', 
+                  color: 'rgba(255,255,255,0.2)', 
+                  fontSize: '0.8rem',
+                  border: '1px dashed rgba(255,255,255,0.05)',
+                  borderRadius: '8px'
+                }}>
+                  No items
+                </div>
+              )}
 
-      {!loading && !error && (
-        <div style={{ overflowX: 'auto', paddingBottom: 16 }}>
-          <div style={{ display: 'flex', gap: 12, minWidth: 900 }}>
-            {STAGES.map(stage => {
-              const meta = STAGE_META[stage];
-              const col  = columnCards(stage);
-              return (
-                <div key={stage} style={{ flex: 1, minWidth: 160 }}>
-                  {/* Column header */}
-                  <div style={{ ...s.colHeader, borderColor: meta.color + '44', background: meta.color + '11' }}>
-                    <span>{meta.icon}</span>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: meta.color }}>{meta.label}</span>
-                    <span style={{ marginLeft: 'auto', fontSize: 11, fontFamily: 'var(--font-mono)', background: meta.color + '22', color: meta.color, padding: '1px 7px', borderRadius: 4 }}>
-                      {col.length}
-                    </span>
-                  </div>
+              {stageCards.map(card => (
+                <div key={card.id} style={{ 
+                  padding: '16px', 
+                  background: 'rgba(255,255,255,0.03)', 
+                  borderRadius: '10px', 
+                  border: '1px solid rgba(255,255,255,0.05)',
+                  position: 'relative'
+                }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: '4px' }}>{card.title}</div>
+                  <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', marginBottom: '12px' }}>{card.company}</div>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <select 
+                      value={stage}
+                      onChange={(e) => moveCard(card.id, e.target.value as any)}
+                      style={{ 
+                        width: '100%', 
+                        padding: '6px', 
+                        borderRadius: '4px', 
+                        background: 'rgba(0,0,0,0.2)', 
+                        border: '1px solid rgba(255,255,255,0.1)', 
+                        color: 'white',
+                        fontSize: '0.75rem'
+                      }}
+                    >
+                      {STAGES.map(s => (
+                        <option key={s} value={s}>{STAGE_META[s].label}</option>
+                      ))}
+                    </select>
 
-                  {/* Cards */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
-                    {col.map(card => (
-                      <div key={card.id} className="glass" style={{ padding: 14 }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4, lineHeight: 1.3 }}>{card.title}</div>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>{card.company}</div>
-
-                        {card.match_score !== undefined && (
-                          <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: theme.glow, marginBottom: 8 }}>
-                            {card.match_score}% match
-                          </div>
-                        )}
-
-                        {/* Move stage */}
-                        <select
-                          value={stage}
-                          onChange={e => moveCard(card, e.target.value as KanbanCard['stage'])}
-                          style={s.stageSelect}
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      {card.apply_url && (
+                        <a 
+                          href={card.apply_url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          style={{ 
+                            flex: 1, 
+                            textAlign: 'center', 
+                            padding: '6px', 
+                            background: 'rgba(255,255,255,0.05)', 
+                            borderRadius: '4px', 
+                            color: 'white', 
+                            textDecoration: 'none',
+                            fontSize: '0.75rem',
+                            fontWeight: 600
+                          }}
                         >
-                          {STAGES.map(st => (
-                            <option key={st} value={st}>{STAGE_META[st].label}</option>
-                          ))}
-                        </select>
-
-                        {/* Actions */}
-                        <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                          {card.apply_url && (
-                            <a href={card.apply_url} target="_blank" rel="noopener noreferrer"
-                              style={{ fontSize: 10, color: theme.glow, flexGrow: 1, textAlign: 'center', padding: '4px 0', borderRadius: 5, background: theme.dim, border: `1px solid ${theme.border}` }}>
-                              Apply →
-                            </a>
-                          )}
-                          <button onClick={() => card.id && deleteCard(card.id)}
-                            style={{ fontSize: 10, color: '#f43f5e', padding: '4px 8px', borderRadius: 5, background: 'rgba(244,63,94,.1)', border: '1px solid rgba(244,63,94,.25)' }}>
-                            ✕
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-
-                    {col.length === 0 && (
-                      <div style={{ padding: 16, textAlign: 'center', fontSize: 11, color: 'var(--text-muted)', borderRadius: 10, border: '1px dashed var(--border-subtle)' }}>
-                        empty
-                      </div>
-                    )}
+                          Apply ↗
+                        </a>
+                      )}
+                      <button 
+                        onClick={() => deleteCard(card.id)}
+                        style={{ 
+                          padding: '6px 10px', 
+                          background: 'rgba(239, 68, 68, 0.1)', 
+                          border: '1px solid rgba(239, 68, 68, 0.2)', 
+                          color: '#ef4444',
+                          borderRadius: '4px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+              ))}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
-
-const s: Record<string, React.CSSProperties> = {
-  secLabel:    { fontSize: 10, fontWeight: 700, letterSpacing: '.12em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 },
-  secTitle:    { fontSize: 22, fontWeight: 800, marginBottom: 4 },
-  secSub:      { fontSize: 13, color: 'var(--text-secondary)' },
-  refreshBtn:  { padding: '8px 16px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer' },
-  colHeader:   { display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 9, border: '1px solid', fontSize: 11 },
-  stageSelect: { width: '100%', fontSize: 11, background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer' },
-};

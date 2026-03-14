@@ -1,5 +1,6 @@
 import React from 'react';
 import axios from 'axios';
+import { API_BASE } from '../utils/api';
 
 export const MCPImportButton = ({ profileId, onRefresh }: { profileId: string, onRefresh: () => void }) => {
     const handleImport = async () => {
@@ -7,7 +8,7 @@ export const MCPImportButton = ({ profileId, onRefresh }: { profileId: string, o
         if (!data) return;
         try {
             const jobs = JSON.parse(data);
-            await axios.post('http://localhost:8080/api/jobs/ingest-mcp', { profileId, jobs });
+            await axios.post(`${API_BASE}/api/jobs/ingest-mcp`, { profileId, jobs });
             alert("✅ Holistic leads added to Railway!");
             onRefresh();
         } catch (e) {

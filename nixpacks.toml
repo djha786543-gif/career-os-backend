@@ -8,4 +8,4 @@ cmds = ["npm run build"]
 nixPkgs = ["chromium", "nodejs"]
 
 [start]
-cmd = "node dist/index.js"
+cmd = "node server.js"

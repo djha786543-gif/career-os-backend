@@ -1,131 +1,153 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useProfile } from '../../context/ProfileContext';
-import { Cert, CertPathwayStep } from '../../data/profiles';
 
-type Tier = 'immediate' | 'midterm' | 'longterm';
-
-const TIER_LABELS: Record<Tier, { label: string; color: string; icon: string }> = {
-  immediate: { label: 'Immediate',  color: '#f43f5e', icon: '🚀' },
-  midterm:   { label: 'Mid-Term',   color: '#f59e0b', icon: '📈' },
-  longterm:  { label: 'Long-Term',  color: '#6366f1', icon: '🏆' },
-};
-
-const DIFF_COLOR: Record<string, string> = {
-  Intermediate: '#f59e0b',
-  Advanced:     '#f43f5e',
-  Expert:       '#a855f7',
-};
-
-function CertCard({ cert, color, theme }: { cert: Cert; color: string; theme: any }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="glass" style={{ overflow: 'hidden', marginBottom: 12 }}>
-      <button onClick={() => setOpen(o => !o)} style={s.certBtn}>
-        <div style={{ flex: 1, textAlign: 'left' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-            <span style={{ fontSize: 15, fontWeight: 700 }}>{cert.name}</span>
-            <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4, background: DIFF_COLOR[cert.difficulty] + '22', color: DIFF_COLOR[cert.difficulty] }}>
-              {cert.difficulty}
-            </span>
-          </div>
-          <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--text-muted)' }}>
-            <span>🏛 {cert.issuer}</span>
-            <span>📅 {cert.timeline}</span>
-            <span style={{ color: '#10b981', fontWeight: 700 }}>💰 {cert.salaryImpact}</span>
-          </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>DEMAND</div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 800, color }}>{cert.demand}</div>
-          </div>
-          <span style={{ color: 'var(--text-muted)', fontSize: 18, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}>⌄</span>
-        </div>
-      </button>
-
-      {open && (
-        <div style={{ padding: '0 20px 20px' }}>
-          <div style={{ padding: 14, background: 'rgba(255,255,255,.03)', borderRadius: 10, marginBottom: 16, fontSize: 13, lineHeight: 1.7, color: 'var(--text-secondary)' }}>
-            {cert.why}
-          </div>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 10 }}>
-            STUDY PATHWAY
-          </div>
-          {cert.pathway.map((step: CertPathwayStep) => (
-            <div key={step.n} style={{ display: 'flex', gap: 14, marginBottom: 10 }}>
-              <div style={{ width: 26, height: 26, borderRadius: '50%', background: theme.dim, border: `1.5px solid ${theme.border}`, color: theme.glow, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>
-                {step.n}
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 500 }}>{step.task}</div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{step.dur}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+interface Cert {
+  name: string;
+  issuer: string;
+  status: 'Active' | 'In Progress' | 'Completed';
+  earned?: string;
+  renewal?: string;
+  cpe_required?: number;
+  cpe_earned?: number;
+  target?: string;
+  notes?: string;
+  priority?: boolean;
 }
 
+const DJ_CERTS: Cert[] = [
+  { name:'CISA', issuer:'ISACA', status:'Active', earned:'2018', renewal:'2027', cpe_required:120, cpe_earned:87 },
+  { name:'AWS Cloud Practitioner', issuer:'Amazon', status:'Active', earned:'Feb 2026', renewal:'Feb 2029', notes:'Recently passed ✓' },
+  { name:'Lean Six Sigma Black Belt', issuer:'ASQ', status:'Active', earned:'2020' },
+  { name:'AAIA — AI Auditing', issuer:'ISACA', status:'In Progress', target:'Q2 2026', notes:'Priority', priority:true }
+];
+
+const POOJA_CERTS: Cert[] = [
+  { name:'ASCP MB — Molecular Biology', issuer:'ASCP', status:'In Progress', target:'May 2026', notes:'Exam scheduled · Priority', priority:true },
+  { name:'PhD — Cardiovascular/Molecular Biology', issuer:'University', status:'Completed', notes:'Postdoctoral level' },
+  { name:'NIH Rigor & Reproducibility', issuer:'NIH', status:'Active', notes:'Required for NIH grants' },
+  { name:'CITI Program — Human Subjects', issuer:'CITI', status:'Active', notes:'Research compliance' }
+];
+
+import { SourceBadge } from '../SourceBadge';
+
 export function CertVault() {
-  const { profile, theme } = useProfile();
-  const [activeTier, setActiveTier] = useState<Tier>('immediate');
-  const certs = profile.vault[activeTier];
+  const { profile } = useProfile();
+  const certs = profile === 'dj' ? DJ_CERTS : POOJA_CERTS;
+
+  const getStatusStyles = (status: Cert['status']) => {
+    switch (status) {
+      case 'Active': return { color: '#22c55e', bg: 'rgba(34, 197, 94, 0.1)' };
+      case 'In Progress': return { color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.1)' };
+      case 'Completed': return { color: '#94a3b8', bg: 'rgba(148, 163, 184, 0.1)' };
+    }
+  };
 
   return (
-    <div>
-      <div style={{ marginBottom: 24 }}>
-        <div style={s.secLabel}>CERTIFICATION ROADMAP</div>
-        <div style={s.secTitle}>Cert Vault</div>
-        <div style={s.secSub}>ROI-ranked certifications · {profile.activeCert}</div>
+    <div className="cert-vault-section" style={{ padding: '24px', background: 'rgba(15, 23, 42, 0.3)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)', position: 'relative' }}>
+      <div style={{ position: 'absolute', top: '24px', right: '24px' }}>
+        <SourceBadge source="static" />
       </div>
+      <header style={{ marginBottom: '24px' }}>
+        <h2 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0 }}>Certification Vault</h2>
+        <p style={{ color: 'rgba(255,255,255,0.6)', marginTop: '4px' }}>Verified credentials and active pursuits</p>
+      </header>
 
-      {/* Tier selector */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
-        {(Object.keys(TIER_LABELS) as Tier[]).map(tier => {
-          const t = TIER_LABELS[tier];
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
+        {certs.map((cert, idx) => {
+          const styles = getStatusStyles(cert.status);
+          const isPriority = cert.priority;
+
           return (
-            <button key={tier} onClick={() => setActiveTier(tier)} style={{
-              ...s.tierBtn,
-              background: activeTier === tier ? t.color + '22' : 'var(--bg-secondary)',
-              color:      activeTier === tier ? t.color : 'var(--text-muted)',
-              border:     `1px solid ${activeTier === tier ? t.color + '44' : 'var(--border-subtle)'}`,
+            <div key={idx} style={{ 
+              padding: '20px', 
+              borderRadius: '12px', 
+              background: 'rgba(255,255,255,0.03)', 
+              border: isPriority ? '1px solid #eab308' : '1px solid rgba(255,255,255,0.05)',
+              position: 'relative',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
             }}>
-              {t.icon} {t.label} ({profile.vault[tier].length})
-            </button>
+              {isPriority && (
+                <div style={{ 
+                  position: 'absolute', 
+                  top: '12px', 
+                  right: '12px', 
+                  background: '#eab308', 
+                  color: '#1e1b4b', 
+                  fontSize: '0.65rem', 
+                  fontWeight: 800, 
+                  padding: '2px 8px', 
+                  borderRadius: '4px',
+                  textTransform: 'uppercase'
+                }}>
+                  Priority
+                </div>
+              )}
+
+              <div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', marginBottom: '4px' }}>
+                  {cert.issuer}
+                </div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0 }}>{cert.name}</h3>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <span style={{ 
+                  fontSize: '0.75rem', 
+                  fontWeight: 700, 
+                  color: styles.color, 
+                  background: styles.bg, 
+                  padding: '4px 8px', 
+                  borderRadius: '4px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: styles.color }} />
+                  {cert.status}
+                </span>
+                
+                {cert.earned && (
+                  <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)' }}>
+                    Earned {cert.earned}
+                  </span>
+                )}
+              </div>
+
+              {cert.cpe_required && cert.cpe_earned !== undefined && (
+                <div style={{ marginTop: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: '6px' }}>
+                    <span style={{ color: 'rgba(255,255,255,0.6)' }}>CPE Progress</span>
+                    <span style={{ fontWeight: 700 }}>{cert.cpe_earned} / {cert.cpe_required}</span>
+                  </div>
+                  <div style={{ height: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '2px', overflow: 'hidden' }}>
+                    <div style={{ 
+                      width: `${(cert.cpe_earned / cert.cpe_required) * 100}%`, 
+                      height: '100%', 
+                      background: 'var(--profile-color)',
+                      borderRadius: '2px'
+                    }} />
+                  </div>
+                </div>
+              )}
+
+              {cert.target && (
+                <div style={{ marginTop: 'auto', padding: '10px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                  <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', fontWeight: 700, textTransform: 'uppercase' }}>Target Date</div>
+                  <div style={{ fontWeight: 700, color: '#f59e0b' }}>{cert.target}</div>
+                </div>
+              )}
+
+              {cert.notes && (
+                <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', fontStyle: 'italic' }}>
+                  {cert.notes}
+                </div>
+              )}
+            </div>
           );
         })}
       </div>
-
-      {certs.map(cert => (
-        <CertCard key={cert.name} cert={cert} color={TIER_LABELS[activeTier].color} theme={theme} />
-      ))}
-
-      {/* Timing matrix */}
-      <div className="glass" style={{ padding: 24, marginTop: 24 }}>
-        <div style={s.cardLabel}>⏱ TIMING MATRIX</div>
-        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {profile.timing.map(t => (
-            <div key={t.skill} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: 10, border: '1px solid var(--border-subtle)' }}>
-              <div style={{ minWidth: 120 }}>
-                <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 6, background: t.color + '22', color: t.color }}>{t.status}</span>
-              </div>
-              <span style={{ fontSize: 13, fontWeight: 600, minWidth: 180 }}>{t.skill}</span>
-              <span style={{ fontSize: 12, color: 'var(--text-muted)', flex: 1 }}>{t.reason}</span>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }
-
-const s: Record<string, React.CSSProperties> = {
-  secLabel:  { fontSize: 10, fontWeight: 700, letterSpacing: '.12em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 },
-  secTitle:  { fontSize: 22, fontWeight: 800, marginBottom: 4 },
-  secSub:    { fontSize: 13, color: 'var(--text-secondary)' },
-  cardLabel: { fontSize: 10, fontWeight: 700, letterSpacing: '.1em', color: 'var(--text-muted)', textTransform: 'uppercase' },
-  certBtn:   { display: 'flex', alignItems: 'center', gap: 16, width: '100%', padding: '16px 20px', background: 'transparent', cursor: 'pointer', transition: 'background .2s' },
-  tierBtn:   { padding: '8px 20px', borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: 'pointer', transition: 'all .2s' },
-};

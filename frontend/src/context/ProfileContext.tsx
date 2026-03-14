@@ -1,72 +1,58 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { PROFILES, Profile } from '../data/profiles';
-import { PREP_VAULT, PrepVaultProfile } from '../data/prepVault';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
 export type ProfileId = 'dj' | 'pj';
 
-// Maps frontend profile ID to backend candidate ID
-export const BACKEND_ID: Record<ProfileId, string> = {
-  dj: 'deobrat',
-  pj: 'pooja',
-};
+export interface ProfileMetadata {
+  name: string;
+  role: string;
+  initials: string;
+  color: string;
+}
 
-const THEME: Record<ProfileId, { glow: string; dim: string; border: string; label: string }> = {
-  dj: { glow: '#22d3ee', dim: 'rgba(34,211,238,.15)', border: 'rgba(34,211,238,.35)', label: 'DJ' },
-  pj: { glow: '#f472b6', dim: 'rgba(244,114,182,.15)', border: 'rgba(244,114,182,.35)', label: 'PJ' },
+export const PROFILE_METADATA: Record<ProfileId, ProfileMetadata> = {
+  dj: { name: 'Deobrat Jha', role: 'IT Audit Manager', initials: 'DJ', color: '#0F6E56' },
+  pj: { name: 'Pooja Jha', role: 'Postdoctoral Researcher · Cardiovascular Biology', initials: 'PJ', color: '#534AB7' }
 };
 
 interface ProfileContextValue {
-  activeId:      ProfileId;
-  profile:       Profile;
-  vault:         PrepVaultProfile;
-  theme:         typeof THEME[ProfileId];
-  setActiveId:   (id: ProfileId) => void;
-  toggle:        () => void;
+  profile: ProfileId;
+  setProfile: (profile: ProfileId) => void;
+  metadata: ProfileMetadata;
+  cacheVersion: number;
+  refresh: () => void;
 }
 
-const ProfileContext = createContext<ProfileContextValue | null>(null);
+const ProfileContext = createContext<ProfileContextValue | undefined>(undefined);
 
-export function ProfileProvider({ children }: { children: React.ReactNode }) {
-  const [activeId, setActiveIdState] = useState<ProfileId>('dj');
+export function ProfileProvider({ children }: { children: ReactNode }) {
+  const [profile, setProfileState] = useState<ProfileId>('dj');
+  const [cacheVersion, setCacheVersion] = useState(0);
 
-  // Apply CSS variables whenever the active profile changes
-  const applyTheme = useCallback((id: ProfileId) => {
-    const t = THEME[id];
-    const root = document.documentElement;
-    root.style.setProperty('--active-glow',   t.glow);
-    root.style.setProperty('--active-dim',    t.dim);
-    root.style.setProperty('--active-border', t.border);
-    root.style.setProperty('--active-color',  t.glow);
-  }, []);
-
-  useEffect(() => { applyTheme(activeId); }, [activeId, applyTheme]);
-
-  const setActiveId = useCallback((id: ProfileId) => {
-    setActiveIdState(id);
-  }, []);
-
-  const toggle = useCallback(() => {
-    setActiveIdState(prev => prev === 'dj' ? 'pj' : 'dj');
-  }, []);
-
-  const value: ProfileContextValue = {
-    activeId,
-    profile: PROFILES[activeId],
-    vault:   PREP_VAULT[activeId],
-    theme:   THEME[activeId],
-    setActiveId,
-    toggle,
+  const setProfile = (newProfile: ProfileId) => {
+    if (newProfile !== profile) {
+      setProfileState(newProfile);
+      setCacheVersion(prev => prev + 1);
+    }
   };
 
+  const refresh = () => setCacheVersion(prev => prev + 1);
+
+  // Sync theme color to CSS variable for dynamic styling
+  useEffect(() => {
+    document.documentElement.style.setProperty('--profile-color', PROFILE_METADATA[profile].color);
+  }, [profile]);
+
   return (
-    <ProfileContext.Provider value={value}>
+    <ProfileContext.Provider value={{ profile, setProfile, metadata: PROFILE_METADATA[profile], cacheVersion, refresh }}>
       {children}
     </ProfileContext.Provider>
   );
 }
 
-export function useProfile(): ProfileContextValue {
-  const ctx = useContext(ProfileContext);
-  if (!ctx) throw new Error('useProfile must be used within ProfileProvider');
-  return ctx;
+export function useProfile() {
+  const context = useContext(ProfileContext);
+  if (!context) {
+    throw new Error('useProfile must be used within a ProfileProvider');
+  }
+  return context;
 }

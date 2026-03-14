@@ -1,25 +1,39 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import { Pool } from 'pg';
 import jobsRouter from './api/jobs';
 import kanbanRouter from './api/kanban';
+import intelligenceRouter from './api/intelligence';
 
 dotenv.config();
 const app = express();
 const PORT = Number(process.env.PORT) || 8080;
 
-app.use(cors({
-	origin: 'https://djha786543-gif.github.io',
-	credentials: true
-}));
+// ─── Middleware ───────────────────────────────────────────────────────────────
+app.use(cors({ origin: '*', methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'] }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
 
-// 1. Simple health check (Railway ping)
-app.get('/health', (req, res) => {
-	res.status(200).json({ status: 'ok' });
+// Global 30s request timeout
+app.use((req: Request, res: Response, next: NextFunction) => {
+	res.setTimeout(30000, () => {
+		if (!res.headersSent) res.status(503).json({ error: 'Request timeout' });
+	});
+	next();
+});
+
+// 1. Health check (Railway ping + env status)
+app.get('/health', (req: Request, res: Response) => {
+	res.status(200).json({
+		status: 'ok',
+		timestamp: Date.now(),
+		env: {
+			anthropic: !!process.env.ANTHROPIC_API_KEY,
+			adzuna:    !!process.env.ADZUNA_APP_ID,
+		},
+	});
 });
 
 // 2. Deep status check (Railway healthcheckPath + dashboard use)
@@ -68,8 +82,15 @@ app.get('/', (req, res) => {
 });
 
 // 4. Feature routes
-app.use('/api/jobs',   jobsRouter);
-app.use('/api/kanban', kanbanRouter);
+app.use('/api/jobs',          jobsRouter);
+app.use('/api/kanban',        kanbanRouter);
+app.use('/api',               intelligenceRouter);  // /api/trends, /api/skills, /api/salary, /api/market
+
+// Global error handler (must be last)
+app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+	console.error('[ERROR]', err.message);
+	if (!res.headersSent) res.status(500).json({ error: err.message });
+});
 
 app.listen(PORT, '0.0.0.0', () => {
 	console.log('✅ Career-OS backend running on port ' + PORT);

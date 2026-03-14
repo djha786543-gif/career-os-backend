@@ -1,129 +1,89 @@
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
 import { useProfile } from '../../context/ProfileContext';
-import { HeatmapEntry } from '../../data/profiles';
+import { useFetch } from '../../hooks/useFetch';
+import { DEMO_MARKET_FALLBACK } from '../../data/fallbacks';
+import { SourceBadge } from '../SourceBadge';
 
-const BAR_GRADIENT: Record<string, string> = {
-  '#f43f5e': 'linear-gradient(90deg, #f43f5e, #fb7185)',
-  '#f59e0b': 'linear-gradient(90deg, #f59e0b, #fbbf24)',
-  '#10b981': 'linear-gradient(90deg, #10b981, #34d399)',
-  '#6366f1': 'linear-gradient(90deg, #6366f1, #818cf8)',
-};
+interface MarketData {
+  city: string;
+  demand: number;
+  jobs: number;
+  yoy: string;
+}
 
-const SIGNAL_LABEL: Record<string, { label: string; color: string }> = {
-  '#f43f5e': { label: '🔥 Critical',  color: '#f43f5e' },
-  '#f59e0b': { label: '📈 Growing',   color: '#f59e0b' },
-  '#10b981': { label: '✅ Established',color: '#10b981' },
-};
+interface MarketResponse {
+  data: MarketData[];
+  source: string;
+}
 
 export function MarketHeatmap() {
-  const { profile, theme } = useProfile();
-  const barsRef = useRef<HTMLDivElement[]>([]);
+  const { metadata } = useProfile();
+  const { data, loading, source } = useFetch<MarketResponse>('/api/market', DEMO_MARKET_FALLBACK as MarketResponse);
 
-  // Animate bars on mount / profile switch
-  useEffect(() => {
-    barsRef.current.forEach((el, i) => {
-      if (!el) return;
-      el.style.width = '0%';
-      setTimeout(() => {
-        el.style.width = profile.heatmap[i].score + '%';
-      }, i * 60);
-    });
-  }, [profile]);
+  const marketData = data?.data || [];
 
   return (
-    <div>
-      {/* ── Header ── */}
-      <div style={{ marginBottom: 24 }}>
-        <div style={s.secLabel}>MARKET INTELLIGENCE</div>
-        <div style={s.secTitle}>Skill Demand Heatmap</div>
-        <div style={s.secSub}>Real-time market demand scores · {profile.name}</div>
+    <div className="market-heatmap-section" style={{ padding: '24px', background: 'rgba(15, 23, 42, 0.3)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)', position: 'relative' }}>
+      <div style={{ position: 'absolute', top: '24px', right: '24px' }}>
+        <SourceBadge source={source} />
       </div>
 
-      {/* ── Gauge ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 28 }}>
-        <div className="glass" style={{ padding: 24 }}>
-          <div style={s.gaugeLabel}>OVERALL MARKET FIT</div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, margin: '12px 0' }}>
-            <span style={{ fontSize: 48, fontWeight: 800, fontFamily: 'var(--font-mono)', color: theme.glow }}>
-              {profile.gaugeVal}
-            </span>
-            <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>/100</span>
-          </div>
-          <div style={{ fontSize: 12, color: '#10b981' }}>{profile.gaugeTrend}</div>
-        </div>
-        <div className="glass" style={{ padding: 24 }}>
-          <div style={s.gaugeLabel}>KEY SIGNALS</div>
-          {profile.gaugeBars.map(bar => (
-            <div key={bar.label} style={{ marginTop: 14 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 4 }}>
-                <span style={{ color: 'var(--text-secondary)' }}>{bar.label}</span>
-                <span style={{ fontFamily: 'var(--font-mono)', color: bar.color, fontWeight: 700 }}>{bar.val}</span>
-              </div>
-              <div style={s.barWrap}>
-                <div style={{ ...s.barFill, width: `${bar.val}%`, background: bar.color + 'cc', transition: 'width 1s' }} />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      <header style={{ marginBottom: '24px' }}>
+        <h2 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0 }}>Job market demand</h2>
+        <p style={{ color: 'rgba(255,255,255,0.6)', marginTop: '4px' }}>{metadata.name}</p>
+      </header>
 
-      {/* ── Stat row ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 28 }}>
-        {profile.trendStats.map(stat => (
-          <div key={stat.lbl} className="glass" style={{ padding: 20 }}>
-            <div style={{ fontSize: 28, fontWeight: 800, fontFamily: 'var(--font-mono)', background: `linear-gradient(135deg, var(--accent-indigo), ${theme.glow})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-              {stat.val}
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{stat.lbl}</div>
-            <div style={{ fontSize: 11, color: stat.up ? '#10b981' : '#f43f5e', marginTop: 6 }}>{stat.delta}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* ── Heatmap bars ── */}
-      <div className="glass" style={{ padding: 24, marginBottom: 24 }}>
-        <div style={s.gaugeLabel}>SKILL DEMAND RANKING</div>
-        <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {profile.heatmap.map((entry: HeatmapEntry, i) => {
-            const sig = SIGNAL_LABEL[entry.color] ?? { label: '—', color: '#5f6580' };
-            return (
-              <div key={entry.name} style={s.skillRow}>
-                <span style={s.rank}>{i + 1}</span>
-                <span style={s.skillName}>{entry.name}</span>
-                <div style={s.barWrap}>
-                  <div
-                    ref={el => { if (el) barsRef.current[i] = el; }}
-                    style={{
-                      height: '100%', borderRadius: 3, width: '0%',
-                      background: BAR_GRADIENT[entry.color] || entry.color,
-                      transition: 'width 1.2s cubic-bezier(.16,1,.3,1)',
-                    }}
-                  />
-                </div>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, minWidth: 28, textAlign: 'right', fontWeight: 700, color: entry.color }}>
-                  {entry.score}
-                </span>
-                <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4, background: entry.color + '22', color: entry.color, minWidth: 90, textAlign: 'right' }}>
-                  {entry.delta}
-                </span>
-                <span style={{ fontSize: 11, color: sig.color, minWidth: 100, textAlign: 'right' }}>{sig.label}</span>
-              </div>
-            );
-          })}
+      {loading ? (
+        <div style={{ padding: '40px', textAlign: 'center', color: 'rgba(255,255,255,0.4)' }}>
+          Loading market insights...
         </div>
-      </div>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                <th style={{ padding: '12px 8px', color: 'rgba(255,255,255,0.4)', fontSize: '0.75rem', textTransform: 'uppercase', fontWeight: 600 }}>City</th>
+                <th style={{ padding: '12px 8px', color: 'rgba(255,255,255,0.4)', fontSize: '0.75rem', textTransform: 'uppercase', fontWeight: 600 }}>Demand Score</th>
+                <th style={{ padding: '12px 8px', color: 'rgba(255,255,255,0.4)', fontSize: '0.75rem', textTransform: 'uppercase', fontWeight: 600, textAlign: 'right' }}>Open Roles</th>
+                <th style={{ padding: '12px 8px', color: 'rgba(255,255,255,0.4)', fontSize: '0.75rem', textTransform: 'uppercase', fontWeight: 600, textAlign: 'right' }}>YoY Change</th>
+              </tr>
+            </thead>
+            <tbody>
+              {marketData.map((item, idx) => {
+                const isPositive = item.yoy.startsWith('+');
+                return (
+                  <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                    <td style={{ padding: '16px 8px', fontWeight: 600 }}>{item.city}</td>
+                    <td style={{ padding: '16px 8px', width: '40%' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ flexGrow: 1, height: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', overflow: 'hidden' }}>
+                          <div style={{ 
+                            width: `${item.demand}%`, 
+                            height: '100%', 
+                            background: `linear-gradient(90deg, var(--profile-color)dd, var(--profile-color))`,
+                            opacity: item.demand / 100 + 0.2,
+                            borderRadius: '4px'
+                          }} />
+                        </div>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 700, minWidth: '30px' }}>{item.demand}</span>
+                      </div>
+                    </td>
+                    <td style={{ padding: '16px 8px', textAlign: 'right', fontWeight: 500 }}>{item.jobs.toLocaleString()}</td>
+                    <td style={{ 
+                      padding: '16px 8px', 
+                      textAlign: 'right', 
+                      fontWeight: 700, 
+                      color: isPositive ? '#22c55e' : '#ef4444' 
+                    }}>
+                      {item.yoy}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
-
-const s: Record<string, React.CSSProperties> = {
-  secLabel:  { fontSize: 10, fontWeight: 700, letterSpacing: '.12em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 },
-  secTitle:  { fontSize: 22, fontWeight: 800, marginBottom: 4 },
-  secSub:    { fontSize: 13, color: 'var(--text-secondary)' },
-  gaugeLabel:{ fontSize: 10, fontWeight: 700, letterSpacing: '.12em', color: 'var(--text-muted)', textTransform: 'uppercase' },
-  barWrap:   { flex: 1, height: 6, background: 'rgba(255,255,255,.06)', borderRadius: 3, overflow: 'hidden' },
-  barFill:   { height: '100%', borderRadius: 3 },
-  skillRow:  { display: 'flex', alignItems: 'center', gap: 14, padding: '10px 14px', background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 10 },
-  rank:      { fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', minWidth: 20, textAlign: 'right' },
-  skillName: { fontSize: 13, fontWeight: 600, minWidth: 200, flexShrink: 0 },
-};
