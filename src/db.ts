@@ -2,8 +2,8 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-// Priority: 1. Private URL (Internal) 2. Standard URL (Public)
-const dbUrl = process.env.DATABASE_PRIVATE_URL || process.env.DATABASE_URL || '';
+// Use the exact Public Proxy URL
+const dbUrl = 'postgresql://postgres:RZENXndmOMxgMZxlaKtIwzosuAIsartk@caboose.proxy.rlwy.net:29794/railway';
 
 const pool = new Pool({
     connectionString: dbUrl,
@@ -12,13 +12,11 @@ const pool = new Pool({
     }
 });
 
-// Immediate connection test for Railway Logs
 pool.query('SELECT NOW()', (err, res) => {
     if (err) {
         console.error('❌ DB Connection Error:', err.message);
-        console.log('TIP: Ensure DATABASE_PRIVATE_URL is set in Railway Variables.');
     } else {
-        console.log('🐘 PostgreSQL connected successfully via Railway internal network');
+        console.log('🐘 PostgreSQL connected successfully via Public Proxy');
     }
 });
 
