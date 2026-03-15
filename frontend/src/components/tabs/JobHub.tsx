@@ -369,6 +369,11 @@ export function JobHub() {
                 <option value="canada">🇨🇦 Canada</option>
                 <option value="germany">🇩🇪 Germany</option>
                 <option value="australia">🇦🇺 Australia</option>
+                <option value="netherlands">🇳🇱 Netherlands</option>
+                <option value="switzerland">🇨🇭 Switzerland</option>
+                <option value="singapore">🇸🇬 Singapore</option>
+                <option value="japan">🇯🇵 Japan</option>
+                <option value="france">🇫🇷 France</option>
               </select>
             )}
             <div style={s.remoteToggle}>
