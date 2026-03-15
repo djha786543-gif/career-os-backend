@@ -17,6 +17,7 @@ const CandidatesData_1 = require("../models/CandidatesData");
 const jobIngestionService_1 = require("../services/jobIngestionService");
 const jobSearchService_1 = require("../services/jobSearchService");
 const webSearchJobService_1 = require("../services/webSearchJobService");
+const classifyAcademicIndustry_1 = require("../utils/classifyAcademicIndustry");
 const router = express_1.default.Router();
 const VALID_TRACKS = ['Academic', 'Industry'];
 const VALID_REGIONS = ['US', 'Europe', 'India'];
@@ -123,10 +124,34 @@ const COUNTRY_TO_REGION = {
     'usa': 'US',
     'united kingdom': 'Europe',
     'uk': 'Europe',
+    'great britain': 'Europe',
+    'britain': 'Europe',
     'europe': 'Europe',
     'india': 'India',
     'in': 'India',
+    // Web-search-only countries (we assign them to a region for display)
+    'germany': 'Europe',
+    'deutschland': 'Europe',
+    'canada': 'North America',
+    'australia': 'Australia',
+    'netherlands': 'Europe',
+    'holland': 'Europe',
+    'switzerland': 'Europe',
+    'sweden': 'Europe',
+    'denmark': 'Europe',
+    'singapore': 'Asia',
+    'japan': 'Asia',
+    'france': 'Europe',
+    'spain': 'Europe',
+    'italy': 'Europe',
+    'belgium': 'Europe',
+    'norway': 'Europe',
 };
+const WEB_SEARCH_COUNTRIES = new Set([
+    'germany', 'deutschland', 'canada', 'australia', 'netherlands', 'holland',
+    'switzerland', 'sweden', 'denmark', 'singapore', 'japan', 'france',
+    'spain', 'italy', 'belgium', 'norway',
+]);
 function resolveRegion(country, region) {
     if (region && VALID_REGIONS.includes(region))
         return region;
@@ -167,6 +192,7 @@ function toFrontendJob(job) {
         keySkills: (job.skills || []).slice(0, 6),
         region: job.region,
         eyConnection: detectEYConnection(job),
+        category: job.category,
     };
 }
 // ─── GET /api/jobs ────────────────────────────────────────────────────────────
@@ -237,18 +263,43 @@ router.get('/', async (req, res) => {
             if (rawMcp)
                 mcpJobs = rawMcp.map(mcpJobToInternal);
         }
-        // 3. Fetch from Adzuna (Live Jobs)
+        // 3. Fetch live jobs (Adzuna or WebSearch depending on country)
         let adzunaJobs = [];
-        try {
-            adzunaJobs = await (0, jobIngestionService_1.ingestJobs)(candidate.id, resolvedRegions, resolvedTrack);
+        const countryParam = (q.country || '').toLowerCase().trim();
+        const useWebSearch = candidate.id === 'pooja' && countryParam && WEB_SEARCH_COUNTRIES.has(countryParam);
+        const isAllCountries = candidate.id === 'pooja' && (!countryParam || countryParam === 'all');
+        if (useWebSearch) {
+            // Non-US/UK country → use Claude web search
+            const COUNTRY_DISPLAY = {
+                'germany': 'Germany', 'deutschland': 'Germany',
+                'canada': 'Canada', 'australia': 'Australia',
+                'netherlands': 'Netherlands', 'holland': 'Netherlands',
+                'switzerland': 'Switzerland', 'sweden': 'Sweden',
+                'denmark': 'Denmark', 'singapore': 'Singapore',
+                'japan': 'Japan', 'france': 'France', 'spain': 'Spain',
+                'italy': 'Italy', 'belgium': 'Belgium', 'norway': 'Norway',
+            };
+            const countryName = COUNTRY_DISPLAY[countryParam] || countryParam;
+            try {
+                adzunaJobs = await (0, webSearchJobService_1.searchPoojaJobsViaWebSearch)(countryName, resolvedTrack);
+                console.log(`[Jobs] WebSearch for Pooja/${countryName}: ${adzunaJobs.length} jobs`);
+            }
+            catch (err) {
+                console.error('[Jobs] WebSearch error:', err instanceof Error ? err.message : err);
+            }
         }
-        catch (err) {
-            console.error('Adzuna Ingestion Error:', err instanceof Error ? err.message : err);
+        else {
+            try {
+                adzunaJobs = await (0, jobIngestionService_1.ingestJobs)(candidate.id, resolvedRegions, resolvedTrack);
+            }
+            catch (err) {
+                console.error('Adzuna Ingestion Error:', err instanceof Error ? err.message : err);
+            }
         }
         // 3b. Web search jobs for Pooja (supplements Adzuna which has thin coverage for research roles)
         // Wrapped in a 75s timeout. The route-level timeout was extended to 90s to accommodate this.
         let webSearchJobs = [];
-        if (candidate.id === 'pooja' && resolvedRegions.length > 0) {
+        if (!useWebSearch && candidate.id === 'pooja' && resolvedRegions.length > 0) {
             try {
                 const webRegions = resolvedRegions.filter(r => ['US', 'Europe', 'India'].includes(r));
                 if (webRegions.length > 0) {
@@ -267,6 +318,16 @@ router.get('/', async (req, res) => {
             }
             catch (wsErr) {
                 console.warn('[WebSearch] Failed, continuing without web search jobs:', wsErr instanceof Error ? wsErr.message : wsErr);
+            }
+        }
+        // 3c. For "all countries" Pooja fetch, additionally run Germany webSearch and merge
+        if (isAllCountries) {
+            try {
+                const intlJobs = await (0, webSearchJobService_1.searchPoojaJobsViaWebSearch)('Germany', resolvedTrack);
+                adzunaJobs = [...adzunaJobs, ...intlJobs];
+            }
+            catch (err) {
+                console.warn('[Jobs] International web search failed:', err instanceof Error ? err.message : err);
             }
         }
         // 4. Merge and Deduplicate (Priority: DB > MCP > Adzuna > WebSearch)
@@ -289,8 +350,14 @@ router.get('/', async (req, res) => {
             salaryMax: q.salaryMax,
         };
         const scored = (0, jobSearchService_1.filterAndScoreJobs)(unique, candidateWithTrack, filters);
+        // A3: Add category classification to all jobs (for Pooja's Industry/Academic counts)
+        // Map to uppercase INDUSTRY/ACADEMIA to match frontend NormalizedJob.category type
+        const classifiedJobs = scored.map(job => ({
+            ...job,
+            category: (0, classifyAcademicIndustry_1.classifyAcademicIndustry)(job) === 'Industry' ? 'INDUSTRY' : 'ACADEMIA',
+        }));
         // Final Sort: Sniper (Web Search) > fitScore
-        const allJobs = scored.sort((a, b) => {
+        const allJobs = classifiedJobs.sort((a, b) => {
             const aIsSniper = a.jobBoard === 'Web Search';
             const bIsSniper = b.jobBoard === 'Web Search';
             if (aIsSniper && !bIsSniper)
@@ -301,7 +368,7 @@ router.get('/', async (req, res) => {
         }).map(toFrontendJob);
         // Pagination
         const page = Math.max(0, parseInt(q.page || '0', 10));
-        const pageSize = Math.max(1, Math.min(50, parseInt(q.pageSize || '8', 10)));
+        const pageSize = Math.max(1, Math.min(100, parseInt(q.pageSize || '50', 10)));
         const totalResults = allJobs.length;
         const totalPages = Math.max(1, Math.ceil(totalResults / pageSize));
         const pagedJobs = allJobs.slice(page * pageSize, (page + 1) * pageSize);

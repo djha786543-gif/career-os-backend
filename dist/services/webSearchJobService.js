@@ -25,6 +25,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.fetchWebSearchJobs = fetchWebSearchJobs;
+exports.searchPoojaJobsViaWebSearch = searchPoojaJobsViaWebSearch;
 const sdk_1 = __importDefault(require("@anthropic-ai/sdk"));
 const matchScore_1 = require("../utils/matchScore");
 const deduplicateJobs_1 = require("../utils/deduplicateJobs");
@@ -271,4 +272,96 @@ async function fetchWebSearchJobs(opts) {
     }
     console.log(`[WebSearch] pooja/${track}: ${sorted.length} jobs cached`);
     return sorted;
+}
+/**
+ * Country-specific web search for Pooja — used for non-US/UK countries
+ * where Adzuna has no coverage.
+ */
+async function searchPoojaJobsViaWebSearch(country, track) {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+        console.warn('[WebSearch] ANTHROPIC_API_KEY not set');
+        return [];
+    }
+    const client = new sdk_1.default({ apiKey });
+    const trackFilter = track === 'Industry'
+        ? 'at pharmaceutical biotech or life sciences companies'
+        : track === 'Academic'
+            ? 'at universities research institutes or hospitals'
+            : 'at universities research institutes hospitals pharmaceutical or biotech companies';
+    const EUROPEAN_COUNTRIES = new Set([
+        'Germany', 'Netherlands', 'Switzerland', 'Sweden',
+        'Denmark', 'France', 'Belgium', 'Norway', 'Spain', 'Italy',
+    ]);
+    const region = EUROPEAN_COUNTRIES.has(country) ? 'Europe' : country;
+    const queries = [
+        `postdoctoral researcher cardiovascular molecular biology ${country} 2025 2026`,
+        `research scientist cardiovascular cell biology ${country} 2025`,
+        `postdoc molecular biology genomics ${country} 2025 2026`,
+        `research associate cardiovascular biology ${country} 2025`,
+    ];
+    const allRaw = [];
+    for (const query of queries) {
+        try {
+            const prompt = `Search for currently open job positions: "${query}" ${trackFilter}.
+
+Find REAL open positions posted in 2025 or 2026 in ${country}.
+Return ONLY a JSON array (no markdown fences, no prose):
+[{
+  "id": "unique_string",
+  "title": "exact job title",
+  "company": "organization name",
+  "location": "city, ${country}",
+  "description": "job description first 250 chars",
+  "apply_url": "direct application URL",
+  "posted_date": "YYYY-MM-DD or empty",
+  "employment_type": "Full-time",
+  "region": "${region}"
+}]
+Return [] if no relevant open positions found.`;
+            const fetchRes = await fetch('https://api.anthropic.com/v1/messages', {
+                method: 'POST',
+                signal: AbortSignal.timeout(55000),
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': apiKey,
+                    'anthropic-version': '2023-06-01',
+                    'anthropic-beta': 'web-search-2025-03-05',
+                },
+                body: JSON.stringify({
+                    model: 'claude-sonnet-4-6',
+                    max_tokens: 3000,
+                    tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+                    messages: [{ role: 'user', content: prompt }],
+                }),
+            });
+            if (!fetchRes.ok) {
+                const errText = await fetchRes.text();
+                throw new Error(`Anthropic API ${fetchRes.status} ${errText.slice(0, 200)}`);
+            }
+            const response = await fetchRes.json();
+            const text = (response.content ?? [])
+                .filter((b) => b.type === 'text')
+                .map((b) => b.text)
+                .join('\n');
+            const parsed = parseJobArray(text);
+            console.log(`[WebSearch/${country}] "${query}": ${parsed.length} results`);
+            allRaw.push(...parsed);
+        }
+        catch (err) {
+            console.error(`[WebSearch/${country}] Query failed: "${query}":`, err.message);
+        }
+        await new Promise(r => setTimeout(r, 800));
+    }
+    // Deduplicate by title+company
+    const seen = new Set();
+    const deduped = allRaw.filter(j => {
+        const k = `${j.title}|${j.company}`.toLowerCase();
+        if (seen.has(k))
+            return false;
+        seen.add(k);
+        return true;
+    });
+    const track_ = track ?? 'Academic';
+    return deduped.map(r => normalizeWebSearchJob(r, track_));
 }

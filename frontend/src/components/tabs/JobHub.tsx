@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useProfile, NormalizedJob, TrackerCard } from '../../context/ProfileContext';
 import { api } from '../../config/api';
 import { CP_PROFILES } from '../../data/cpProfiles';
@@ -57,6 +57,106 @@ const JobCard = ({ job, profileAccent, onSave, isNew }: { job: NormalizedJob, pr
   );
 };
 
+// ── Country Flag Helper ─────────────────────────────────────────────────────
+
+function getCountryFlag(location: string, region: string): string {
+  const loc = (location + ' ' + region).toLowerCase();
+  if (loc.includes('germany') || loc.includes('deutsch')) return '🇩🇪';
+  if (loc.includes('canada')) return '🇨🇦';
+  if (loc.includes('australia')) return '🇦🇺';
+  if (loc.includes('netherlands') || loc.includes('holland')) return '🇳🇱';
+  if (loc.includes('switzerland')) return '🇨🇭';
+  if (loc.includes('sweden')) return '🇸🇪';
+  if (loc.includes('denmark')) return '🇩🇰';
+  if (loc.includes('singapore')) return '🇸🇬';
+  if (loc.includes('japan')) return '🇯🇵';
+  if (loc.includes('france')) return '🇫🇷';
+  if (loc.includes('spain') || loc.includes('españa')) return '🇪🇸';
+  if (loc.includes('italy') || loc.includes('italia')) return '🇮🇹';
+  if (loc.includes('belgium')) return '🇧🇪';
+  if (loc.includes('norway')) return '🇳🇴';
+  if (loc.includes('uk') || loc.includes('united kingdom') || loc.includes('britain') || loc.includes('england') || loc.includes('scotland') || loc.includes('wales') || region === 'Europe') return '🇬🇧';
+  if (loc.includes('india')) return '🇮🇳';
+  if (loc.includes('united states') || loc.includes(' us') || region === 'US') return '🇺🇸';
+  return '';
+}
+
+// ── List Job Card ───────────────────────────────────────────────────────────
+
+function ListJobCard({ job, onSave }: { job: any; onSave: (j: any) => void }) {
+  return (
+    <div className="glass" style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 16,
+      padding: '0 16px',
+      marginBottom: 8,
+      height: 80,
+      borderRadius: 10,
+    }}>
+      {/* Left: title + company + location */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 700, fontSize: 14, color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {job.title}
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+          {job.company} · {job.location || 'USA'}
+        </div>
+        <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+          {job.workMode === 'Remote' && (
+            <span style={{ fontSize: 9, fontWeight: 900, padding: '2px 6px', background: 'rgba(34,211,238,0.1)', color: '#22D3EE', borderRadius: 4 }}>
+              REMOTE
+            </span>
+          )}
+          {job.salary && job.salary !== 'Market Rate' && (
+            <span style={{ fontSize: 9, fontWeight: 900, padding: '2px 6px', background: 'rgba(16,185,129,0.1)', color: '#10b981', borderRadius: 4 }}>
+              {job.salary}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Middle: FIT + EY */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 20, minWidth: 120 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--text-muted)', marginBottom: 2 }}>FIT</div>
+          <FitScoreRing score={job.fitScore} />
+        </div>
+        {job.eyConnection && (
+          <div style={{ fontSize: 11, background: 'rgba(245,158,11,0.1)', color: '#f59e0b', padding: '4px 8px', borderRadius: 6, border: '1px solid rgba(245,158,11,0.2)', fontWeight: 700 }}>
+            ⭐ EY
+          </div>
+        )}
+      </div>
+
+      {/* Right: posted + buttons */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+          {job.postedDate || 'Recent'}
+        </div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button
+            onClick={() => window.open(job.applyUrl, '_blank')}
+            style={{
+              fontSize: 11, fontWeight: 800, padding: '6px 14px',
+              background: 'white', color: 'black',
+              borderRadius: 6, border: 'none', cursor: 'pointer'
+            }}
+          >Apply →</button>
+          <button
+            onClick={() => onSave(job)}
+            style={{
+              fontSize: 11, fontWeight: 800, padding: '6px 10px',
+              background: 'transparent', color: 'var(--text-muted)',
+              borderRadius: 6, border: '1px solid var(--border-subtle)', cursor: 'pointer'
+            }}
+          >+</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Tab Component ──────────────────────────────────────────────────────
 
 export function JobHub() {
@@ -71,6 +171,25 @@ export function JobHub() {
   const [error, setError] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [timeLeft, setTimeLeft] = useState(45 * 60);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>(subContext === 'pooja' ? 'list' : 'grid');
+  const [sortBy, setSortBy] = useState<'fit' | 'newest' | 'salary' | 'company'>('fit');
+
+  const candidateId = subContext;
+
+  const sortedJobs = useMemo(() => {
+    if (candidateId !== 'dj') return state.jobs;
+    return [...state.jobs].sort((a, b) => {
+      if (sortBy === 'fit') return (b.fitScore ?? 0) - (a.fitScore ?? 0);
+      if (sortBy === 'newest') return (b.postedDate || '').localeCompare(a.postedDate || '');
+      if (sortBy === 'salary') {
+        const sa = a.salary?.replace(/[^0-9]/g, '') ? parseInt(a.salary.replace(/[^0-9]/g, '')) : 0;
+        const sb = b.salary?.replace(/[^0-9]/g, '') ? parseInt(b.salary.replace(/[^0-9]/g, '')) : 0;
+        return sb - sa;
+      }
+      if (sortBy === 'company') return (a.company || '').localeCompare(b.company || '');
+      return 0;
+    });
+  }, [state.jobs, sortBy, candidateId]);
 
   // Tracker State
   const [loadingTracker, setLoadingTracker] = useState(false);
@@ -85,13 +204,17 @@ export function JobHub() {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.get(`/jobs?candidate=${subContext}&page=${state.page}&pageSize=8&remote=${isRemote}${subContext === 'pooja' ? `&country=${country}` : ''}`);
-      const newJobs: NormalizedJob[] = data.jobs;
-      const currentIds = new Set(newJobs.map(j => j.id));
+      const pageSize = 16;
+      const remoteParam = subContext === 'dj' ? 'true' : isRemote;
+      const data = await api.get(`/jobs?candidate=${subContext}&page=${state.page}&pageSize=${pageSize}&remote=${remoteParam}${subContext === 'pooja' ? `&country=${country}` : ''}`);
       
       setState({ 
-        jobs: newJobs,
-        lastJobIds: state.lastJobIds.size === 0 ? currentIds : state.lastJobIds 
+        jobs: data.jobs,
+        totalResults: data.totalResults,
+        totalPages: data.totalPages,
+        hasNext: data.hasNext,
+        hasPrev: data.hasPrev,
+        lastJobIds: state.lastJobIds.size === 0 ? new Set(data.jobs.map((j: any) => j.id)) : state.lastJobIds 
       });
       setTimeLeft(45 * 60);
     } catch (err) {
@@ -210,8 +333,8 @@ export function JobHub() {
     <div style={s.container}>
       <div style={s.topBar}>
         <div style={s.profileToggle}>
-          <button onClick={() => setSubContext('dj')} style={{ ...s.subPsw, background: subContext === 'dj' ? '#22D3EE' : 'transparent', color: subContext === 'dj' ? '#000' : 'white' }}>⚡ DJ Context</button>
-          <button onClick={() => setSubContext('pooja')} style={{ ...s.subPsw, background: subContext === 'pooja' ? '#F472B6' : 'transparent', color: subContext === 'pooja' ? '#000' : 'white' }}>🔬 Pooja Context</button>
+          <button onClick={() => { setSubContext('dj'); setViewMode('grid'); }} style={{ ...s.subPsw, background: subContext === 'dj' ? '#22D3EE' : 'transparent', color: subContext === 'dj' ? '#000' : 'white' }}>⚡ DJ Context</button>
+          <button onClick={() => { setSubContext('pooja'); setViewMode('list'); }} style={{ ...s.subPsw, background: subContext === 'pooja' ? '#F472B6' : 'transparent', color: subContext === 'pooja' ? '#000' : 'white' }}>🔬 Pooja Context</button>
         </div>
         <div style={s.panelTabs}>
           <button onClick={() => setActivePanel('hub')} style={{ ...s.panelTab, color: activePanel === 'hub' ? 'var(--accent-active)' : 'var(--text-muted)' }}>Job Hub</button>
@@ -234,8 +357,16 @@ export function JobHub() {
               </select>
             )}
             <div style={s.remoteToggle}>
-              <label style={s.toggleLabel}>Remote Only</label>
-              <input type="checkbox" checked={isRemote} onChange={e => setIsRemote(e.target.checked)} />
+              {subContext === 'dj' ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: 'rgba(34,211,238,0.1)', borderRadius: 20, border: '1px solid rgba(34,211,238,0.2)' }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: '#22D3EE' }}>🌐 Remote Only</span>
+                </div>
+              ) : (
+                <>
+                  <label style={s.toggleLabel}>Remote Only</label>
+                  <input type="checkbox" checked={isRemote} onChange={e => setIsRemote(e.target.checked)} />
+                </>
+              )}
             </div>
             <button onClick={fetchJobs} style={{ ...s.searchBtn, background: subContext === 'dj' ? '#22D3EE' : '#F472B6' }} disabled={loading}>{loading ? '...' : 'Search Jobs'}</button>
           </div>
@@ -250,22 +381,80 @@ export function JobHub() {
 
           {error && <div style={s.error}>{error}</div>}
 
-          <div style={s.jobGrid}>
-            {state.jobs.map(job => (
-              <JobCard 
-                key={job.id} 
-                job={job} 
-                profileAccent={subContext === 'dj' ? '#22D3EE' : '#F472B6'} 
-                onSave={saveToTracker}
-                isNew={!state.lastJobIds.has(job.id)}
-              />
-            ))}
+          {/* Toolbar */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+            {/* Results count */}
+            <span style={{ color: 'var(--text-muted)', fontSize: 13, flex: 1 }}>
+              {state.totalResults || 0} {isRemote || subContext === 'dj' ? 'remote ' : ''} {CP_PROFILES[subContext].role.replace(' Manager', '')} positions · {subContext === 'dj' ? 'USA' : country.toUpperCase()} · Updated {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+
+            {/* Sort dropdown — DJ only */}
+            {subContext === 'dj' && (
+              <select
+                value={sortBy}
+                onChange={e => setSortBy(e.target.value as any)}
+                style={{
+                  background: 'rgba(0,0,0,0.2)',
+                  color: 'white',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: 6,
+                  padding: '4px 8px',
+                  fontSize: 13,
+                  cursor: 'pointer',
+                }}
+              >
+                <option value="fit">Best Match</option>
+                <option value="newest">Newest First</option>
+                <option value="salary">Salary High–Low</option>
+                <option value="company">Company A–Z</option>
+              </select>
+            )}
+
+            {/* View toggle */}
+            <div style={{ display: 'flex', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, overflow: 'hidden' }}>
+              {(['grid', 'list'] as const).map(mode => (
+                <button
+                  key={mode}
+                  onClick={() => setViewMode(mode)}
+                  style={{
+                    padding: '4px 10px',
+                    fontSize: 13,
+                    background: viewMode === mode ? 'var(--accent-active, #06b6d4)' : 'transparent',
+                    color: viewMode === mode ? '#000' : 'var(--text-muted)',
+                    border: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {mode === 'grid' ? '⊞ Grid' : '☰ List'}
+                </button>
+              ))}
+            </div>
           </div>
 
+          {viewMode === 'list' ? (
+            <div>
+              {sortedJobs.map(job => (
+                <ListJobCard key={job.id} job={job} onSave={saveToTracker} />
+              ))}
+            </div>
+          ) : (
+            <div style={s.jobGrid}>
+              {sortedJobs.map(job => (
+                <JobCard
+                  key={job.id}
+                  job={job}
+                  profileAccent={subContext === 'dj' ? '#22D3EE' : '#F472B6'}
+                  onSave={saveToTracker}
+                  isNew={!state.lastJobIds.has(job.id)}
+                />
+              ))}
+            </div>
+          )}
+
           <div style={s.pagination}>
-            <button onClick={() => setState({ page: Math.max(0, state.page - 1) })} disabled={state.page === 0}>← Prev</button>
-            <span>Page {state.page + 1}</span>
-            <button onClick={() => setState({ page: state.page + 1 })}>Next →</button>
+            <button onClick={() => setState({ page: Math.max(0, state.page - 1) })} disabled={state.page === 0 || !state.hasPrev}>← Prev</button>
+            <span>Page {state.page + 1} of {state.totalPages || 1}</span>
+            <button onClick={() => setState({ page: state.page + 1 })} disabled={!state.hasNext}>Next →</button>
           </div>
         </div>
       )}
