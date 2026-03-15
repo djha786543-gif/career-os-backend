@@ -714,16 +714,31 @@ a.key-link:hover{text-decoration:underline}
 
   <!-- Controls -->
   <div class="job-hub-controls">
-    <div id="jh-dj-controls">
-      <button class="btn btn-primary" onclick="searchJobs()" id="jh-search-btn">ðŸ” Search Remote CISA Jobs</button>
-      <span style="font-size:11px;color:var(--text-muted);margin-left:10px">Web Search Â· USA Â· Remote Â· CISA / SOX / ITGC</span>
+    <div id="jh-dj-controls" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="searchJobs()" id="jh-search-btn">🔍 Search Remote CISA Jobs</button>
+      <div style="padding:5px 12px;background:rgba(6,182,212,.1);border:1px solid rgba(6,182,212,.25);border-radius:20px;font-size:11px;font-weight:700;color:#06b6d4">🌐 Remote Only</div>
+      <select id="jh-sort" onchange="setSort(this.value)" style="padding:6px 12px;background:var(--bg-tertiary);border:1px solid var(--border-subtle);border-radius:8px;color:var(--text-secondary);font-size:12px;cursor:pointer;outline:none">
+        <option value="fit">Best Match ▼</option>
+        <option value="newest">Newest First</option>
+        <option value="salary">Salary High–Low</option>
+        <option value="company">Company A–Z</option>
+      </select>
+      <span style="font-size:10px;color:var(--text-muted)">CISA · SOX · IT Audit</span>
     </div>
     <div id="jh-pj-controls" style="display:none;align-items:center;gap:10px;flex-wrap:wrap">
-      <select class="job-country-select" id="jh-country" onchange="updateCountryHint()">
-        <option>United States</option><option>United Kingdom</option><option>Canada</option>
-        <option>Germany</option><option>Australia</option><option>Netherlands</option>
-        <option>Switzerland</option><option>Sweden</option><option>Denmark</option>
-        <option>Singapore</option><option>Japan</option>
+      <select class="job-country-select" id="jh-country" onchange="onCountryChange()">
+        <option value="all">🌍 All Countries</option>
+        <option value="usa" selected>🇺🇸 United States</option>
+        <option value="uk">🇬🇧 United Kingdom</option>
+        <option value="germany">🇩🇪 Germany</option>
+        <option value="canada">🇨🇦 Canada</option>
+        <option value="australia">🇦🇺 Australia</option>
+        <option value="netherlands">🇳🇱 Netherlands</option>
+        <option value="switzerland">🇨🇭 Switzerland</option>
+        <option value="sweden">🇸🇪 Sweden</option>
+        <option value="denmark">🇩🇰 Denmark</option>
+        <option value="singapore">🇸🇬 Singapore</option>
+        <option value="japan">🇯🇵 Japan</option>
       </select>
       <button class="btn btn-pink" onclick="searchJobs()" id="jh-search-btn-pj">ðŸ”¬ Search Research Positions</button>
       <span style="font-size:11px;color:var(--text-muted)" id="jh-country-hint">Web Search Â· All work modes Â· Industry + Academia</span>
@@ -1408,6 +1423,10 @@ function switchProfile(id) {
   document.getElementById('avatar').textContent = p.initials;
   document.getElementById('uname').textContent = p.name;
   document.getElementById('utitle').textContent = p.title;
+  // Reset job hub state for new profile so auto-search fires
+  JH[id].jobs=[]; JH[id].page=1; JH[id].cat='ALL'; JH[id].sort='fit';
+  // If on job hub view, refresh country dropdown default for Pooja
+  if(id==='pj'){const sel=document.getElementById('jh-country');if(sel&&sel.value==='')sel.value='usa';}
   refreshAll();
 }
 
@@ -2557,8 +2576,8 @@ function clearPvCache() {
 // JOB HUB â€” STATE (STRICTLY ISOLATED PER PROFILE)
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 const JH = {
-  dj: { jobs:[], page:1, cat:'ALL', loading:false, lastRefresh:null },
-  pj: { jobs:[], page:1, cat:'ALL', loading:false, lastRefresh:null }
+  dj: { jobs:[], page:1, cat:'ALL', sort:'fit', loading:false, lastRefresh:null },
+  pj: { jobs:[], page:1, cat:'ALL', sort:'fit', loading:false, lastRefresh:null }
 };
 const PER_PAGE = 8;
 let arCdInterval = null, arSecs = 2700, arOn = false;
@@ -2629,13 +2648,26 @@ function renderJobCards(){
     catTabs.innerHTML=[{id:'ALL',label:`All (${state.jobs.length})`,cls:'active-dj'},{id:'INDUSTRY',label:`ðŸ­ Industry (${ind})`,cls:'active-industry'},{id:'ACADEMIA',label:`ðŸŽ“ Academia (${aca})`,cls:'active-academia'}]
       .map(f=>`<button class="job-cat-btn ${state.cat===f.id?f.cls:''}" onclick="setCat('${f.id}')">${f.label}</button>`).join('');
   } else catRow.style.display='none';
-  const filtered=state.cat==='ALL'?state.jobs:state.jobs.filter(j=>j.category===state.cat);
+  let filtered=state.cat==='ALL'?[...state.jobs]:state.jobs.filter(j=>j.category===state.cat);
+  if(!isPJ){const srt=state.sort||'fit';filtered.sort((a,b)=>srt==='fit'?(b.fitScore||0)-(a.fitScore||0):srt==='newest'?(b.postedDate||'').localeCompare(a.postedDate||''):srt==='salary'?(parseInt((b.salary||'').replace(/[^0-9]/g,''))||0)-(parseInt((a.salary||'').replace(/[^0-9]/g,''))||0):srt==='company'?(a.company||'').localeCompare(b.company||''):0);}
   const totalPages=Math.max(1,Math.ceil(filtered.length/PER_PAGE));
   if(state.page>totalPages)state.page=totalPages;
   const paged=filtered.slice((state.page-1)*PER_PAGE,state.page*PER_PAGE);
   const infoEl=document.getElementById('jh-results-info');
-  if(filtered.length>0){infoEl.style.display='block';infoEl.textContent=`${filtered.length} position${filtered.length!==1?'s':''} Â· Page ${state.page}/${totalPages}`;}
-  else infoEl.style.display='none';
+  if(filtered.length>0){
+    infoEl.style.display='block';
+    const refreshTime=state.lastRefresh?state.lastRefresh.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'';
+    if(isPJ){
+      const cval=(document.getElementById('jh-country')?.value||'usa');
+      const cLabel={all:'Global',usa:'USA',uk:'UK',germany:'Germany',canada:'Canada',australia:'Australia',netherlands:'Netherlands',switzerland:'Switzerland',sweden:'Sweden',denmark:'Denmark',singapore:'Singapore',japan:'Japan'}[cval]||cval.toUpperCase();
+      const catLabel=state.cat==='INDUSTRY'?'Industry Only':state.cat==='ACADEMIA'?'Academia Only':'Industry + Academia';
+      infoEl.textContent=`${filtered.length} research position${filtered.length!==1?'s':''} · ${cLabel} · ${catLabel}${refreshTime?' · Updated '+refreshTime:''} · Page ${state.page}/${totalPages}`;
+    } else {
+      const sortEl=document.getElementById('jh-sort');
+      const sortLbl=sortEl?sortEl.options[sortEl.selectedIndex]?.text||'Best Match':'Best Match';
+      infoEl.textContent=`${filtered.length} remote IT audit position${filtered.length!==1?'s':''} · USA · ${sortLbl}${refreshTime?' · Updated '+refreshTime:''} · Page ${state.page}/${totalPages}`;
+    }
+  } else infoEl.style.display='none';
   const grid=document.getElementById('jh-grid');
   if(paged.length===0){
     grid.innerHTML=`<div class="job-empty" style="grid-column:1/-1"><div class="job-empty-icon">${isPJ?'ðŸ”¬':'ðŸ”'}</div><div class="job-empty-title">${state.jobs.length===0?'Search for positions above':'No results in this category'}</div><div class="job-empty-sub">${state.jobs.length===0?(isPJ?'Select a country and click Search':'Click Search Remote CISA Jobs'):'Try a different category filter'}</div></div>`;
@@ -2651,7 +2683,7 @@ function renderJobCards(){
     const safeJob=JSON.stringify(job).replace(/\\/g,'\\\\').replace(/"/g,'&quot;');
     return `<div class="job-card" style="animation-delay:${Math.min(i*45,300)}ms">
       <div class="job-card-top"><div style="flex:1;min-width:0"><div class="job-title">${escHtml(job.title||'')}</div><div class="job-company">${escHtml(job.company||'')} Â· ${escHtml(job.location||'')}</div></div><div class="fit-ring-wrap">${ring}<span class="fit-lbl">FIT</span></div></div>
-      <div class="job-badges">${isPJ&&job.category?`<span class="jbadge ${job.category==='INDUSTRY'?'jbadge-industry':'jbadge-academia'}">${job.category==='INDUSTRY'?'ðŸ­ INDUSTRY':'ðŸŽ“ ACADEMIA'}</span>`:''}<span class="jbadge ${wmCls}">${wm}</span>${job.salary?`<span class="jbadge jbadge-salary">${escHtml(job.salary)}</span>`:''}</div>
+      <div class="job-badges">${isPJ&&job.category?`<span class="jbadge ${job.category==='INDUSTRY'?'jbadge-industry':'jbadge-academia'}">${job.category==='INDUSTRY'?'🏭 INDUSTRY':'🎓 ACADEMIA'}</span>`:''}<span class="jbadge ${wmCls}">${wm}</span>${job.salary?`<span class="jbadge jbadge-salary">${escHtml(job.salary)}</span>`:''} ${!isPJ&&job.eyConnection?`<span class="jbadge" style="background:rgba(245,158,11,.15);color:#f59e0b;border:1px solid rgba(245,158,11,.3)">⭐ EY Alumni Advantage</span>`:''}</div>
       <p class="job-snippet">${escHtml(job.snippet||'')}</p>
       <div class="job-badges" style="margin-bottom:10px">${(job.keySkills||[]).map(s=>`<span class="jbadge ${skillCls}">${escHtml(s)}</span>`).join('')}</div>
       ${job.fitReason?`<div class="job-fit-reason${isPJ?' pj':''}">ðŸ’¡ ${escHtml(job.fitReason)}</div>`:''}
@@ -2676,13 +2708,27 @@ function updateCountryHint(){const c=document.getElementById('jh-country')?.valu
 
 function renderJobHub(){
   const isPJ=currentProfile==='pj';
-  document.getElementById('jh-title').textContent=`Job Hub â€” ${isPJ?'Pooja':'DJ'}`;
-  document.getElementById('jh-sub').textContent=isPJ?'Real active research positions Â· AI-scored Â· Industry & Academia Â· 11 countries':'Real active remote IT audit positions Â· AI-scored against DJ profile Â· USA Â· Strict isolation';
+  document.getElementById('jh-title').textContent=`Job Hub — ${isPJ?'Pooja':'DJ'}`;
+  document.getElementById('jh-sub').textContent=isPJ?'Real active research positions · AI-scored · Industry & Academia · 11 countries':'Real active remote IT audit positions · AI-scored against DJ profile · USA · Strict isolation';
   document.getElementById('jh-dj-controls').style.display=isPJ?'none':'flex';
   document.getElementById('jh-pj-controls').style.display=isPJ?'flex':'none';
   renderJobCards();
+  if(JH[currentProfile].jobs.length===0 && !JH[currentProfile].loading){searchJobs();}
 }
 
+function refreshAll(){
+  renderJobHub();
+  if(document.getElementById('view-tracker')?.classList.contains('active'))renderTracker();
+}
+function setSort(s){JH[currentProfile].sort=s;JH[currentProfile].page=1;renderJobCards();}
+function onCountryChange(){
+  const c=document.getElementById('jh-country')?.value||'usa';
+  const hints={all:'Global · US + UK combined',usa:'USA · Adzuna live',uk:'UK · Adzuna live',germany:'Germany · Adzuna',canada:'Canada · Adzuna',australia:'Australia · Adzuna',netherlands:'Netherlands · Adzuna',switzerland:'Switzerland · Adzuna',sweden:'Sweden · Adzuna',denmark:'Denmark · Adzuna',singapore:'Singapore · Adzuna',japan:'Japan · Adzuna'};
+  const hintEl=document.getElementById('jh-country-hint');
+  if(hintEl)hintEl.textContent=`${hints[c]||c} · All work modes · Industry + Academia`;
+  JH[currentProfile].jobs=[];JH[currentProfile].page=1;JH[currentProfile].cat='ALL';
+  renderJobCards();searchJobs();
+}
 function toggleAutoRefresh(){
   arOn=!arOn;
   const track=document.getElementById('arTrack'),knob=document.getElementById('arKnob'),cd=document.getElementById('arCountdown');
