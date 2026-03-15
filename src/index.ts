@@ -7,6 +7,8 @@ import jobsRouter from './api/jobs';
 import kanbanRouter from './api/kanban';
 import intelligenceRouter from './api/intelligence';
 import aiRouter from './api/ai';
+import monitorRouter from './api/monitor';
+import { initMonitorScheduler } from './opportunity-monitor/scheduler';
 import { dbInit } from './db/init';
 
 dotenv.config();
@@ -87,6 +89,7 @@ app.get('/', (req, res) => {
 app.use('/api/jobs',          jobsRouter);
 app.use('/api/kanban',        kanbanRouter);
 app.use('/api/ai',            aiRouter);            // /api/ai/skill, /api/ai/trend, /api/ai/assist, etc.
+app.use('/api/monitor',       monitorRouter);       // /api/monitor/jobs, /api/monitor/orgs, /api/monitor/scan, /api/monitor/stats
 app.use('/api',               intelligenceRouter);  // /api/trends, /api/skills, /api/salary, /api/market, /api/market/heatmap, /api/study/plan
 
 // Global error handler (must be last)
@@ -95,8 +98,12 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
 	if (!res.headersSent) res.status(500).json({ error: err.message });
 });
 
-// 5. Start server — run DB init after port is bound
-app.listen(PORT, '0.0.0.0', () => {
+// 5. Start server — run DB init, then monitor scheduler in sequence
+app.listen(PORT, '0.0.0.0', async () => {
 	console.log('✅ Career-OS backend running on port ' + PORT);
-	dbInit().catch(err => console.error('dbInit error:', err.message));
+	// dbInit must complete first so monitor tables exist before seeder runs
+	await dbInit().catch(err => console.error('dbInit error:', err.message));
+	initMonitorScheduler().catch(err =>
+		console.error('[Monitor] Scheduler init failed:', err.message)
+	);
 });

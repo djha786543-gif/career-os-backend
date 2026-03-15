@@ -90,6 +90,68 @@ export async function dbInit(): Promise<void> {
         CONSTRAINT uq_prep_progress UNIQUE (profile_id, card_key)
       );
       CREATE INDEX IF NOT EXISTS idx_prep_profile ON prep_progress (profile_id);
+
+      -- Opportunity Monitor tables
+      CREATE TABLE IF NOT EXISTS monitor_orgs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(255) NOT NULL UNIQUE,
+        sector VARCHAR(50) NOT NULL
+          CHECK (sector IN ('academia','industry','international','india')),
+        country VARCHAR(100) NOT NULL DEFAULT 'USA',
+        careers_url TEXT,
+        rss_url TEXT,
+        api_type VARCHAR(50)
+          CHECK (api_type IN ('rss','usajobs','websearch','adzuna','natureJobs')),
+        is_active BOOLEAN DEFAULT TRUE,
+        last_scanned_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS monitor_jobs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        org_id UUID REFERENCES monitor_orgs(id) ON DELETE CASCADE,
+        external_id VARCHAR(500) NOT NULL,
+        title VARCHAR(500) NOT NULL,
+        org_name VARCHAR(255) NOT NULL,
+        location VARCHAR(255),
+        country VARCHAR(100),
+        sector VARCHAR(50),
+        apply_url TEXT,
+        snippet TEXT,
+        salary VARCHAR(100),
+        posted_date VARCHAR(100),
+        detected_at TIMESTAMPTZ DEFAULT NOW(),
+        last_seen_at TIMESTAMPTZ DEFAULT NOW(),
+        is_new BOOLEAN DEFAULT TRUE,
+        is_active BOOLEAN DEFAULT TRUE,
+        content_hash VARCHAR(64),
+        UNIQUE(org_id, external_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS monitor_scans (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        org_id UUID REFERENCES monitor_orgs(id) ON DELETE CASCADE,
+        scanned_at TIMESTAMPTZ DEFAULT NOW(),
+        jobs_found INTEGER DEFAULT 0,
+        new_jobs INTEGER DEFAULT 0,
+        status VARCHAR(20) DEFAULT 'success',
+        error_message TEXT
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_monitor_jobs_sector
+        ON monitor_jobs(sector);
+      CREATE INDEX IF NOT EXISTS idx_monitor_jobs_new
+        ON monitor_jobs(is_new, detected_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_monitor_jobs_org
+        ON monitor_jobs(org_id);
+      CREATE INDEX IF NOT EXISTS idx_monitor_jobs_active
+        ON monitor_jobs(is_active, last_seen_at);
+      CREATE INDEX IF NOT EXISTS idx_monitor_orgs_sector
+        ON monitor_orgs(sector, is_active);
+      CREATE INDEX IF NOT EXISTS idx_monitor_scans_time
+        ON monitor_scans(scanned_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_monitor_scans_org
+        ON monitor_scans(org_id, scanned_at DESC);
     `);
     console.log('✅ DB tables verified / created');
   } catch (err) {

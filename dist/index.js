@@ -12,6 +12,8 @@ const jobs_1 = __importDefault(require("./api/jobs"));
 const kanban_1 = __importDefault(require("./api/kanban"));
 const intelligence_1 = __importDefault(require("./api/intelligence"));
 const ai_1 = __importDefault(require("./api/ai"));
+const monitor_1 = __importDefault(require("./api/monitor"));
+const scheduler_1 = require("./opportunity-monitor/scheduler");
 const init_1 = require("./db/init");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
@@ -83,6 +85,7 @@ app.get('/', (req, res) => {
 app.use('/api/jobs', jobs_1.default);
 app.use('/api/kanban', kanban_1.default);
 app.use('/api/ai', ai_1.default); // /api/ai/skill, /api/ai/trend, /api/ai/assist, etc.
+app.use('/api/monitor', monitor_1.default); // /api/monitor/jobs, /api/monitor/orgs, /api/monitor/scan, /api/monitor/stats
 app.use('/api', intelligence_1.default); // /api/trends, /api/skills, /api/salary, /api/market, /api/market/heatmap, /api/study/plan
 // Global error handler (must be last)
 app.use((err, req, res, next) => {
@@ -90,8 +93,10 @@ app.use((err, req, res, next) => {
     if (!res.headersSent)
         res.status(500).json({ error: err.message });
 });
-// 5. Start server — run DB init after port is bound
-app.listen(PORT, '0.0.0.0', () => {
+// 5. Start server — run DB init, then monitor scheduler in sequence
+app.listen(PORT, '0.0.0.0', async () => {
     console.log('✅ Career-OS backend running on port ' + PORT);
-    (0, init_1.dbInit)().catch(err => console.error('dbInit error:', err.message));
+    // dbInit must complete first so monitor tables exist before seeder runs
+    await (0, init_1.dbInit)().catch(err => console.error('dbInit error:', err.message));
+    (0, scheduler_1.initMonitorScheduler)().catch(err => console.error('[Monitor] Scheduler init failed:', err.message));
 });
