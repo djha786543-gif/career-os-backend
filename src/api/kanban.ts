@@ -38,7 +38,7 @@ router.get('/', async (req: Request, res: Response) => {
     });
     res.json(cards);
   } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
+    if (!res.headersSent) res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
   }
 });
 
@@ -61,7 +61,7 @@ router.post('/', async (req: Request, res: Response) => {
     });
     res.json(card);
   } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
+    if (!res.headersSent) res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
   }
 });
 
@@ -84,7 +84,7 @@ router.patch('/:id', async (req: Request, res: Response) => {
     if (!card) return res.status(404).json({ error: 'Card not found' });
     res.json(card);
   } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
+    if (!res.headersSent) res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
   }
 });
 
@@ -99,7 +99,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     });
     res.status(204).end();
   } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
+    if (!res.headersSent) res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
   }
 });
 

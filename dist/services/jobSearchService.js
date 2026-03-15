@@ -14,13 +14,11 @@ function makeBlockRegex(keywords) {
     const escaped = keywords.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
     return new RegExp('(?<![a-z])(' + escaped.join('|') + ')(?![a-z])', 'i');
 }
-// Deobrat: 10yr Manager — block intern/junior/entry level (word-boundary safe)
+// Deobrat: 10yr Manager — block only genuine junior/entry terms (word-boundary safe)
 const DJ_BLOCK_REGEX = makeBlockRegex([
-    'intern', 'internship', 'trainee', 'apprentice',
-    'entry level', 'entry-level', 'junior', 'jr\\.',
-    'graduate program', 'new grad', 'co-op', 'coop',
-    'assistant auditor', 'audit clerk', 'audit assistant',
-    'staff accountant', 'bookkeeper',
+    'intern', 'internship', 'trainee',
+    'entry level', 'entry-level', 'junior',
+    'new grad', 'co-op',
 ]);
 // Pooja: postdoc researcher — block undergrad/tech/student roles
 const PJ_BLOCK_REGEX = makeBlockRegex([
@@ -32,7 +30,7 @@ const PJ_BLOCK_REGEX = makeBlockRegex([
     'student researcher', 'phd student', 'graduate student',
     'visiting student', 'co-op', 'coop',
 ]);
-const MIN_FIT = 40;
+const MIN_FIT = 20;
 function filterAndScoreJobs(jobs, candidate, filters) {
     let scoringProfile = candidate;
     if (candidate.id === 'pooja' && candidate.track) {
@@ -74,6 +72,7 @@ function filterAndScoreJobs(jobs, candidate, filters) {
     const scored = filtered
         .map(j => ({ ...j, matchScore: (0, matchScore_1.computeMatchScore)(j, scoringProfile), fitScore: (0, matchScore_1.computeMatchScore)(j, scoringProfile) }))
         .filter(j => (j.fitScore ?? 0) >= MIN_FIT);
+    console.log(`[Filter Debug] Before filter: ${jobs.length}, After block: ${filtered.length}, After score (MIN_FIT=${MIN_FIT}): ${scored.length}`);
     // Company dedup: keep highest-scored per company
     const best = new Map();
     for (const j of scored) {

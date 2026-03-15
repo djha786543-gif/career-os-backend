@@ -1,18 +1,12 @@
+import React from 'react';
 import type { AppProps } from 'next/app';
 import { ProfileProvider } from '../src/context/ProfileContext';
-import { HealthBanner } from '../src/components/HealthBanner';
 import '../styles/globals.css';
+import '../src/styles/tokens.css';
 
 export default function App({ Component, pageProps }: AppProps) {
   return (
     <ProfileProvider>
-      <HealthBanner />
-      {/* Ambient background orbs */}
-      <div className="amb">
-        <div className="orb o1" />
-        <div className="orb o2" />
-        <div className="orb o3" />
-      </div>
       <Component {...pageProps} />
     </ProfileProvider>
   );

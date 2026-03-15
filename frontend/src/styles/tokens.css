@@ -1,94 +1,87 @@
-/* ─────────────────────────────────────────────────────────────────────────────
-   tokens.css — Design system tokens extracted from career-os-v2.html
-   DJ theme:    #22D3EE (Cyan)  ← profile color override
-   Pooja theme: #F472B6 (Rose)  ← profile color override
-   ───────────────────────────────────────────────────────────────────────────── */
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
-
 :root {
-  /* ── Backgrounds ── */
-  --bg-primary:   #0a0b14;
+  --bg-primary: #0a0b14;
   --bg-secondary: #12131f;
-  --bg-tertiary:  #1a1b2e;
-  --bg-glass:     rgba(18, 19, 31, 0.85);
-
-  /* ── Text ── */
-  --text-primary:   #e8e9f3;
+  --bg-tertiary: #1a1b2e;
+  --bg-glass: rgba(18, 19, 31, 0.85);
+  --text-primary: #e8e9f3;
   --text-secondary: #9ca3b8;
-  --text-muted:     #5f6580;
-
-  /* ── Accent palette ── */
-  --accent-indigo:  #6366f1;
-  --accent-cyan:    #06b6d4;   /* base cyan */
-  --accent-cyan-dj: #22d3ee;   /* DJ theme cyan (Tailwind cyan-400) */
-  --accent-purple:  #a855f7;
-  --accent-amber:   #f59e0b;
+  --text-muted: #5f6580;
+  
+  --accent-indigo: #6366f1;
+  --accent-cyan: #22D3EE;
+  --accent-purple: #a855f7;
+  --accent-amber: #f59e0b;
   --accent-emerald: #10b981;
-  --accent-rose:    #f43f5e;   /* base rose */
-  --accent-pink:    #ec4899;
-  --accent-rose-pj: #f472b6;   /* Pooja theme rose (Tailwind pink-400) */
-
-  /* ── Profile themes ── */
-  --profile-dj-color:      #22d3ee;
-  --profile-dj-dim:        rgba(34, 211, 238, 0.15);
-  --profile-dj-border:     rgba(34, 211, 238, 0.35);
-  --profile-dj-glow:       0 0 24px rgba(34, 211, 238, 0.18);
-
-  --profile-pj-color:      #f472b6;
-  --profile-pj-dim:        rgba(244, 114, 182, 0.15);
-  --profile-pj-border:     rgba(244, 114, 182, 0.35);
-  --profile-pj-glow:       0 0 24px rgba(244, 114, 182, 0.18);
-
-  /* ── Borders ── */
-  --border-subtle: rgba(99, 102, 241, 0.12);
-  --border-medium: rgba(99, 102, 241, 0.25);
-
-  /* ── Radii ── */
-  --radius-sm: 8px;
+  --accent-rose: #F472B6;
+  --accent-pink: #ec4899;
+  
+  /* Dynamic accent based on profile */
+  --accent-active: #22D3EE;
+  
+  --border-subtle: rgba(255, 255, 255, 0.05);
+  --border-medium: rgba(255, 255, 255, 0.1);
   --radius-md: 12px;
   --radius-lg: 16px;
-  --radius-xl: 24px;
-
-  /* ── Typography ── */
   --font-sans: 'Inter', sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
-
-  /* ── Glass morphism ── */
-  --glass-bg:     rgba(18, 19, 31, 0.85);
-  --glass-blur:   blur(8px);
-  --glass-border: 1px solid rgba(99, 102, 241, 0.12);
-
-  /* ── Glow tokens (ambient orbs) ── */
-  --glow-indigo: rgba(99,  102, 241, 0.12);
-  --glow-cyan:   rgba(6,   182, 212, 0.12);
-  --glow-purple: rgba(168, 85,  247, 0.12);
-
-  /* ── Shadows ── */
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
-  --shadow-md: 0 4px 16px rgba(0,0,0,0.4);
-  --shadow-lg: 0 8px 32px rgba(0,0,0,0.5);
-
-  /* ── Transitions ── */
-  --transition-fast: all 0.15s ease;
-  --transition-base: all 0.2s ease;
-  --transition-slow: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* ── Prep Vault content classes (preserved from prototype) ── */
-.pv-formula       { background: rgba(99,102,241,.08); border:1px solid rgba(99,102,241,.2); border-radius:10px; padding:16px; margin:12px 0; }
-.pv-formula-title { font-size:11px; font-weight:700; letter-spacing:.08em; color:#6366f1; text-transform:uppercase; margin-bottom:8px; }
-.pv-formula-math  { font-family:var(--font-mono); font-size:12.5px; color:#e8e9f3; line-height:1.8; white-space:pre-wrap; }
-.pv-formula-example { margin-top:10px; font-size:12px; color:#9ca3b8; border-top:1px solid rgba(99,102,241,.15); padding-top:8px; }
+body {
+  margin: 0;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
 
-.pv-trap { background:rgba(244,63,94,.06); border-left:3px solid #f43f5e; padding:12px 14px; margin:10px 0; border-radius:0 8px 8px 0; font-size:13px; }
-.pv-def  { padding:10px 0; border-bottom:1px solid rgba(255,255,255,.05); font-size:13px; line-height:1.7; }
-.pv-def:last-child { border-bottom:none; }
-.pv-tip  { background:rgba(16,185,129,.06); border-left:3px solid #10b981; padding:12px 14px; margin:10px 0; border-radius:0 8px 8px 0; font-size:13px; }
-.pv-tree { font-family:var(--font-mono); font-size:12px; color:#9ca3b8; line-height:1.9; white-space:pre; overflow-x:auto; padding:12px; background:rgba(0,0,0,.2); border-radius:8px; }
+.glass {
+  background: var(--bg-glass);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(8px);
+}
 
-.pv-table         { width:100%; border-collapse:collapse; font-size:12.5px; margin:8px 0; }
-.pv-table th      { background:rgba(99,102,241,.12); color:#9ca3b8; font-weight:700; font-size:11px; letter-spacing:.06em; text-transform:uppercase; padding:8px 12px; text-align:left; }
-.pv-table td      { padding:8px 12px; border-bottom:1px solid rgba(255,255,255,.04); color:#e8e9f3; vertical-align:top; }
-.pv-row-critical  { background:rgba(244,63,94,.05); }
-.pv-row-high      { background:rgba(245,158,11,.05); }
+.amb {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: -1;
+  overflow: hidden;
+}
+
+.orb {
+  position: absolute;
+  filter: blur(120px);
+  border-radius: 50%;
+  opacity: 0.15;
+}
+
+.o1 { top: -10%; right: -10%; width: 40%; height: 40%; background: var(--accent-indigo); }
+.o2 { bottom: -10%; left: -10%; width: 35%; height: 35%; background: var(--accent-cyan); }
+.o3 { top: 30%; left: 20%; width: 30%; height: 30%; background: var(--accent-purple); }
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255,255,255,0.1);
+  border-top-color: var(--accent-active);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}

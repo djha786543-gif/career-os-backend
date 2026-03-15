@@ -169,7 +169,9 @@ async function fetchIndeedJobsMCP(query, location) {
 // Adzuna fallback — delegates entirely to the existing production fetcher
 // ─────────────────────────────────────────────────────────────────────────────
 async function fetchAdzunaFallback(countries, profileMap) {
-    const results = await Promise.all(countries.map(country => (0, adzunaFetcher_1.fetchAdzunaJobs)(country, profileMap[country])));
+    const results = await Promise.all(countries
+        .filter(country => !!profileMap[country])
+        .map(country => (0, adzunaFetcher_1.fetchAdzunaJobs)(country, profileMap[country])));
     return results.flat();
 }
 async function fetchAggregatedJobs(opts) {
@@ -194,7 +196,7 @@ async function fetchAggregatedJobs(opts) {
             try {
                 const usProfile = profileMap['us'];
                 // Run each query sequentially to respect MCP rate limits
-                for (const query of usProfile.queries.slice(0, 4)) {
+                for (const query of (usProfile?.queries ?? []).slice(0, 4)) {
                     const hits = await fetchIndeedJobsMCP(query, 'United States');
                     usJobs.push(...hits);
                 }

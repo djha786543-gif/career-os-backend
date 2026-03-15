@@ -1,202 +1,147 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useProfile } from '../../context/ProfileContext';
 
-interface KanbanCard {
-  id: string;
-  title: string;
-  company: string;
-  stage: 'wishlist' | 'applied' | 'phone_screen' | 'interview' | 'offer' | 'rejected' | 'archived';
-  match_score?: number;
-  apply_url?: string;
+const API = process.env.NEXT_PUBLIC_API_URL || 
+  'https://career-os-backend-production.up.railway.app/api';
+
+const DJ_COLS = ['Saved','Applied','Phone Screen','Interview','Offer','Rejected'];
+const PJ_COLS = ['Saved','Applied','Shortlisted','Interview','Offer','Rejected'];
+
+interface Card {
+  id: string; title: string; company: string;
+  date_saved: string; apply_url: string; column_name: string;
+  ey_connection?: boolean;
 }
 
-const STAGES: KanbanCard['stage'][] = [
-  'wishlist', 'applied', 'phone_screen', 'interview', 'offer', 'rejected', 'archived',
-];
-
-const STAGE_META: Record<KanbanCard['stage'], { label: string; color: string; icon: string }> = {
-  wishlist:     { label: 'Wishlist',     color: '#6366f1', icon: '⭐' },
-  applied:      { label: 'Applied',      color: '#06b6d4', icon: '📨' },
-  phone_screen: { label: 'Phone Screen', color: '#f59e0b', icon: '📞' },
-  interview:    { label: 'Interview',    color: '#a855f7', icon: '🗓️' },
-  offer:        { label: 'Offer',        color: '#10b981', icon: '🎉' },
-  rejected:     { label: 'Rejected',     color: '#f43f5e', icon: '✕'  },
-  archived:     { label: 'Archived',     color: '#5f6580', icon: '📁' },
-};
-
-export function Tracker() {
+export const Tracker = () => {
   const { profile } = useProfile();
-  const [cards, setCards] = useState<KanbanCard[]>([]);
+  const cols = profile === 'dj' ? DJ_COLS : PJ_COLS;
+  const [cards, setCards] = useState<Card[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Load from localStorage
-  useEffect(() => {
-    setLoading(true);
-    const storageKey = `tracker_${profile}`;
-    const saved = localStorage.getItem(storageKey);
-    if (saved) {
-      setCards(JSON.parse(saved));
-    } else {
-      // Default empty state or mock data
-      setCards([]);
-    }
-    setLoading(false);
+  const load = useCallback(async () => {
+    try {
+      const r = await fetch(`${API}/tracker/${profile}`);
+      const d = await r.json();
+      const all: Card[] = [];
+      if (d.cards) {
+        Object.keys(d.cards).forEach(col => {
+          all.push(...d.cards[col]);
+        });
+      }
+      setCards(all);
+    } catch(e) { console.error(e); }
+    finally { setLoading(false); }
   }, [profile]);
 
-  // Save to localStorage
-  const saveCards = (newCards: KanbanCard[]) => {
-    setCards(newCards);
-    localStorage.setItem(`tracker_${profile}`, JSON.stringify(newCards));
+  useEffect(() => { setLoading(true); load(); }, [load]);
+
+  const advance = async (card: Card) => {
+    const i = cols.indexOf(card.column_name);
+    if (i >= cols.length - 1) return;
+    const next = cols[i + 1];
+    setCards(prev => prev.map(c => c.id === card.id ? {...c, column_name: next} : c));
+    await fetch(`${API}/tracker/${profile}/${card.id}`, {
+      method: 'PATCH',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ column: next })
+    });
   };
 
-  const moveCard = (cardId: string, stage: KanbanCard['stage']) => {
-    const newCards = cards.map(c => c.id === cardId ? { ...c, stage } : c);
-    saveCards(newCards);
+  const remove = async (id: string) => {
+    setCards(prev => prev.filter(c => c.id !== id));
+    await fetch(`${API}/tracker/${profile}/${id}`, { method: 'DELETE' });
   };
 
-  const deleteCard = (id: string) => {
-    const newCards = cards.filter(c => c.id !== id);
-    saveCards(newCards);
-  };
+  // Stats
+  const week = new Date(); week.setDate(week.getDate() - 7);
+  const thisWeek = cards.filter(c => new Date(c.date_saved) > week).length;
+  const active = cards.filter(c => !['Saved','Rejected'].includes(c.column_name)).length;
+  const applied = cards.filter(c => c.column_name !== 'Saved').length;
+  const advanced = cards.filter(c => ['Phone Screen','Shortlisted','Interview','Offer'].includes(c.column_name)).length;
+  const responseRate = applied > 0 ? Math.round((advanced / applied) * 100) : 0;
 
-  const columnCards = (stage: KanbanCard['stage']) =>
-    cards.filter(c => c.stage === stage);
+  const accent = profile === 'dj' ? '#22D3EE' : '#F472B6';
 
-  return (
-    <div className="tracker-section" style={{ padding: '24px', background: 'rgba(15, 23, 42, 0.3)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)' }}>
-      <header style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0 }}>Application Tracker</h2>
-          <p style={{ color: 'rgba(255,255,255,0.6)', marginTop: '4px' }}>Managing {cards.length} active opportunities</p>
-        </div>
-      </header>
-
-      <div style={{ display: 'flex', gap: '16px', overflowX: 'auto', paddingBottom: '16px' }}>
-        {STAGES.map(stage => {
-          const meta = STAGE_META[stage];
-          const stageCards = columnCards(stage);
-          
-          return (
-            <div key={stage} style={{ 
-              flex: '0 0 280px', 
-              background: 'rgba(255,255,255,0.02)', 
-              borderRadius: '12px', 
-              padding: '16px',
-              border: '1px solid rgba(255,255,255,0.05)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '12px',
-              minHeight: '400px'
-            }}>
-              <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '8px', 
-                paddingBottom: '12px', 
-                borderBottom: `2px solid ${meta.color}33`,
-                marginBottom: '4px'
-              }}>
-                <span style={{ fontSize: '1.2rem' }}>{meta.icon}</span>
-                <span style={{ fontWeight: 800, fontSize: '0.85rem', color: meta.color, textTransform: 'uppercase' }}>
-                  {meta.label}
-                </span>
-                <span style={{ 
-                  marginLeft: 'auto', 
-                  background: 'rgba(255,255,255,0.05)', 
-                  padding: '2px 8px', 
-                  borderRadius: '10px', 
-                  fontSize: '0.75rem', 
-                  fontWeight: 700 
-                }}>
-                  {stageCards.length}
-                </span>
-              </div>
-
-              {stageCards.length === 0 && (
-                <div style={{ 
-                  padding: '24px', 
-                  textAlign: 'center', 
-                  color: 'rgba(255,255,255,0.2)', 
-                  fontSize: '0.8rem',
-                  border: '1px dashed rgba(255,255,255,0.05)',
-                  borderRadius: '8px'
-                }}>
-                  No items
-                </div>
-              )}
-
-              {stageCards.map(card => (
-                <div key={card.id} style={{ 
-                  padding: '16px', 
-                  background: 'rgba(255,255,255,0.03)', 
-                  borderRadius: '10px', 
-                  border: '1px solid rgba(255,255,255,0.05)',
-                  position: 'relative'
-                }}>
-                  <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: '4px' }}>{card.title}</div>
-                  <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', marginBottom: '12px' }}>{card.company}</div>
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <select 
-                      value={stage}
-                      onChange={(e) => moveCard(card.id, e.target.value as any)}
-                      style={{ 
-                        width: '100%', 
-                        padding: '6px', 
-                        borderRadius: '4px', 
-                        background: 'rgba(0,0,0,0.2)', 
-                        border: '1px solid rgba(255,255,255,0.1)', 
-                        color: 'white',
-                        fontSize: '0.75rem'
-                      }}
-                    >
-                      {STAGES.map(s => (
-                        <option key={s} value={s}>{STAGE_META[s].label}</option>
-                      ))}
-                    </select>
-
-                    <div style={{ display: 'flex', gap: '6px' }}>
-                      {card.apply_url && (
-                        <a 
-                          href={card.apply_url} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          style={{ 
-                            flex: 1, 
-                            textAlign: 'center', 
-                            padding: '6px', 
-                            background: 'rgba(255,255,255,0.05)', 
-                            borderRadius: '4px', 
-                            color: 'white', 
-                            textDecoration: 'none',
-                            fontSize: '0.75rem',
-                            fontWeight: 600
-                          }}
-                        >
-                          Apply ↗
-                        </a>
-                      )}
-                      <button 
-                        onClick={() => deleteCard(card.id)}
-                        style={{ 
-                          padding: '6px 10px', 
-                          background: 'rgba(239, 68, 68, 0.1)', 
-                          border: '1px solid rgba(239, 68, 68, 0.2)', 
-                          color: '#ef4444',
-                          borderRadius: '4px',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          );
-        })}
-      </div>
+  if (loading) return (
+    <div style={{textAlign:'center',padding:'60px',color:'#9ca3b8'}}>
+      <div className="spinner" style={{margin:'0 auto 12px'}} />
+      Loading tracker...
     </div>
   );
-}
+
+  return (
+    <div style={{padding:'24px 0'}}>
+      {/* Stats bar */}
+      <div style={{display:'flex',gap:'12px',marginBottom:'24px',flexWrap:'wrap'}}>
+        {[
+          {label:'This Week', val: thisWeek},
+          {label:'Response Rate', val: `${responseRate}%`},
+          {label:'Active Pipeline', val: active},
+          {label:'Total Applications', val: applied},
+        ].map(s => (
+          <div key={s.label} style={{
+            flex:'1',minWidth:'140px',padding:'16px',
+            background:'#12131f',border:'1px solid rgba(255,255,255,0.05)',
+            borderRadius:'12px'
+          }}>
+            <div style={{fontSize:'24px',fontWeight:800,color:accent,fontFamily:'var(--font-mono)'}}>{s.val}</div>
+            <div style={{fontSize:'11px',color:'#5f6580',marginTop:'4px',letterSpacing:'.06em'}}>{s.label.toUpperCase()}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Kanban board */}
+      {cards.length === 0 ? (
+        <div style={{textAlign:'center',padding:'60px',color:'#5f6580'}}>
+          <div style={{fontSize:'40px',marginBottom:'12px'}}>📋</div>
+          <div style={{fontSize:'14px',fontWeight:600,color:'#9ca3b8',marginBottom:'6px'}}>No applications tracked yet</div>
+          <div style={{fontSize:'12px'}}>Save jobs from the Job Hub to start tracking your applications.</div>
+        </div>
+      ) : (
+        <div style={{display:'flex',gap:'12px',overflowX:'auto',paddingBottom:'12px'}}>
+          {cols.map(col => {
+            const colCards = cards.filter(c => c.column_name === col);
+            return (
+              <div key={col} style={{
+                minWidth:'200px',flex: 1,
+                background:'#12131f',border:'1px solid rgba(255,255,255,0.05)',
+                borderRadius:'12px',padding:'12px'
+              }}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
+                  <span style={{fontSize:'11px',fontWeight:700,letterSpacing:'.08em',color:'#5f6580',textTransform:'uppercase'}}>{col}</span>
+                  <span style={{fontSize:'10px',background:'#1a1b2e',borderRadius:'4px',padding:'2px 6px',fontFamily:'monospace',color:'#9ca3b8'}}>{colCards.length}</span>
+                </div>
+                <div style={{display:'flex',flexDirection:'column',gap:'7px',minHeight:'60px'}}>
+                  {colCards.length === 0 && (
+                    <div style={{border:'1px dashed rgba(255,255,255,0.05)',borderRadius:'8px',padding:'12px',fontSize:'11px',color:'#5f6580',textAlign:'center'}}>Empty</div>
+                  )}
+                  {colCards.map(card => (
+                    <div key={card.id} style={{
+                      background:'#1a1b2e',border:'1px solid rgba(255,255,255,0.05)',
+                      borderRadius:'8px',padding:'10px',fontSize:'12px'
+                    }}>
+                      <div style={{fontWeight:600,color:'#e8e9f3',marginBottom:'3px',fontSize:'12px'}}>{card.title}</div>
+                      <div style={{color:'#5f6580',fontSize:'11px',marginBottom:'5px'}}>{card.company}</div>
+                      {card.ey_connection && <div style={{fontSize:'10px',color:'#f59e0b',marginBottom:'4px'}}>⭐ EY Alumni Advantage</div>}
+                      <div style={{fontSize:'10px',color:'#5f6580',marginBottom:'6px'}}>{new Date(card.date_saved || Date.now()).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</div>
+                      <div style={{display:'flex',gap:'4px',flexWrap:'wrap'}}>
+                        {card.apply_url && (
+                          <a href={card.apply_url} target="_blank" rel="noreferrer" style={{fontSize:'10px',padding:'3px 7px',borderRadius:'4px',border:'1px solid rgba(255,255,255,0.1)',color:'#9ca3b8',textDecoration:'none'}}>Apply</a>
+                        )}
+                        {cols.indexOf(card.column_name) < cols.length - 1 && (
+                          <button onClick={() => advance(card)} style={{fontSize:'10px',padding:'3px 7px',borderRadius:'4px',border:'1px solid rgba(255,255,255,0.1)',background:'transparent',color:'#9ca3b8',cursor:'pointer'}}>→ Advance</button>
+                        )}
+                        <button onClick={() => remove(card.id)} style={{fontSize:'10px',padding:'3px 7px',borderRadius:'4px',border:'1px solid rgba(255,255,255,0.1)',background:'transparent',color:'#f43f5e',cursor:'pointer'}}>✕ Remove</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};

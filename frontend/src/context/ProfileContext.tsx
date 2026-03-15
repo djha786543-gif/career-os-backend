@@ -1,58 +1,133 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react'
 
-export type ProfileId = 'dj' | 'pj';
+export type ProfileId = 'dj' | 'pooja'
 
-export interface ProfileMetadata {
-  name: string;
-  role: string;
-  initials: string;
-  color: string;
+export interface NormalizedJob {
+  id: string
+  title: string
+  company: string
+  location: string
+  isRemote: boolean
+  workMode: 'Remote' | 'Hybrid' | 'On-site'
+  salary: string | null
+  snippet: string
+  applyUrl: string
+  postedDate: string
+  fitScore: number        // 1-100
+  fitReason: string       // one sentence
+  keySkills: string[]     // up to 4
+  category?: 'INDUSTRY' | 'ACADEMIA'  // Pooja only
+  eyConnection?: boolean  // true = EY alumni advantage signal
+  source: 'live' | 'demo'
 }
 
-export const PROFILE_METADATA: Record<ProfileId, ProfileMetadata> = {
-  dj: { name: 'Deobrat Jha', role: 'IT Audit Manager', initials: 'DJ', color: '#0F6E56' },
-  pj: { name: 'Pooja Jha', role: 'Postdoctoral Researcher · Cardiovascular Biology', initials: 'PJ', color: '#534AB7' }
-};
+export interface TrackerCard {
+  id: string
+  title: string
+  company: string
+  applyUrl: string
+  column: string
+  eyConnection?: boolean
+  savedDate: string
+}
+
+interface ProfileState {
+  jobs: NormalizedJob[]
+  aiResults: Record<string, string>
+  page: number
+  searchKeywords: string
+  selectedCountry: string
+  activeCategory: 'all' | 'INDUSTRY' | 'ACADEMIA'
+  trackerCards: Record<string, TrackerCard[]>
+  lastJobIds: Set<string>
+}
 
 interface ProfileContextValue {
-  profile: ProfileId;
-  setProfile: (profile: ProfileId) => void;
-  metadata: ProfileMetadata;
-  cacheVersion: number;
-  refresh: () => void;
+  profile: ProfileId
+  setProfile: (p: ProfileId) => void
+  state: ProfileState
+  setState: (updates: Partial<ProfileState>) => void
+  resetProfileState: () => void
+  metadata: {
+    name: string
+    role: string
+    initials: string
+    color: string
+  }
 }
 
-const ProfileContext = createContext<ProfileContextValue | undefined>(undefined);
+const defaultState = (): ProfileState => ({
+  jobs: [],
+  aiResults: {},
+  page: 0,
+  searchKeywords: '',
+  selectedCountry: 'usa',
+  activeCategory: 'all',
+  trackerCards: {},
+  lastJobIds: new Set()
+})
+
+const METADATA: Record<ProfileId, { name: string, role: string, initials: string, color: string }> = {
+  dj: { name: 'Deobrat Jha', role: 'IT Audit Manager', initials: 'DJ', color: '#22D3EE' },
+  pooja: { name: 'Pooja Jha', role: 'Postdoctoral Researcher', initials: 'PJ', color: '#F472B6' }
+}
+
+const ProfileContext = createContext<ProfileContextValue | null>(null)
 
 export function ProfileProvider({ children }: { children: ReactNode }) {
-  const [profile, setProfileState] = useState<ProfileId>('dj');
-  const [cacheVersion, setCacheVersion] = useState(0);
+  const [profile, setProfileRaw] = useState<ProfileId>('dj')
+  const [states, setStates] = useState<Record<ProfileId, ProfileState>>({
+    dj: defaultState(),
+    pooja: defaultState()
+  })
 
-  const setProfile = (newProfile: ProfileId) => {
-    if (newProfile !== profile) {
-      setProfileState(newProfile);
-      setCacheVersion(prev => prev + 1);
-    }
-  };
+  const state = states[profile]
 
-  const refresh = () => setCacheVersion(prev => prev + 1);
+  const setState = useCallback((updates: Partial<ProfileState>) => {
+    setStates(prev => ({
+      ...prev,
+      [profile]: { ...prev[profile], ...updates }
+    }))
+  }, [profile])
 
-  // Sync theme color to CSS variable for dynamic styling
+  const setProfile = useCallback((p: ProfileId) => {
+    setProfileRaw(p)
+  }, [])
+
+  const resetProfileState = useCallback(() => {
+    setStates(prev => ({
+      ...prev,
+      [profile]: defaultState()
+    }))
+  }, [profile])
+
   useEffect(() => {
-    document.documentElement.style.setProperty('--profile-color', PROFILE_METADATA[profile].color);
-  }, [profile]);
+    document.documentElement.style.setProperty(
+      '--accent-active', 
+      profile === 'dj' ? '#22D3EE' : '#F472B6'
+    )
+    document.documentElement.style.setProperty(
+      '--profile-color', 
+      profile === 'dj' ? '#22D3EE' : '#F472B6'
+    )
+  }, [profile])
 
   return (
-    <ProfileContext.Provider value={{ profile, setProfile, metadata: PROFILE_METADATA[profile], cacheVersion, refresh }}>
+    <ProfileContext.Provider value={{ 
+      profile, 
+      setProfile, 
+      state, 
+      setState, 
+      resetProfileState,
+      metadata: METADATA[profile]
+    }}>
       {children}
     </ProfileContext.Provider>
-  );
+  )
 }
 
-export function useProfile() {
-  const context = useContext(ProfileContext);
-  if (!context) {
-    throw new Error('useProfile must be used within a ProfileProvider');
-  }
-  return context;
+export const useProfile = () => {
+  const ctx = useContext(ProfileContext)
+  if (!ctx) throw new Error('useProfile must be used within ProfileProvider')
+  return ctx
 }

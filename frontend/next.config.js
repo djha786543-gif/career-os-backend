@@ -1,12 +1,11 @@
-/** @type {import('next').NextConfig} */
+﻿/** @type {import('next').NextConfig} */
 const nextConfig = {
-  async rewrites() {
-    return [
-      {
-        source: '/api/:path*',
-        destination: `${process.env.NEXT_PUBLIC_API_URL || 'https://career-os-portal-production.up.railway.app'}/api/:path*`
-      }
-    ];
+  output: 'export',
+  basePath: '/career-portal',
+  images: { unoptimized: true },
+  trailingSlash: true,
+  env: {
+    NEXT_PUBLIC_API_URL: 'https://career-os-backend-production.up.railway.app/api'
   }
-};
-module.exports = nextConfig;
+}
+module.exports = nextConfig

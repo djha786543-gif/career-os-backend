@@ -2,26 +2,24 @@ import React from 'react';
 import { useProfile, ProfileId } from '../context/ProfileContext';
 
 export type TabId =
-  | 'job-hub'
-  | 'prep-vault'
   | 'heatmap'
   | 'skill-engine'
   | 'cert-vault'
+  | 'learning-tracks'
   | 'trend-radar'
-  | 'salary'
-  | 'study-plan'
+  | 'prep-vault'
+  | 'job-hub'
   | 'tracker';
 
 const TABS: { id: TabId; icon: string; label: string }[] = [
-  { id: 'job-hub',      icon: '💼', label: 'Job Hub'         },
-  { id: 'prep-vault',   icon: '📚', label: 'Prep Vault'      },
-  { id: 'heatmap',      icon: '🔥', label: 'Market Heatmap'  },
-  { id: 'skill-engine', icon: '⚡', label: 'Skill Engine'    },
-  { id: 'cert-vault',   icon: '🏆', label: 'Cert Vault'      },
-  { id: 'trend-radar',  icon: '📡', label: 'Trend Radar'     },
-  { id: 'salary',       icon: '💰', label: 'Salary Intel'    },
-  { id: 'study-plan',   icon: '🗓️', label: 'Study Plan'      },
-  { id: 'tracker',      icon: '📋', label: 'Tracker'         },
+  { id: 'heatmap',         icon: '📡', label: 'Market Heatmap'  },
+  { id: 'skill-engine',    icon: '🤖', label: 'AI Skill Engine' },
+  { id: 'cert-vault',      icon: '🏆', label: 'Cert Vault'      },
+  { id: 'learning-tracks', icon: '📚', label: 'Learning Tracks' },
+  { id: 'trend-radar',     icon: '📈', label: 'Trend Radar'     },
+  { id: 'prep-vault',      icon: '📖', label: 'Prep Vault'      },
+  { id: 'job-hub',         icon: '💼', label: 'Job Hub'         },
+  { id: 'tracker',         icon: '📋', label: 'Tracker'         },
 ];
 
 interface Props {
@@ -34,50 +32,49 @@ export function AppLayout({ activeTab, onTabChange, children }: Props) {
   const { profile: activeProfile, setProfile, metadata } = useProfile();
 
   return (
-    <div style={{ position: 'relative', zIndex: 1, minHeight: '100vh', background: '#0a0b14', color: 'white' }}>
-      {/* ── Header ── */}
+    <div style={{ position: 'relative', minHeight: '100vh', background: activeProfile === 'dj' ? '#001E2B' : '#1A0020', color: 'white', transition: 'background 0.5s ease' }}>
+      <div className="amb">
+        <div className="orb o1" />
+        <div className="orb o2" />
+        <div className="orb o3" />
+      </div>
+
       <header style={styles.header}>
         <div style={styles.headerInner}>
-          {/* Brand */}
           <div style={styles.brand}>
-            CAREER<span style={{ color: 'var(--profile-color, #6366f1)' }}>OS</span>
+            CAREER<span style={{ color: 'var(--accent-active)' }}>_OS</span> / MARKET INTEL
           </div>
 
-          {/* Profile toggle */}
           <div style={styles.profileSwitch}>
             <button
               onClick={() => setProfile('dj')}
               style={{
                 ...styles.psw,
-                background: activeProfile === 'dj' ? '#0F6E56' : 'transparent',
-                color: activeProfile === 'dj' ? 'white' : 'rgba(255,255,255,0.4)',
-                border: activeProfile === 'dj' ? '1px solid #0F6E56' : '1px solid rgba(255,255,255,0.1)',
-                boxShadow: activeProfile === 'dj' ? '0 0 15px rgba(15,110,86,0.4)' : 'none',
+                background: activeProfile === 'dj' ? '#22D3EE' : 'transparent',
+                color: activeProfile === 'dj' ? '#000' : 'rgba(255,255,255,0.4)',
+                border: '1px solid ' + (activeProfile === 'dj' ? '#22D3EE' : 'rgba(255,255,255,0.1)'),
               }}
             >
-              DJ
+              ⚡ DJ
             </button>
             <button
-              onClick={() => setProfile('pj')}
+              onClick={() => setProfile('pooja')}
               style={{
                 ...styles.psw,
-                background: activeProfile === 'pj' ? '#534AB7' : 'transparent',
-                color: activeProfile === 'pj' ? 'white' : 'rgba(255,255,255,0.4)',
-                border: activeProfile === 'pj' ? '1px solid #534AB7' : '1px solid rgba(255,255,255,0.1)',
-                boxShadow: activeProfile === 'pj' ? '0 0 15px rgba(83,74,183,0.4)' : 'none',
+                background: activeProfile === 'pooja' ? '#F472B6' : 'transparent',
+                color: activeProfile === 'pooja' ? '#000' : 'rgba(255,255,255,0.4)',
+                border: '1px solid ' + (activeProfile === 'pooja' ? '#F472B6' : 'rgba(255,255,255,0.1)'),
               }}
             >
-              PJ
+              🔬 POOJA
             </button>
           </div>
 
-          {/* User pill */}
           <div style={styles.userPill}>
             <div style={{
               ...styles.avatar,
-              background: metadata.color + '22',
-              border: `1.5px solid ${metadata.color}44`,
-              color: metadata.color,
+              background: metadata.color,
+              color: '#000',
             }}>
               {metadata.initials}
             </div>
@@ -87,7 +84,6 @@ export function AppLayout({ activeTab, onTabChange, children }: Props) {
             </div>
           </div>
 
-          {/* Tab navigation */}
           <nav style={styles.navTabs}>
             {TABS.map(tab => (
               <button
@@ -96,8 +92,8 @@ export function AppLayout({ activeTab, onTabChange, children }: Props) {
                 style={{
                   ...styles.ntab,
                   color:      activeTab === tab.id ? 'white' : 'rgba(255,255,255,0.4)',
-                  background: activeTab === tab.id ? 'rgba(255,255,255,0.05)' : 'transparent',
-                  borderColor:activeTab === tab.id ? 'var(--profile-color)' : 'transparent',
+                  borderBottom: activeTab === tab.id ? '2px solid var(--accent-active)' : '2px solid transparent',
+                  borderRadius: 0,
                 }}
               >
                 <span style={{ marginRight: 6 }}>{tab.icon}</span>{tab.label}
@@ -107,7 +103,6 @@ export function AppLayout({ activeTab, onTabChange, children }: Props) {
         </div>
       </header>
 
-      {/* ── Main content ── */}
       <main style={styles.main}>
         <div style={styles.wrap}>
           {children}
@@ -122,7 +117,7 @@ const styles: Record<string, React.CSSProperties> = {
     position:       'sticky',
     top:            0,
     zIndex:         100,
-    background:     'rgba(10,11,20,0.8)',
+    background:     'rgba(0,0,0,0.3)',
     backdropFilter: 'blur(20px)',
     borderBottom:   '1px solid rgba(255,255,255,0.05)',
   },
@@ -136,7 +131,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding:       '0 24px',
   },
   brand: {
-    fontSize:      18,
+    fontSize:      16,
     fontWeight:    900,
     letterSpacing: '0.1em',
     color:         'white',
@@ -154,9 +149,9 @@ const styles: Record<string, React.CSSProperties> = {
   psw: {
     padding:       '6px 16px',
     borderRadius:  8,
-    fontSize:      12,
+    fontSize:      11,
     fontWeight:    800,
-    transition:    'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+    transition:    'all 0.3s ease',
     cursor:        'pointer',
   },
   userPill: {
@@ -168,34 +163,32 @@ const styles: Record<string, React.CSSProperties> = {
     borderLeft: '1px solid rgba(255,255,255,0.05)',
   },
   avatar: {
-    width:         38,
-    height:        38,
+    width:         32,
+    height:        32,
     borderRadius:  '50%',
     display:       'flex',
     alignItems:    'center',
     justifyContent:'center',
-    fontSize:      13,
+    fontSize:      12,
     fontWeight:    800,
   },
-  userName:  { fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap' },
-  userTitle: { fontSize: 11, color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap' },
+  userName:  { fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' },
+  userTitle: { fontSize: 10, color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap' },
   navTabs: {
     display:    'flex',
     gap:        4,
     marginLeft: 'auto',
-    overflowX:  'auto',
-    padding:    '4px 0',
-    scrollbarWidth: 'none',
+    height: '100%',
   },
   ntab: {
-    padding:       '8px 16px',
-    borderRadius:  10,
-    fontSize:      12,
+    padding:       '0 12px',
+    fontSize:      11,
     fontWeight:    700,
     cursor:        'pointer',
     transition:    'all 0.2s',
     whiteSpace:    'nowrap',
-    border:        '1px solid transparent',
+    background: 'transparent',
+    border: 'none',
     display:       'flex',
     alignItems:    'center',
   },

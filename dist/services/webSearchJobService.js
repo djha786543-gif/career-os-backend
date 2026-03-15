@@ -193,25 +193,37 @@ function parseJobArray(text) {
 }
 async function runWebSearch(client, query, region, track) {
     const prompt = buildSearchPrompt(query, region);
-    // web_search is a first-party Anthropic tool — no schema needed, just the name
-    const response = await client.messages.create({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 4096,
-        tools: [
-            {
-                type: 'web_search_20250305',
-                name: 'web_search',
-            },
-        ],
-        messages: [{ role: 'user', content: prompt }],
-    }, { signal: AbortSignal.timeout(10000) });
+    // web_search is a first-party Anthropic tool — use direct fetch (matches pattern in ai.ts)
+    const apiKey = client.apiKey;
+    const fetchRes = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        signal: AbortSignal.timeout(55000),
+        headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+            'anthropic-beta': 'web-search-2025-03-05',
+        },
+        body: JSON.stringify({
+            model: 'claude-sonnet-4-6',
+            max_tokens: 4096,
+            tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+            messages: [{ role: 'user', content: prompt }],
+        }),
+    });
+    console.log(`[WebSearch] HTTP ${fetchRes.status} for "${query.slice(0, 40)}..."`);
+    if (!fetchRes.ok) {
+        const errText = await fetchRes.text();
+        throw new Error(`Anthropic API ${fetchRes.status} ${errText.slice(0, 200)}`);
+    }
+    const response = await fetchRes.json();
     // Collect text blocks (Claude's final answer after tool use)
-    const text = response.content
+    const text = (response.content ?? [])
         .filter((b) => b.type === 'text')
         .map((b) => b.text)
         .join('\n');
     const raw = parseJobArray(text);
-    console.log(`[WebSearch] "${query}" (${region}): ${raw.length} results`);
+    console.log(`[WebSearch] "${query.slice(0, 40)}..." (${region}): ${raw.length} results`);
     return raw.map(r => normalizeWebSearchJob(r, track));
 }
 async function fetchWebSearchJobs(opts) {
@@ -231,12 +243,14 @@ async function fetchWebSearchJobs(opts) {
     const allJobs = [];
     for (const region of regions) {
         const queries = getQueries(track, region);
-        for (const query of queries) {
+        // Limit to first 1 query per region; each query can take up to 55s (web search is slow)
+        const limitedQueries = queries.slice(0, 1);
+        for (const query of limitedQueries) {
             try {
                 const jobs = await runWebSearch(client, query, region, track);
                 allJobs.push(...jobs);
                 // Be polite to the API between queries
-                await new Promise(r => setTimeout(r, 500));
+                await new Promise(r => setTimeout(r, 300));
             }
             catch (err) {
                 console.error(`[WebSearch] Query failed: "${query}" (${region}):`, err.message);
@@ -251,7 +265,10 @@ async function fetchWebSearchJobs(opts) {
     const sorted = scored
         .filter(job => (job.matchScore ?? 0) >= 20) // light floor; jobSearchService enforces ≥60
         .sort((a, b) => (b.matchScore ?? 0) - (a.matchScore ?? 0));
-    (0, cache_1.setCache)(cacheKey, sorted);
+    // Only cache when we have real results — don't cache empty runs caused by timeouts
+    if (sorted.length > 0) {
+        (0, cache_1.setCache)(cacheKey, sorted);
+    }
     console.log(`[WebSearch] pooja/${track}: ${sorted.length} jobs cached`);
     return sorted;
 }

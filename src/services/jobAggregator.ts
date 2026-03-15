@@ -209,7 +209,9 @@ async function fetchAdzunaFallback(
   profileMap: RegionProfileMap,
 ): Promise<Job[]> {
   const results: Job[][] = await Promise.all(
-    countries.map(country => fetchAdzunaJobs(country, profileMap[country]))
+    countries
+      .filter(country => !!profileMap[country])
+      .map(country => fetchAdzunaJobs(country, profileMap[country]!))
   );
   return results.flat();
 }
@@ -258,7 +260,7 @@ export async function fetchAggregatedJobs(opts: AggregatorOptions): Promise<Job[
       try {
         const usProfile = profileMap['us'];
         // Run each query sequentially to respect MCP rate limits
-        for (const query of usProfile.queries.slice(0, 4)) {
+        for (const query of (usProfile?.queries ?? []).slice(0, 4)) {
           const hits = await fetchIndeedJobsMCP(query, 'United States');
           usJobs.push(...hits);
         }

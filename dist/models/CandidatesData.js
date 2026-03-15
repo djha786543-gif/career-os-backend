@@ -14,7 +14,7 @@ exports.candidates = [
             'IT audit', 'SoD', 'IT risk', 'compliance', 'cybersecurity'
         ],
         experienceYears: 12,
-        regions: ['US', 'Europe', 'India'],
+        regions: ['US'],
         preferences: {
             remote: true,
             hybrid: true,

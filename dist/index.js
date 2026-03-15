@@ -11,6 +11,8 @@ const pg_1 = require("pg");
 const jobs_1 = __importDefault(require("./api/jobs"));
 const kanban_1 = __importDefault(require("./api/kanban"));
 const intelligence_1 = __importDefault(require("./api/intelligence"));
+const ai_1 = __importDefault(require("./api/ai"));
+const init_1 = require("./db/init");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const PORT = Number(process.env.PORT) || 8080;
@@ -80,13 +82,16 @@ app.get('/', (req, res) => {
 // 4. Feature routes
 app.use('/api/jobs', jobs_1.default);
 app.use('/api/kanban', kanban_1.default);
-app.use('/api', intelligence_1.default); // /api/trends, /api/skills, /api/salary, /api/market
+app.use('/api/ai', ai_1.default); // /api/ai/skill, /api/ai/trend, /api/ai/assist, etc.
+app.use('/api', intelligence_1.default); // /api/trends, /api/skills, /api/salary, /api/market, /api/market/heatmap, /api/study/plan
 // Global error handler (must be last)
 app.use((err, req, res, next) => {
     console.error('[ERROR]', err.message);
     if (!res.headersSent)
         res.status(500).json({ error: err.message });
 });
+// 5. Start server — run DB init after port is bound
 app.listen(PORT, '0.0.0.0', () => {
     console.log('✅ Career-OS backend running on port ' + PORT);
+    (0, init_1.dbInit)().catch(err => console.error('dbInit error:', err.message));
 });

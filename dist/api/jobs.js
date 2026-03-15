@@ -16,6 +16,7 @@ const db_1 = __importDefault(require("../db"));
 const CandidatesData_1 = require("../models/CandidatesData");
 const jobIngestionService_1 = require("../services/jobIngestionService");
 const jobSearchService_1 = require("../services/jobSearchService");
+const webSearchJobService_1 = require("../services/webSearchJobService");
 const router = express_1.default.Router();
 const VALID_TRACKS = ['Academic', 'Industry'];
 const VALID_REGIONS = ['US', 'Europe', 'India'];
@@ -94,24 +95,11 @@ function mcpJobToInternal(job) {
         matchScore: 82,
     };
 }
-// ─── Tier 3: Demo data (safety net — never fails) ────────────────────────────
-const DEMO_JOBS = {
-    dj: [
-        { id: 'dj1', title: 'IT Audit Manager', company: 'Cisco Systems', location: 'Remote, US', salary: '$130,000 - $155,000', snippet: '', applyUrl: 'https://jobs.cisco.com', fitScore: 92, workMode: 'Remote', isRemote: true, source: 'Demo', postedDate: '2 days ago', keySkills: ['SOX ITGC', 'CISA', 'Remote'], region: 'US' },
-        { id: 'dj2', title: 'Senior IT Auditor — SOX', company: 'Salesforce', location: 'Remote, US', salary: '$115,000 - $135,000', snippet: '', applyUrl: 'https://careers.salesforce.com', fitScore: 88, workMode: 'Remote', isRemote: true, source: 'Demo', postedDate: '3 days ago', keySkills: ['SOX', 'Cloud', 'Remote'], region: 'US' },
-        { id: 'dj3', title: 'IT Compliance Manager', company: 'Amazon Web Services', location: 'Remote, US', salary: '$140,000 - $165,000', snippet: '', applyUrl: 'https://amazon.jobs', fitScore: 85, workMode: 'Remote', isRemote: true, source: 'Demo', postedDate: '1 day ago', keySkills: ['AWS', 'CISA', 'GRC'], region: 'US' },
-        { id: 'dj4', title: 'Director of IT Audit', company: 'Public Storage', location: 'Glendale, CA', salary: '$155,000 - $185,000', snippet: '', applyUrl: 'https://publicstorage.com/careers', fitScore: 83, workMode: 'Hybrid', isRemote: false, source: 'Demo', postedDate: '5 days ago', keySkills: ['SOX', 'REIT', 'Hybrid'], region: 'US' },
-        { id: 'dj5', title: 'AI Governance Auditor', company: 'Anthropic', location: 'Remote, US', salary: '$145,000 - $175,000', snippet: '', applyUrl: 'https://anthropic.com/careers', fitScore: 90, workMode: 'Remote', isRemote: true, source: 'Demo', postedDate: '1 week ago', keySkills: ['AI', 'GRC', 'Remote'], region: 'US' },
-        { id: 'dj6', title: 'Cloud Security Auditor', company: 'Microsoft', location: 'Remote, US', salary: '$135,000 - $160,000', snippet: '', applyUrl: 'https://careers.microsoft.com', fitScore: 87, workMode: 'Remote', isRemote: true, source: 'Demo', postedDate: '4 days ago', keySkills: ['Azure', 'CISA', 'Remote'], region: 'US' },
-    ],
-    pj: [
-        { id: 'pj1', title: 'Postdoctoral Researcher — Cardiovascular Biology', company: 'UCLA Cardiovascular Research Lab', location: 'Los Angeles, CA', salary: '$62,000 - $68,000', snippet: '', applyUrl: 'https://hr.ucla.edu', fitScore: 95, workMode: 'On-site', isRemote: false, source: 'Demo', postedDate: '1 week ago', keySkills: ['Postdoc', 'CVD', 'Molecular Bio'], region: 'US' },
-        { id: 'pj2', title: 'Senior Research Scientist — Cardiology', company: 'AstraZeneca', location: 'Remote / San Diego, CA', salary: '$110,000 - $135,000', snippet: '', applyUrl: 'https://astrazeneca.com/careers', fitScore: 88, workMode: 'Hybrid', isRemote: false, source: 'Demo', postedDate: '3 days ago', keySkills: ['Industry', 'CVD', 'Pharma'], region: 'US' },
-        { id: 'pj3', title: 'Assistant Professor — Molecular Biology', company: 'UC Irvine School of Medicine', location: 'Irvine, CA', salary: '$95,000 - $120,000', snippet: '', applyUrl: 'https://recruit.uci.edu', fitScore: 85, workMode: 'On-site', isRemote: false, source: 'Demo', postedDate: '2 weeks ago', keySkills: ['Faculty', 'Tenure-track', 'CVD'], region: 'US' },
-        { id: 'pj4', title: 'Research Scientist II — PPCM', company: 'Cedars-Sinai Medical Center', location: 'Los Angeles, CA', salary: '$90,000 - $115,000', snippet: '', applyUrl: 'https://cedars-sinai.org/careers', fitScore: 82, workMode: 'On-site', isRemote: false, source: 'Demo', postedDate: '5 days ago', keySkills: ['PPCM', 'Research', 'Hospital'], region: 'US' },
-        { id: 'pj5', title: 'Translational Scientist — Cardiovascular', company: 'Pfizer Global R&D', location: 'Remote, US', salary: '$120,000 - $148,000', snippet: '', applyUrl: 'https://pfizer.com/careers', fitScore: 80, workMode: 'Remote', isRemote: true, source: 'Demo', postedDate: '4 days ago', keySkills: ['Translational', 'CVD', 'Pharma'], region: 'US' },
-    ],
-};
+// ─── EY Alumni signal detector ────────────────────────────────────────────────
+function detectEYConnection(job) {
+    const text = `${job.company || ''} ${job.description || ''}`.toLowerCase();
+    return ['ernst & young', 'ernst and young', ' ey ', 'ey.com', 'ey llp', 'ey-parthenon'].some(t => text.includes(t));
+}
 // ─── Map frontend "profile" shortcodes → candidateId ─────────────────────────
 const PROFILE_MAP = {
     dj: 'deobrat',
@@ -119,10 +107,15 @@ const PROFILE_MAP = {
     deobrat: 'deobrat',
     pooja: 'pooja',
 };
-// ─── Map candidateId → profile shortcode (for DB queries) ───────────────────
+// ─── Map candidateId → profile shortcode (for display/cache) ────────────────
 const ID_TO_PROFILE = {
     deobrat: 'dj',
     pooja: 'pj',
+};
+// ─── Map candidateId → DB profile_id (VARCHAR in jobs/kanban tables) ────────
+const ID_TO_DB_PROFILE = {
+    deobrat: 'dj',
+    pooja: 'pooja',
 };
 const COUNTRY_TO_REGION = {
     'united states': 'US',
@@ -173,10 +166,13 @@ function toFrontendJob(job) {
         postedDate: job.postedDate || 'Recent',
         keySkills: (job.skills || []).slice(0, 6),
         region: job.region,
+        eyConnection: detectEYConnection(job),
     };
 }
 // ─── GET /api/jobs ────────────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
+    // Extend timeout for Pooja requests (web search can take up to 60s)
+    res.setTimeout(90000);
     try {
         const q = req.query;
         const rawProfile = q.profile || q.candidate || '';
@@ -188,43 +184,51 @@ router.get('/', async (req, res) => {
         let resolvedTrack;
         if (candidate.id === 'pooja') {
             const t = q.track;
-            resolvedTrack = t && VALID_TRACKS.includes(t) ? t : 'Industry';
+            resolvedTrack = t && VALID_TRACKS.includes(t) ? t : undefined;
         }
         const resolvedRegion = resolveRegion(q.country, q.region);
         const resolvedRegions = resolvedRegion ? [resolvedRegion] : candidate.regions;
+        // DB-safe profile ID (matches the VARCHAR values stored in the jobs table)
+        const dbProfileId = ID_TO_DB_PROFILE[candidateId] || candidateId;
         // 1. Fetch from Database (Priority Sniper Jobs)
         let dbJobs = [];
-        const client = await db_1.default.connect();
         try {
-            await client.query(`SET LOCAL app.current_profile = $1`, [profileShort]);
-            const query = `SELECT * FROM jobs WHERE profile_id = $1 AND region = ANY($2::text[]) ORDER BY job_board = 'Web Search' DESC, match_score DESC`;
-            const { rows } = await client.query(query, [profileShort, resolvedRegions]);
-            dbJobs = rows.map((r) => ({
-                id: r.id.toString(),
-                title: r.title,
-                company: r.company,
-                location: r.location,
-                region: r.region,
-                description: r.description,
-                applyUrl: r.apply_url,
-                remote: !!r.remote,
-                hybrid: !!r.hybrid,
-                visaSponsorship: !!r.visa_sponsorship,
-                experienceLevel: r.experience_level || 'Mid',
-                employmentType: r.employment_type || 'Full-time',
-                jobBoard: r.job_board,
-                matchScore: r.match_score,
-                skills: r.skills || [],
-                postedDate: r.fetched_at instanceof Date ? r.fetched_at.toISOString() : (r.fetched_at || ''),
-                normalized: true
-            }));
-            console.log(`[DB] Fetched ${dbJobs.length} jobs for ${profileShort}`);
+            const client = await db_1.default.connect();
+            try {
+                // SET LOCAL does not accept $1 parameters in PostgreSQL — use string literal
+                await client.query(`SET LOCAL app.current_profile = '${dbProfileId}'`);
+                const query = `SELECT * FROM jobs WHERE profile_id = $1 AND region = ANY($2::text[]) ORDER BY job_board = 'Web Search' DESC, match_score DESC`;
+                const { rows } = await client.query(query, [dbProfileId, resolvedRegions]);
+                dbJobs = rows.map((r) => ({
+                    id: r.id.toString(),
+                    title: r.title,
+                    company: r.company,
+                    location: r.location,
+                    region: r.region,
+                    description: r.description,
+                    applyUrl: r.apply_url,
+                    remote: !!r.remote,
+                    hybrid: !!r.hybrid,
+                    visaSponsorship: !!r.visa_sponsorship,
+                    experienceLevel: r.experience_level || 'Mid',
+                    employmentType: r.employment_type || 'Full-time',
+                    jobBoard: r.job_board,
+                    matchScore: r.match_score,
+                    skills: r.skills || [],
+                    postedDate: r.fetched_at instanceof Date ? r.fetched_at.toISOString() : (r.fetched_at || ''),
+                    normalized: true
+                }));
+                console.log(`[DB] Fetched ${dbJobs.length} jobs for ${profileShort}`);
+            }
+            catch (err) {
+                console.error('DB Fetch Error:', err instanceof Error ? err.message : err);
+            }
+            finally {
+                client.release();
+            }
         }
-        catch (err) {
-            console.error('DB Fetch Error:', err instanceof Error ? err.message : err);
-        }
-        finally {
-            client.release();
+        catch (dbConnErr) {
+            console.warn('[DB] Connection failed, continuing without DB cache:', dbConnErr instanceof Error ? dbConnErr.message : dbConnErr);
         }
         // 2. Fetch Indeed MCP (if enabled)
         let mcpJobs = [];
@@ -241,8 +245,32 @@ router.get('/', async (req, res) => {
         catch (err) {
             console.error('Adzuna Ingestion Error:', err instanceof Error ? err.message : err);
         }
-        // 4. Merge and Deduplicate (Priority: DB > MCP > Adzuna)
-        const combined = [...dbJobs, ...mcpJobs, ...adzunaJobs];
+        // 3b. Web search jobs for Pooja (supplements Adzuna which has thin coverage for research roles)
+        // Wrapped in a 75s timeout. The route-level timeout was extended to 90s to accommodate this.
+        let webSearchJobs = [];
+        if (candidate.id === 'pooja' && resolvedRegions.length > 0) {
+            try {
+                const webRegions = resolvedRegions.filter(r => ['US', 'Europe', 'India'].includes(r));
+                if (webRegions.length > 0) {
+                    const wsTrack = resolvedTrack ?? 'Academic';
+                    const wsTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('WebSearch timeout')), 75000));
+                    webSearchJobs = await Promise.race([
+                        (0, webSearchJobService_1.fetchWebSearchJobs)({
+                            candidate,
+                            track: wsTrack,
+                            regions: webRegions,
+                        }),
+                        wsTimeout,
+                    ]);
+                    console.log(`[WebSearch] ${webSearchJobs.length} jobs for pooja/${wsTrack}`);
+                }
+            }
+            catch (wsErr) {
+                console.warn('[WebSearch] Failed, continuing without web search jobs:', wsErr instanceof Error ? wsErr.message : wsErr);
+            }
+        }
+        // 4. Merge and Deduplicate (Priority: DB > MCP > Adzuna > WebSearch)
+        const combined = [...dbJobs, ...mcpJobs, ...adzunaJobs, ...webSearchJobs];
         const seen = new Set();
         const unique = combined.filter(j => {
             const key = `${j.company.toLowerCase()}|${j.title.toLowerCase()}`;
@@ -262,7 +290,7 @@ router.get('/', async (req, res) => {
         };
         const scored = (0, jobSearchService_1.filterAndScoreJobs)(unique, candidateWithTrack, filters);
         // Final Sort: Sniper (Web Search) > fitScore
-        const finalJobs = scored.sort((a, b) => {
+        const allJobs = scored.sort((a, b) => {
             const aIsSniper = a.jobBoard === 'Web Search';
             const bIsSniper = b.jobBoard === 'Web Search';
             if (aIsSniper && !bIsSniper)
@@ -271,35 +299,31 @@ router.get('/', async (req, res) => {
                 return 1;
             return (b.fitScore || 0) - (a.fitScore || 0);
         }).map(toFrontendJob);
-        // Tier 3: demo data safety net — never return an empty list to the frontend
-        if (finalJobs.length === 0 && ['dj', 'pj'].includes(profileShort)) {
-            console.log(`[/api/jobs] all sources empty, using demo data for ${profileShort}`);
-            const demo = DEMO_JOBS[profileShort];
-            return res.json({
-                status: 'success',
-                candidate: candidate.name,
-                candidateId: candidate.id,
-                track: resolvedTrack ?? null,
-                regions: resolvedRegions,
-                totalResults: demo.length,
-                source: 'demo',
-                jobs: demo,
-            });
-        }
+        // Pagination
+        const page = Math.max(0, parseInt(q.page || '0', 10));
+        const pageSize = Math.max(1, Math.min(50, parseInt(q.pageSize || '8', 10)));
+        const totalResults = allJobs.length;
+        const totalPages = Math.max(1, Math.ceil(totalResults / pageSize));
+        const pagedJobs = allJobs.slice(page * pageSize, (page + 1) * pageSize);
         return res.json({
             status: 'success',
             candidate: candidate.name,
             candidateId: candidate.id,
             track: resolvedTrack ?? null,
             regions: resolvedRegions,
-            totalResults: finalJobs.length,
-            source: mcpJobs.length > 0 ? 'hybrid-mcp' : 'hybrid',
-            jobs: finalJobs,
+            totalResults,
+            page,
+            totalPages,
+            hasNext: page < totalPages - 1,
+            hasPrev: page > 0,
+            source: mcpJobs.length > 0 ? 'hybrid-mcp' : 'live',
+            jobs: pagedJobs,
         });
     }
     catch (err) {
         console.error('[/api/jobs] Error:', err instanceof Error ? err.message : err);
-        return res.status(500).json({ error: 'Internal server error' });
+        if (!res.headersSent)
+            return res.status(500).json({ error: 'Internal server error' });
     }
 });
 router.post('/refresh', (req, res) => {
@@ -307,7 +331,8 @@ router.post('/refresh', (req, res) => {
     if (!candidateId || !['deobrat', 'pooja'].includes(candidateId))
         return res.status(400).json({ error: 'Invalid candidate' });
     (0, jobIngestionService_1.invalidateCandidateCache)(candidateId, track);
-    return res.json({ status: 'cache_invalidated', candidate: candidateId });
+    console.log(`[Refresh] Cache invalidated for ${candidateId} at ${new Date().toISOString()}`);
+    return res.json({ status: 'cache_invalidated', candidate: candidateId, timestamp: new Date().toISOString() });
 });
 router.post('/ingest-mcp', async (req, res) => {
     const { profileId, jobs } = req.body;
@@ -318,7 +343,7 @@ router.post('/ingest-mcp', async (req, res) => {
     const client = await db_1.default.connect();
     try {
         await client.query('BEGIN');
-        await client.query(`SET LOCAL app.current_profile = $1`, [profileId]);
+        await client.query(`SET LOCAL app.current_profile = '${profileId}'`);
         for (const job of jobs) {
             const id = job.id || `mcp_${Math.random().toString(36).slice(2)}`;
             await client.query(`INSERT INTO jobs (

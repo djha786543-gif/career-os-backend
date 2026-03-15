@@ -38,7 +38,8 @@ router.get('/', async (req, res) => {
         res.json(cards);
     }
     catch (err) {
-        res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
+        if (!res.headersSent)
+            res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
     }
 });
 // ─── POST /api/kanban ──────────────────────────────────────────────────────────
@@ -58,7 +59,8 @@ router.post('/', async (req, res) => {
         res.json(card);
     }
     catch (err) {
-        res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
+        if (!res.headersSent)
+            res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
     }
 });
 // ─── PATCH /api/kanban/:id ──────────────────────────────────────────────────────
@@ -79,7 +81,8 @@ router.patch('/:id', async (req, res) => {
         res.json(card);
     }
     catch (err) {
-        res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
+        if (!res.headersSent)
+            res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
     }
 });
 // ─── DELETE /api/kanban/:id ─────────────────────────────────────────────────────
@@ -94,7 +97,8 @@ router.delete('/:id', async (req, res) => {
         res.status(204).end();
     }
     catch (err) {
-        res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
+        if (!res.headersSent)
+            res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' });
     }
 });
 exports.default = router;

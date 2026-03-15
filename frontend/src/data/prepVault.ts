@@ -1,38 +1,4 @@
-// frontend/src/data/prepVault.ts
-// Extracted verbatim from career-os-v2.html — do not strip embedded HTML.
-// The pv-formula, pv-trap, pv-def, pv-tree, pv-table, pv-tip CSS classes
-// in the content strings are rendered directly as innerHTML in React components.
-
-export interface Flashcard {
-  q: string;
-  a: string;
-}
-
-export interface Subsection {
-  heading: string;
-  content: string; // raw HTML — render via dangerouslySetInnerHTML
-}
-
-export interface VaultSection {
-  id: string;
-  icon: string;
-  title: string;
-  weight: 'critical' | 'high' | 'medium' | 'low';
-  subtitle: string;
-  category: string;
-  tag: 'formula' | 'trap' | 'concept';
-  subsections: Subsection[];
-}
-
-export interface PrepVaultProfile {
-  title: string;
-  sub: string;
-  quickTopics: string[];
-  sections: VaultSection[];
-  flashcards: Flashcard[];
-}
-
-export const PREP_VAULT: Record<'dj' | 'pj', PrepVaultProfile> = {
+export const PREP_VAULT = {
   dj: {
     title: "Preparation Vault — AAIA + AIGP (DJ)",
     sub: "Pre-built reference for ISACA AAIA (March 2026) and IAPP AIGP — definitions, formulas, frameworks, exam traps",
@@ -42,9 +8,13 @@ export const PREP_VAULT: Record<'dj' | 'pj', PrepVaultProfile> = {
     ],
     sections: [
       {
-        id: "aaia-governance", icon: "🏛️", title: "AI Governance Frameworks", weight: "critical",
+        id: "aaia-governance",
+        icon: "🏛️",
+        title: "AI Governance Frameworks",
+        weight: "critical",
         subtitle: "NIST AI RMF · ISO 42001 · OECD Principles · EU AI Act — Domain 1 AAIA",
-        category: "AI Governance", tag: "formula",
+        category: "AI Governance",
+        tag: "formula",
         subsections: [
           {
             heading: "NIST AI RMF — Four Core Functions",
@@ -87,9 +57,13 @@ Risk Appetite Threshold → triggers Manage function response</div>
         ]
       },
       {
-        id: "aaia-risk", icon: "⚖️", title: "AI Risk Assessment & Quantification", weight: "critical",
+        id: "aaia-risk",
+        icon: "⚖️",
+        title: "AI Risk Assessment & Quantification",
+        weight: "critical",
         subtitle: "FAIR model · Risk scoring · Residual risk · Loss event frequency — Domain 2 AAIA",
-        category: "AI Risk", tag: "formula",
+        category: "AI Risk",
+        tag: "formula",
         subsections: [
           {
             heading: "FAIR Risk Quantification — Full Formula Set",
@@ -130,9 +104,13 @@ Random errors, no pattern → Pipeline/infrastructure issue</div>
         ]
       },
       {
-        id: "aaia-audit", icon: "🔍", title: "AI Audit Methodology & Evidence", weight: "high",
+        id: "aaia-audit",
+        icon: "🔍",
+        title: "AI Audit Methodology & Evidence",
+        weight: "high",
         subtitle: "Audit procedures · Evidence standards · Control testing · Reporting — Domain 5 AAIA",
-        category: "AI Audit", tag: "trap",
+        category: "AI Audit",
+        tag: "trap",
         subsections: [
           {
             heading: "AI Audit Lifecycle — Phases and Key Deliverables",
@@ -189,9 +167,13 @@ Random errors, no pattern → Pipeline/infrastructure issue</div>
         ]
       },
       {
-        id: "aigp-euai", icon: "🇪🇺", title: "EU AI Act — Deep Reference", weight: "critical",
+        id: "aigp-euai",
+        icon: "🇪🇺",
+        title: "EU AI Act — Deep Reference",
+        weight: "critical",
         subtitle: "Risk tiers · Prohibited uses · Conformity assessment · AIGP exam focus",
-        category: "EU AI Act", tag: "trap",
+        category: "EU AI Act",
+        tag: "trap",
         subsections: [
           {
             heading: "Prohibited AI Practices — Article 5 (Must Memorize)",
@@ -227,9 +209,13 @@ Random errors, no pattern → Pipeline/infrastructure issue</div>
         ]
       },
       {
-        id: "aaia-ethics", icon: "⚖️", title: "AI Ethics & Bias — Metrics & Frameworks", weight: "high",
+        id: "aaia-ethics",
+        icon: "⚖️",
+        title: "AI Ethics & Bias — Metrics & Frameworks",
+        weight: "high",
         subtitle: "Fairness metrics · Disparate impact · Protected attributes · Bias audit procedures",
-        category: "AI Fairness", tag: "formula",
+        category: "AI Fairness",
+        tag: "formula",
         subsections: [
           {
             heading: "Fairness Metrics — Definitions and Formulas",
@@ -276,9 +262,13 @@ Counterfactual Fairness: Outcome unchanged if protected attribute were different
         ]
       },
       {
-        id: "conflict-frameworks", icon: "⚡", title: "Conflicting Framework Resolution", weight: "high",
+        id: "conflict-frameworks",
+        icon: "⚡",
+        title: "Conflicting Framework Resolution",
+        weight: "high",
         subtitle: "GDPR vs retention · HIPAA vs AI · SOX vs AI models — Framework conflict exam scenarios",
-        category: "Framework Conflicts", tag: "trap",
+        category: "Framework Conflicts",
+        tag: "trap",
         subsections: [
           {
             heading: "Common Framework Conflicts — Decision Matrix",
@@ -309,11 +299,10 @@ Counterfactual Fairness: Outcome unchanged if protected attribute were different
       { q: "What must a Model Card contain?", a: "Intended use cases, training data sources, known limitations, fairness metrics by protected class, evaluation methodology, and version history." },
       { q: "FAIR formula: What is Loss Event Frequency (LEF)?", a: "LEF = Threat Event Frequency (TEF) × Vulnerability. Example: 2 attempts/year × 50% success rate = 1.0 LEF." },
       { q: "When is a compensating control 'adequate' per audit standards?", a: "When it: (1) addresses the same risk as the primary control, (2) provides comparable assurance level, (3) is formally documented with ownership, and (4) is independently tested." },
-      { q: "What is the difference between ISO 42001 and NIST AI RMF applicability?", a: "NIST AI RMF is voluntary, US-origin, no certification. ISO 42001 is a certifiable management standard (third-party audit), globally applicable, PDCA-structured." },
+      { q: "What is the difference between ISO 42001 and NIST AI RMF applicability?", a: "NIST AI RMF is voluntary, US-origin, no certification. ISO 42001 is a certifiable management standard (third-party audit), globally applicable, PDCA-structured." }
     ]
   },
-
-  pj: {
+  pooja: {
     title: "Preparation Vault — ASCP MB (Pooja)",
     sub: "Pre-built reference for ASCP Molecular Biology certification (May 2026) — all 6 domains with definitions, techniques, QC formulas, traps",
     quickTopics: [
@@ -322,9 +311,13 @@ Counterfactual Fairness: Outcome unchanged if protected attribute were different
     ],
     sections: [
       {
-        id: "ascp-pcr", icon: "🧬", title: "PCR Methodologies — Domain 3 (25% of Exam)", weight: "critical",
+        id: "ascp-pcr",
+        icon: "🧬",
+        title: "PCR Methodologies — Domain 3 (25% of Exam)",
+        weight: "critical",
         subtitle: "Largest exam domain · RT-PCR · qPCR · ddPCR · Multiplex PCR · Allele-specific PCR",
-        category: "PCR Methods", tag: "formula",
+        category: "PCR Methods",
+        tag: "formula",
         subsections: [
           {
             heading: "PCR Variant Comparison — Master Table",
@@ -361,9 +354,13 @@ Ct 3.3 cycles difference = 10-fold concentration difference (at 100% efficiency)
         ]
       },
       {
-        id: "ascp-ngs", icon: "🔬", title: "Sequencing Technologies — Domain 4 (20% of Exam)", weight: "critical",
+        id: "ascp-ngs",
+        icon: "🔬",
+        title: "Sequencing Technologies — Domain 4 (20% of Exam)",
+        weight: "critical",
         subtitle: "NGS workflow · Variant calling · File formats · Sanger comparison · Clinical interpretation",
-        category: "Sequencing", tag: "formula",
+        category: "Sequencing",
+        tag: "formula",
         subsections: [
           {
             heading: "NGS Workflow — Complete Pipeline",
@@ -426,9 +423,13 @@ Ct 3.3 cycles difference = 10-fold concentration difference (at 100% efficiency)
         ]
       },
       {
-        id: "ascp-extraction", icon: "🧪", title: "Nucleic Acid Extraction & QC — Domain 2", weight: "high",
+        id: "ascp-extraction",
+        icon: "🧪",
+        title: "Nucleic Acid Extraction & QC — Domain 2",
+        weight: "high",
         subtitle: "Extraction methods · QC metrics · Inhibitors · Storage conditions",
-        category: "Nucleic Acids", tag: "formula",
+        category: "Nucleic Acids",
+        tag: "formula",
         subsections: [
           {
             heading: "Extraction Method Comparison",
@@ -460,9 +461,13 @@ A260/A230 ratio:
         ]
       },
       {
-        id: "ascp-qc", icon: "📊", title: "QC, Lab Ops & CLIA Regulations — Domain 6", weight: "high",
+        id: "ascp-qc",
+        icon: "📊",
+        title: "QC, Lab Ops & CLIA Regulations — Domain 6",
+        weight: "high",
         subtitle: "Westgard rules · CLIA requirements · Proficiency testing · Delta checks · QC frequency",
-        category: "Lab QC", tag: "formula",
+        category: "Lab QC",
+        tag: "formula",
         subsections: [
           {
             heading: "Westgard Rules — Complete Reference",
@@ -498,9 +503,13 @@ R₄s — REJECTION: 1 QC value exceeds +2SD AND another exceeds -2SD in same ru
         ]
       },
       {
-        id: "ascp-expression", icon: "📈", title: "Gene Expression & Epigenetics — Domain 5", weight: "medium",
+        id: "ascp-expression",
+        icon: "📈",
+        title: "Gene Expression & Epigenetics — Domain 5",
+        weight: "medium",
         subtitle: "RNA-seq workflow · scRNA-seq · Epigenetic modifications · ChIP-seq · ATAC-seq",
-        category: "Gene Expression", tag: "formula",
+        category: "Gene Expression",
+        tag: "formula",
         subsections: [
           {
             heading: "RNA-seq vs scRNA-seq — Key Distinctions",
@@ -541,7 +550,7 @@ R₄s — REJECTION: 1 QC value exceeds +2SD AND another exceeds -2SD in same ru
       { q: "What is the H3K27me3 histone modification associated with?", a: "Gene repression / silenced chromatin. H3K4me3 = active promoter. H3K27ac = active enhancer. H3K36me3 = active transcription elongation." },
       { q: "Nested PCR — what is the primary clinical concern?", a: "High contamination risk due to open-tube transfer between first and second PCR. Requires strict physical separation of pre- and post-amplification areas. Highest contamination risk of all PCR methods." },
       { q: "What does the R₄s Westgard rule detect?", a: "Random error within a single run. One QC exceeds +2SD AND another exceeds -2SD in the same run. The 4-SD range between the two QC values triggers run rejection." },
-      { q: "scRNA-seq dropout — what causes it and what is the typical rate?", a: "Stochastic failure to capture/amplify low-abundance transcripts from a single cell. Typical dropout rate: 80–95% on 10x Chromium platform. Leads to zero-inflated count matrices." },
+      { q: "scRNA-seq dropout — what causes it and what is the typical rate?", a: "Stochastic failure to capture/amplify low-abundance transcripts from a single cell. Typical dropout rate: 80–95% on 10x Chromium platform. Leads to zero-inflated count matrices." }
     ]
   }
-};
+} as const;

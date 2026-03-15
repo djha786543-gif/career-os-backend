@@ -131,7 +131,8 @@ Base this on the 2025-2026 job market. Be specific and actionable.`,
     catch (err) {
         clearTimeout(timer);
         console.warn('[/api/trends] Claude failed, using static:', err.message);
-        return res.json({ trends: STATIC_TRENDS[p], source: 'static', profile: p });
+        if (!res.headersSent)
+            return res.json({ trends: STATIC_TRENDS[p], source: 'static', profile: p });
     }
 });
 // ─── GET /api/skills ──────────────────────────────────────────────────────────
@@ -148,5 +149,110 @@ router.get('/salary', (req, res) => {
 router.get('/market', (req, res) => {
     const p = profile(req);
     res.json({ data: MARKET_DATA[p], profile: p });
+});
+// ─── GET /api/market/heatmap ──────────────────────────────────────────────────
+const HEATMAP_DATA = {
+    dj: {
+        gaugeValue: 94,
+        skills: [
+            { name: 'AI Governance', score: 97, trend: 'rising' },
+            { name: 'LLM Security', score: 94, trend: 'rising' },
+            { name: 'Cloud Audit (AWS)', score: 93, trend: 'stable' },
+            { name: 'EU AI Act', score: 92, trend: 'rising' },
+            { name: 'SOX/ITGC', score: 89, trend: 'stable' },
+            { name: 'NIST AI RMF', score: 88, trend: 'rising' },
+            { name: 'Continuous Auditing', score: 84, trend: 'rising' },
+            { name: 'COBIT 2019', score: 78, trend: 'stable' },
+            { name: 'GRC Platforms', score: 75, trend: 'stable' },
+            { name: 'Manual Audits', score: 32, trend: 'cooling' },
+        ],
+        risingSkills: ['AI Governance', 'LLM Security', 'EU AI Act', 'NIST AI RMF'],
+        gapSkills: ['Python for Audit', 'Azure/GCP', 'COBIT 2019 deep dive'],
+    },
+    pj: {
+        gaugeValue: 91,
+        skills: [
+            { name: 'NGS/Sequencing', score: 96, trend: 'rising' },
+            { name: 'scRNA-seq', score: 94, trend: 'rising' },
+            { name: 'CRISPR', score: 91, trend: 'stable' },
+            { name: 'Bioinformatics', score: 89, trend: 'rising' },
+            { name: 'ddPCR', score: 87, trend: 'stable' },
+            { name: 'Spatial Transcriptomics', score: 85, trend: 'rising' },
+            { name: 'iPSC Modeling', score: 82, trend: 'rising' },
+            { name: 'Clinical Translation', score: 79, trend: 'rising' },
+            { name: 'Drug Discovery', score: 74, trend: 'stable' },
+            { name: 'Pure Bench Science', score: 41, trend: 'cooling' },
+        ],
+        risingSkills: ['scRNA-seq', 'Spatial Transcriptomics', 'iPSC Modeling', 'Bioinformatics'],
+        gapSkills: ['Biotech regulatory (IND/NDA)', 'Clinical trial design', 'Industry communication'],
+    },
+};
+router.get('/market/heatmap', (req, res) => {
+    const p = profile(req);
+    res.json({ data: HEATMAP_DATA[p], profile: p });
+});
+// ─── GET /api/study/plan ──────────────────────────────────────────────────────
+const STUDY_PLANS = {
+    dj: {
+        examName: 'ISACA AAIA (Auditing AI Systems)',
+        examDate: '2026-03-31',
+        topics: [
+            'AI Fundamentals & Machine Learning Concepts',
+            'NIST AI RMF — Govern, Map, Measure, Manage functions',
+            'AI Risk Assessment Methodologies',
+            'Bias, Fairness & Explainability in AI',
+            'AI Model Risk Management (MRM)',
+            'Data Governance & Lineage for AI',
+            'Responsible AI Frameworks (ISO 42001)',
+            'AI Audit Evidence & Testing Techniques',
+            'Regulatory Landscape: EU AI Act, NIST, FFIEC',
+            'AAIA Exam Strategy & Practice Questions',
+        ],
+    },
+    pj: {
+        examName: 'ASCP Molecular Biology (MBcm)',
+        examDate: '2026-05-31',
+        topics: [
+            'Nucleic Acid Extraction & QC',
+            'PCR Principles & Troubleshooting',
+            'NGS Library Prep & Sequencing Platforms',
+            'Variant Interpretation & ACMG Guidelines',
+            'FISH, ISH & Cytogenetics',
+            'Gene Expression Profiling',
+            'Molecular Oncology',
+            'Inherited Disease & Carrier Testing',
+            'Laboratory Management & QA/QC',
+            'MBcm Exam Strategy & Practice Questions',
+        ],
+    },
+};
+router.get('/study/plan', (req, res) => {
+    const p = profile(req);
+    const plan = STUDY_PLANS[p];
+    const today = new Date();
+    const examDay = new Date(plan.examDate);
+    const msLeft = examDay.getTime() - today.getTime();
+    const daysRemaining = Math.max(0, Math.ceil(msLeft / (1000 * 60 * 60 * 24)));
+    let urgency;
+    if (daysRemaining <= 14)
+        urgency = 'critical';
+    else if (daysRemaining <= 30)
+        urgency = 'high';
+    else if (daysRemaining <= 60)
+        urgency = 'moderate';
+    else
+        urgency = 'comfortable';
+    // Deterministic today's topic (rotates by day of year)
+    const dayOfYear = Math.floor((today.getTime() - new Date(today.getFullYear(), 0, 0).getTime()) / 86400000);
+    const todayTask = plan.topics[dayOfYear % plan.topics.length];
+    res.json({
+        examName: plan.examName,
+        examDate: plan.examDate,
+        daysRemaining,
+        urgency,
+        todayTask,
+        topics: plan.topics,
+        profile: p,
+    });
 });
 exports.default = router;
