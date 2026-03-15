@@ -29,8 +29,17 @@ const RESULTS_PER_PAGE = 50;
 const REQUEST_TIMEOUT_MS = 8000;
 const RETRY_DELAY_MS = 1200;
 // ─── Currency / region maps ───────────────────────────────────────────────────
-const COUNTRY_CURRENCY = { us: 'USD', gb: 'GBP', in: 'INR' };
-const COUNTRY_REGION = { us: 'US', gb: 'Europe', in: 'India' };
+const COUNTRY_CURRENCY = {
+    us: 'USD', gb: 'GBP', au: 'AUD', at: 'EUR', be: 'EUR',
+    ca: 'CAD', de: 'EUR', fr: 'EUR', in: 'INR', it: 'EUR',
+    nl: 'EUR', nz: 'NZD', pl: 'PLN', sg: 'SGD', za: 'ZAR',
+};
+const COUNTRY_REGION = {
+    us: 'US', gb: 'Europe', au: 'Australia', at: 'Europe',
+    be: 'Europe', ca: 'Canada', de: 'Europe', fr: 'Europe',
+    in: 'India', it: 'Europe', nl: 'Europe', nz: 'Australia',
+    pl: 'Europe', sg: 'Asia', za: 'Africa',
+};
 // ─── Seniority keywords that disqualify a job for senior candidates ───────────
 const JUNIOR_TITLE_KEYWORDS = [
     'intern', 'internship', 'trainee', 'apprentice',

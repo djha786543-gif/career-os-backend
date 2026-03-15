@@ -33,6 +33,10 @@ export interface TrackerCard {
 
 interface ProfileState {
   jobs: NormalizedJob[]
+  totalResults: number
+  totalPages: number
+  hasNext: boolean
+  hasPrev: boolean
   aiResults: Record<string, string>
   page: number
   searchKeywords: string
@@ -58,6 +62,10 @@ interface ProfileContextValue {
 
 const defaultState = (): ProfileState => ({
   jobs: [],
+  totalResults: 0,
+  totalPages: 0,
+  hasNext: false,
+  hasPrev: false,
   aiResults: {},
   page: 0,
   searchKeywords: '',

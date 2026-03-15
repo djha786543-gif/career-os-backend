@@ -28,7 +28,7 @@ exports.candidates = [
         specialization: 'Molecular Genetics & Cardiovascular Research Scientist',
         skills: [], // populated per-track from PoojaProfiles
         experienceYears: 10,
-        regions: ['US', 'Europe', 'India'],
+        regions: ['US', 'Europe', 'India', 'Australia', 'Canada', 'Asia'],
         preferences: {
             visaSponsorship: true
         }

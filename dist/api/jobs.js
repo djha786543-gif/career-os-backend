@@ -16,6 +16,8 @@ const db_1 = __importDefault(require("../db"));
 const CandidatesData_1 = require("../models/CandidatesData");
 const jobIngestionService_1 = require("../services/jobIngestionService");
 const jobSearchService_1 = require("../services/jobSearchService");
+const adzunaFetcher_1 = require("../services/adzunaFetcher");
+const searchProfiles_1 = require("../config/searchProfiles");
 const webSearchJobService_1 = require("../services/webSearchJobService");
 const classifyAcademicIndustry_1 = require("../utils/classifyAcademicIndustry");
 const router = express_1.default.Router();
@@ -118,47 +120,24 @@ const ID_TO_DB_PROFILE = {
     deobrat: 'dj',
     pooja: 'pooja',
 };
-const COUNTRY_TO_REGION = {
-    'united states': 'US',
-    'us': 'US',
-    'usa': 'US',
-    'united kingdom': 'Europe',
-    'uk': 'Europe',
-    'great britain': 'Europe',
-    'britain': 'Europe',
-    'europe': 'Europe',
-    'india': 'India',
-    'in': 'India',
-    // Web-search-only countries (we assign them to a region for display)
-    'germany': 'Europe',
-    'deutschland': 'Europe',
-    'canada': 'North America',
-    'australia': 'Australia',
-    'netherlands': 'Europe',
-    'holland': 'Europe',
-    'switzerland': 'Europe',
-    'sweden': 'Europe',
-    'denmark': 'Europe',
-    'singapore': 'Asia',
-    'japan': 'Asia',
-    'france': 'Europe',
-    'spain': 'Europe',
-    'italy': 'Europe',
-    'belgium': 'Europe',
-    'norway': 'Europe',
-};
-const WEB_SEARCH_COUNTRIES = new Set([
-    'germany', 'deutschland', 'canada', 'australia', 'netherlands', 'holland',
-    'switzerland', 'sweden', 'denmark', 'singapore', 'japan', 'france',
-    'spain', 'italy', 'belgium', 'norway',
-]);
+// Countries that route through ingestJobs (region-based Adzuna fetch)
+const REGION_COUNTRIES = new Set(['us', 'usa', 'united states', 'uk', 'gb', 'united kingdom', 'britain', 'great britain', 'india', 'in', 'europe']);
 function resolveRegion(country, region) {
     if (region && VALID_REGIONS.includes(region))
         return region;
     if (country) {
-        const mapped = COUNTRY_TO_REGION[country.toLowerCase().trim()];
-        if (mapped)
-            return mapped;
+        const c = country.toLowerCase().trim();
+        const code = searchProfiles_1.countryNameToAdzunaCode[c];
+        if (code) {
+            // Re-use adzunaFetcher's region strings via a local map
+            const ADZUNA_CODE_TO_REGION = {
+                us: 'US', gb: 'Europe', au: 'Australia', at: 'Europe',
+                be: 'Europe', ca: 'Canada', de: 'Europe', fr: 'Europe',
+                in: 'India', it: 'Europe', nl: 'Europe', nz: 'Australia',
+                pl: 'Europe', sg: 'Asia', za: 'Africa',
+            };
+            return ADZUNA_CODE_TO_REGION[code];
+        }
     }
     return undefined;
 }
@@ -197,8 +176,6 @@ function toFrontendJob(job) {
 }
 // ─── GET /api/jobs ────────────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
-    // Extend timeout for Pooja requests (web search can take up to 60s)
-    res.setTimeout(90000);
     try {
         const q = req.query;
         const rawProfile = q.profile || q.candidate || '';
@@ -263,75 +240,186 @@ router.get('/', async (req, res) => {
             if (rawMcp)
                 mcpJobs = rawMcp.map(mcpJobToInternal);
         }
-        // 3. Fetch live jobs (Adzuna or WebSearch depending on country)
+        // 3. Fetch live jobs
+        //    Pooja: UK only → Adzuna GB (the one Adzuna source with real postdoc listings)
+        //           All other countries → webSearch (Adzuna has zero postdoc coverage outside GB)
+        //    DJ:    existing Adzuna routing unchanged
         let adzunaJobs = [];
-        const countryParam = (q.country || '').toLowerCase().trim();
-        const useWebSearch = candidate.id === 'pooja' && countryParam && WEB_SEARCH_COUNTRIES.has(countryParam);
-        const isAllCountries = candidate.id === 'pooja' && (!countryParam || countryParam === 'all');
-        if (useWebSearch) {
-            // Non-US/UK country → use Claude web search
-            const COUNTRY_DISPLAY = {
-                'germany': 'Germany', 'deutschland': 'Germany',
-                'canada': 'Canada', 'australia': 'Australia',
-                'netherlands': 'Netherlands', 'holland': 'Netherlands',
-                'switzerland': 'Switzerland', 'sweden': 'Sweden',
-                'denmark': 'Denmark', 'singapore': 'Singapore',
-                'japan': 'Japan', 'france': 'France', 'spain': 'Spain',
-                'italy': 'Italy', 'belgium': 'Belgium', 'norway': 'Norway',
+        if (candidateId === 'pooja') {
+            const countryKey = (q.country || '').toLowerCase().trim();
+            const UK_VARIANTS = new Set(['uk', 'gb', 'united kingdom', 'britain', 'great britain']);
+            const COUNTRY_NAMES = {
+                'usa': 'United States', 'us': 'United States', 'united states': 'United States',
+                'germany': 'Germany', 'de': 'Germany', 'deutschland': 'Germany',
+                'canada': 'Canada', 'ca': 'Canada',
+                'australia': 'Australia', 'au': 'Australia',
+                'netherlands': 'Netherlands', 'nl': 'Netherlands', 'holland': 'Netherlands',
+                'switzerland': 'Switzerland', 'ch': 'Switzerland',
+                'sweden': 'Sweden', 'se': 'Sweden',
+                'denmark': 'Denmark', 'dk': 'Denmark',
+                'singapore': 'Singapore', 'sg': 'Singapore',
+                'japan': 'Japan', 'jp': 'Japan',
+                'india': 'India', 'in': 'India',
+                'france': 'France', 'fr': 'France',
+                'belgium': 'Belgium', 'be': 'Belgium',
+                'italy': 'Italy', 'it': 'Italy',
+                'norway': 'Norway', 'no': 'Norway',
+                'austria': 'Austria', 'at': 'Austria',
+                'poland': 'Poland', 'pl': 'Poland',
             };
-            const countryName = COUNTRY_DISPLAY[countryParam] || countryParam;
-            try {
-                adzunaJobs = await (0, webSearchJobService_1.searchPoojaJobsViaWebSearch)(countryName, resolvedTrack);
-                console.log(`[Jobs] WebSearch for Pooja/${countryName}: ${adzunaJobs.length} jobs`);
+            // Countries that use ingestJobs (Adzuna regions with proper caching + scoring)
+            const INGEST_REGION_MAP = {
+                'uk': 'Europe', 'gb': 'Europe', 'united kingdom': 'Europe',
+                'britain': 'Europe', 'great britain': 'Europe',
+                'usa': 'US', 'us': 'US', 'united states': 'US',
+                'india': 'India', 'in': 'India',
+            };
+            // Countries with direct Adzuna code (not covered by ingestJobs regions)
+            const DIRECT_ADZUNA_COUNTRIES = new Set([
+                'germany', 'de', 'deutschland',
+                'netherlands', 'nl', 'holland',
+                'france', 'fr',
+                'canada', 'ca',
+                'australia', 'au',
+                'singapore', 'sg',
+                'austria', 'at', 'belgium', 'be',
+                'italy', 'it', 'poland', 'pl',
+            ]);
+            if (!countryKey || countryKey === 'all') {
+                // No filter → US + UK in parallel (best Adzuna coverage)
+                console.log('[Jobs] Pooja: all → Adzuna US + GB in parallel');
+                const [usResult, ukResult] = await Promise.allSettled([
+                    (0, jobIngestionService_1.ingestJobs)('pooja', ['US'], resolvedTrack),
+                    (0, jobIngestionService_1.ingestJobs)('pooja', ['Europe'], resolvedTrack),
+                ]);
+                adzunaJobs = [
+                    ...(usResult.status === 'fulfilled' ? usResult.value : []),
+                    ...(ukResult.status === 'fulfilled' ? ukResult.value : []),
+                ];
             }
-            catch (err) {
-                console.error('[Jobs] WebSearch error:', err instanceof Error ? err.message : err);
+            else if (INGEST_REGION_MAP[countryKey]) {
+                // USA / UK / India → ingestJobs (cached Adzuna with proper scoring)
+                const region = INGEST_REGION_MAP[countryKey];
+                console.log(`[Jobs] Pooja: ${countryKey} → ingestJobs([${region}])`);
+                try {
+                    adzunaJobs = await (0, jobIngestionService_1.ingestJobs)('pooja', [region], resolvedTrack);
+                }
+                catch (err) {
+                    console.error(`[Jobs] ingestJobs(${region}) error:`, err instanceof Error ? err.message : err);
+                }
+            }
+            else if (DIRECT_ADZUNA_COUNTRIES.has(countryKey)) {
+                // Countries with Adzuna support but not covered by ingestJobs regions
+                const adzunaCode = searchProfiles_1.countryNameToAdzunaCode[countryKey];
+                if (adzunaCode) {
+                    const profileMap = (0, searchProfiles_1.getSearchProfile)('pooja', q.track);
+                    const profile = profileMap[adzunaCode];
+                    if (profile) {
+                        console.log(`[Jobs] Pooja: ${countryKey} → Adzuna(${adzunaCode})`);
+                        try {
+                            const raw = await (0, adzunaFetcher_1.fetchAdzunaJobs)(adzunaCode, profile);
+                            console.log(`[Jobs] Adzuna(${adzunaCode}): ${raw.length} jobs`);
+                            // Try web search as supplement if Adzuna returns few results
+                            if (raw.length < 5) {
+                                const countryName = COUNTRY_NAMES[countryKey]
+                                    || (countryKey.charAt(0).toUpperCase() + countryKey.slice(1));
+                                console.log(`[Jobs] Adzuna thin for ${countryKey}, supplementing with webSearch`);
+                                try {
+                                    const webJobs = await (0, webSearchJobService_1.searchPoojaJobsViaWebSearch)(countryName, q.track);
+                                    adzunaJobs = [...raw, ...webJobs];
+                                }
+                                catch {
+                                    adzunaJobs = raw;
+                                }
+                            }
+                            else {
+                                adzunaJobs = raw;
+                            }
+                        }
+                        catch (err) {
+                            console.error(`[Jobs] Adzuna(${adzunaCode}) error:`, err instanceof Error ? err.message : err);
+                        }
+                    }
+                }
+            }
+            else {
+                // Countries not in Adzuna → try webSearch, fallback to nearest Adzuna proxy
+                const countryName = COUNTRY_NAMES[countryKey]
+                    || (countryKey.charAt(0).toUpperCase() + countryKey.slice(1));
+                // Nearest Adzuna proxy for non-Adzuna countries
+                const ADZUNA_PROXY = {
+                    'switzerland': 'de', 'ch': 'de', // German-speaking → Germany
+                    'sweden': 'gb', 'se': 'gb', // Nordic → UK Europe pool
+                    'denmark': 'gb', 'dk': 'gb', // Nordic → UK Europe pool
+                    'norway': 'gb', 'no': 'gb', // Nordic → UK Europe pool
+                    'japan': 'sg', 'jp': 'sg', // East Asia → Singapore
+                    'south korea': 'sg', 'kr': 'sg', // East Asia → Singapore
+                    'new zealand': 'au', 'nz': 'au', // Oceania → Australia
+                };
+                console.log(`[Jobs] Pooja: ${countryKey} → webSearch (${countryName})`);
+                let webJobs = [];
+                try {
+                    webJobs = await (0, webSearchJobService_1.searchPoojaJobsViaWebSearch)(countryName, q.track);
+                }
+                catch (err) {
+                    console.error(`[Jobs] webSearch(${countryName}) error:`, err instanceof Error ? err.message : err);
+                }
+                if (webJobs.length > 0) {
+                    adzunaJobs = webJobs;
+                }
+                else {
+                    // webSearch unavailable → fallback to nearest Adzuna proxy country
+                    const proxyCode = ADZUNA_PROXY[countryKey];
+                    if (proxyCode) {
+                        const profileMap = (0, searchProfiles_1.getSearchProfile)('pooja', q.track);
+                        const profile = profileMap[proxyCode];
+                        if (profile) {
+                            console.log(`[Jobs] Pooja: webSearch unavailable, falling back to Adzuna proxy (${proxyCode}) for ${countryKey}`);
+                            try {
+                                adzunaJobs = await (0, adzunaFetcher_1.fetchAdzunaJobs)(proxyCode, profile);
+                            }
+                            catch (err) {
+                                console.error(`[Jobs] Adzuna proxy(${proxyCode}) error:`, err instanceof Error ? err.message : err);
+                            }
+                        }
+                    }
+                }
             }
         }
         else {
-            try {
-                adzunaJobs = await (0, jobIngestionService_1.ingestJobs)(candidate.id, resolvedRegions, resolvedTrack);
-            }
-            catch (err) {
-                console.error('Adzuna Ingestion Error:', err instanceof Error ? err.message : err);
-            }
-        }
-        // 3b. Web search jobs for Pooja (supplements Adzuna which has thin coverage for research roles)
-        // Wrapped in a 75s timeout. The route-level timeout was extended to 90s to accommodate this.
-        let webSearchJobs = [];
-        if (!useWebSearch && candidate.id === 'pooja' && resolvedRegions.length > 0) {
-            try {
-                const webRegions = resolvedRegions.filter(r => ['US', 'Europe', 'India'].includes(r));
-                if (webRegions.length > 0) {
-                    const wsTrack = resolvedTrack ?? 'Academic';
-                    const wsTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('WebSearch timeout')), 75000));
-                    webSearchJobs = await Promise.race([
-                        (0, webSearchJobService_1.fetchWebSearchJobs)({
-                            candidate,
-                            track: wsTrack,
-                            regions: webRegions,
-                        }),
-                        wsTimeout,
-                    ]);
-                    console.log(`[WebSearch] ${webSearchJobs.length} jobs for pooja/${wsTrack}`);
+            // DJ (deobrat) — existing Adzuna routing unchanged
+            const countryParam = (q.country || '').toLowerCase().trim();
+            const adzunaCode = countryParam
+                ? searchProfiles_1.countryNameToAdzunaCode[countryParam]
+                : undefined;
+            const useDirectFetch = !!adzunaCode && !REGION_COUNTRIES.has(countryParam);
+            if (useDirectFetch && adzunaCode) {
+                const profileMap = (0, searchProfiles_1.getSearchProfile)(candidate.id, resolvedTrack);
+                const profile = profileMap[adzunaCode];
+                if (profile) {
+                    try {
+                        adzunaJobs = await (0, adzunaFetcher_1.fetchAdzunaJobs)(adzunaCode, profile);
+                        console.log(`[Jobs] Adzuna(${adzunaCode}) for ${candidate.id}: ${adzunaJobs.length} jobs`);
+                    }
+                    catch (err) {
+                        console.error(`[Jobs] Adzuna(${adzunaCode}) error:`, err instanceof Error ? err.message : err);
+                    }
+                }
+                else {
+                    console.warn(`[Jobs] No Adzuna profile for ${candidate.id}/${adzunaCode}`);
                 }
             }
-            catch (wsErr) {
-                console.warn('[WebSearch] Failed, continuing without web search jobs:', wsErr instanceof Error ? wsErr.message : wsErr);
+            else {
+                try {
+                    adzunaJobs = await (0, jobIngestionService_1.ingestJobs)(candidate.id, resolvedRegions, resolvedTrack);
+                }
+                catch (err) {
+                    console.error('Adzuna Ingestion Error:', err instanceof Error ? err.message : err);
+                }
             }
         }
-        // 3c. For "all countries" Pooja fetch, additionally run Germany webSearch and merge
-        if (isAllCountries) {
-            try {
-                const intlJobs = await (0, webSearchJobService_1.searchPoojaJobsViaWebSearch)('Germany', resolvedTrack);
-                adzunaJobs = [...adzunaJobs, ...intlJobs];
-            }
-            catch (err) {
-                console.warn('[Jobs] International web search failed:', err instanceof Error ? err.message : err);
-            }
-        }
-        // 4. Merge and Deduplicate (Priority: DB > MCP > Adzuna > WebSearch)
-        const combined = [...dbJobs, ...mcpJobs, ...adzunaJobs, ...webSearchJobs];
+        // 4. Merge and Deduplicate (Priority: DB > MCP > Adzuna)
+        const combined = [...dbJobs, ...mcpJobs, ...adzunaJobs];
         const seen = new Set();
         const unique = combined.filter(j => {
             const key = `${j.company.toLowerCase()}|${j.title.toLowerCase()}`;
