@@ -2595,24 +2595,25 @@ async function searchJobs(){
     ?`Searching Adzuna for real positions in ${country}…`
     :'Searching Adzuna for real remote IT Audit jobs…';
   try{
-    const data = await backendGet('/api/jobs', { profile: currentProfile, country, page: state.page });
+    const data = await backendGet('/api/jobs', { candidate: currentProfile, country, page: state.page });
     if(!data.jobs||data.jobs.length===0){
       throw new Error(data.message||'No results found — try a different country or search again');
     }
     state.jobs=data.jobs;state.lastRefresh=new Date();state.cat='ALL';
-    document.getElementById('jh-last-refresh').textContent=`Updated: ${state.lastRefresh.toLocaleTimeString()} · Adzuna`;
+    document.getElementById('jh-last-refresh').textContent=`Updated: ${state.lastRefresh.toLocaleTimeString()} · ${data.totalResults||data.jobs.length} live jobs`;
     showToast(`✓ Found ${data.jobs.length} real positions for ${isPJ?'Pooja':'DJ'}`);
     populateCaiJobSelect();
   }catch(e){
-    let msg=e.message;
-    if(msg.includes('Cannot reach backend')) msg='⚠ Backend not running — start it: cd career-os-backend && npm start';
+    let msg=e.message||String(e);
+    if(msg.includes('Cannot reach backend')) msg='⚠ Backend offline — check Railway deployment';
     document.getElementById('jh-error').textContent=msg;
     document.getElementById('jh-error').style.display='block';
     showToast('⚠ '+msg.slice(0,70));
+  }finally{
+    state.loading=false;
+    document.getElementById('jh-searching').style.display='none';
+    renderJobCards();
   }
-  state.loading=false;
-  document.getElementById('jh-searching').style.display='none';
-  renderJobCards();
 }
 
 function renderJobCards(){
