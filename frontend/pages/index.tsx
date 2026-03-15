@@ -8,6 +8,7 @@ import { CertVault }       from '../src/components/tabs/CertVault';
 import { TrendRadar }      from '../src/components/tabs/TrendRadar';
 import { Tracker }         from '../src/components/tabs/Tracker';
 import { LearningTracks }  from '../src/components/tabs/LearningTracks';
+import { OpportunityMonitor } from '../src/components/tabs/OpportunityMonitor';
 
 const TAB_VIEWS: Record<TabId, React.ReactElement> = {
   'heatmap':         <MarketHeatmap />,
@@ -18,6 +19,7 @@ const TAB_VIEWS: Record<TabId, React.ReactElement> = {
   'prep-vault':      <PrepVault />,
   'job-hub':         <JobHub />,
   'tracker':         <Tracker />,
+  'opportunity-monitor': <OpportunityMonitor />,
 };
 
 export default function Home() {

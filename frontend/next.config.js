@@ -1,7 +1,6 @@
 ﻿/** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'export',
-  basePath: '/career-portal',
   images: { unoptimized: true },
   trailingSlash: true,
   env: {

@@ -9,7 +9,8 @@ export type TabId =
   | 'trend-radar'
   | 'prep-vault'
   | 'job-hub'
-  | 'tracker';
+  | 'tracker'
+  | 'opportunity-monitor';
 
 const TABS: { id: TabId; icon: string; label: string }[] = [
   { id: 'heatmap',         icon: '📡', label: 'Market Heatmap'  },
@@ -20,6 +21,7 @@ const TABS: { id: TabId; icon: string; label: string }[] = [
   { id: 'prep-vault',      icon: '📖', label: 'Prep Vault'      },
   { id: 'job-hub',         icon: '💼', label: 'Job Hub'         },
   { id: 'tracker',         icon: '📋', label: 'Tracker'         },
+  { id: 'opportunity-monitor', icon: '🔬', label: 'Opportunity Monitor' },
 ];
 
 interface Props {

@@ -160,13 +160,13 @@ function ListJobCard({ job, onSave }: { job: any; onSave: (j: any) => void }) {
 // ── Main Tab Component ──────────────────────────────────────────────────────
 
 export function JobHub() {
-  const { profile, state, setState } = useProfile();
+  const { profile, state, setState, setProfile } = useProfile();
   const [subContext, setSubContext] = useState<'dj' | 'pooja'>(profile);
   const [activePanel, setActivePanel] = useState<'hub' | 'tracker' | 'assist'>('hub');
   
   const [keywords, setKeywords] = useState<string>(CP_PROFILES[subContext].searchKeywordsDefault);
   const [isRemote, setIsRemote] = useState(subContext === 'dj');
-  const [country, setCountry] = useState('usa');
+  const [country, setCountry] = useState(subContext === 'pooja' ? 'all' : 'usa');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
@@ -175,6 +175,16 @@ export function JobHub() {
   const [sortBy, setSortBy] = useState<'fit' | 'newest' | 'salary' | 'company'>('fit');
 
   const candidateId = subContext;
+
+  // Stage ↔ column mappings for kanban API
+  const STAGE_MAP: Record<string, string> = {
+    'Saved': 'wishlist', 'Applied': 'applied', 'Phone Screen': 'phone_screen',
+    'Shortlisted': 'wishlist', 'Interview': 'interview', 'Offer': 'offer', 'Rejected': 'rejected',
+  };
+  const STAGE_TO_COL: Record<string, string> = {
+    'wishlist': 'Saved', 'applied': 'Applied', 'phone_screen': 'Phone Screen',
+    'interview': 'Interview', 'offer': 'Offer', 'rejected': 'Rejected', 'archived': 'Rejected',
+  };
 
   const sortedJobs = useMemo(() => {
     if (candidateId !== 'dj') return state.jobs;
@@ -245,8 +255,14 @@ export function JobHub() {
   const loadTracker = useCallback(async () => {
     setLoadingTracker(true);
     try {
-      const data = await api.get(`/tracker/${subContext}`);
-      setState({ trackerCards: data.cards });
+      const data: any[] = await api.get(`/kanban?profile=${subContext}`);
+      const grouped: Record<string, any[]> = {};
+      for (const col of CP_PROFILES[subContext].columns) grouped[col] = [];
+      for (const card of data) {
+        const col = STAGE_TO_COL[card.stage] || 'Saved';
+        if (grouped[col]) grouped[col].push(card);
+      }
+      setState({ trackerCards: grouped });
     } catch (err) {
       console.error('Tracker load failed', err);
     } finally {
@@ -260,15 +276,13 @@ export function JobHub() {
 
   const saveToTracker = async (job: NormalizedJob) => {
     try {
-      const card = {
-        column: CP_PROFILES[subContext].columns[0],
+      await api.post(`/kanban?profile=${subContext}`, {
         title: job.title,
         company: job.company,
-        applyUrl: job.applyUrl,
-        snippet: job.snippet,
-        salary: job.salary
-      };
-      await api.post(`/tracker/${subContext}`, card);
+        apply_url: job.applyUrl,
+        match_score: job.fitScore,
+        stage: 'wishlist'
+      });
       loadTracker();
       alert('Job saved to tracker!');
     } catch (err) {
@@ -277,13 +291,13 @@ export function JobHub() {
   };
 
   const advanceCard = async (cardId: string, currentColumn: string) => {
-    const columns = (CP_PROFILES as any)[subContext].columns;
+    const columns = CP_PROFILES[subContext].columns as readonly string[];
     const currentIndex = columns.indexOf(currentColumn);
     if (currentIndex >= columns.length - 1) return;
-    
     const nextColumn = columns[currentIndex + 1];
+    const stage = STAGE_MAP[nextColumn] || 'applied';
     try {
-      await api.patch(`/tracker/${subContext}/${cardId}`, { column: nextColumn });
+      await api.patch(`/kanban/${cardId}?profile=${subContext}`, { stage });
       loadTracker();
     } catch (err) {
       alert('Failed to advance card.');
@@ -293,7 +307,7 @@ export function JobHub() {
   const removeCard = async (cardId: string) => {
     if (!confirm('Remove this application?')) return;
     try {
-      await api.delete(`/tracker/${subContext}/${cardId}`);
+      await api.delete(`/kanban/${cardId}?profile=${subContext}`);
       loadTracker();
     } catch (err) {
       alert('Failed to remove card.');
@@ -333,8 +347,8 @@ export function JobHub() {
     <div style={s.container}>
       <div style={s.topBar}>
         <div style={s.profileToggle}>
-          <button onClick={() => { setSubContext('dj'); setViewMode('grid'); }} style={{ ...s.subPsw, background: subContext === 'dj' ? '#22D3EE' : 'transparent', color: subContext === 'dj' ? '#000' : 'white' }}>⚡ DJ Context</button>
-          <button onClick={() => { setSubContext('pooja'); setViewMode('list'); }} style={{ ...s.subPsw, background: subContext === 'pooja' ? '#F472B6' : 'transparent', color: subContext === 'pooja' ? '#000' : 'white' }}>🔬 Pooja Context</button>
+          <button onClick={() => { setSubContext('dj'); setProfile('dj'); setViewMode('grid'); }} style={{ ...s.subPsw, background: subContext === 'dj' ? '#22D3EE' : 'transparent', color: subContext === 'dj' ? '#000' : 'white' }}>⚡ DJ Context</button>
+          <button onClick={() => { setSubContext('pooja'); setProfile('pooja'); setViewMode('list'); }} style={{ ...s.subPsw, background: subContext === 'pooja' ? '#F472B6' : 'transparent', color: subContext === 'pooja' ? '#000' : 'white' }}>🔬 Pooja Context</button>
         </div>
         <div style={s.panelTabs}>
           <button onClick={() => setActivePanel('hub')} style={{ ...s.panelTab, color: activePanel === 'hub' ? 'var(--accent-active)' : 'var(--text-muted)' }}>Job Hub</button>
@@ -349,6 +363,7 @@ export function JobHub() {
             <input value={keywords} onChange={e => setKeywords(e.target.value)} placeholder="Search keywords..." style={s.searchInput} />
             {subContext === 'pooja' && (
               <select value={country} onChange={e => setCountry(e.target.value)} style={s.countrySelect}>
+                <option value="all">🌍 Global (All)</option>
                 <option value="usa">🇺🇸 USA</option>
                 <option value="uk">🇬🇧 UK</option>
                 <option value="canada">🇨🇦 Canada</option>
@@ -385,7 +400,7 @@ export function JobHub() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
             {/* Results count */}
             <span style={{ color: 'var(--text-muted)', fontSize: 13, flex: 1 }}>
-              {state.totalResults || 0} {isRemote || subContext === 'dj' ? 'remote ' : ''} {CP_PROFILES[subContext].role.replace(' Manager', '')} positions · {subContext === 'dj' ? 'USA' : country.toUpperCase()} · Updated {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              {state.totalResults || 0} {isRemote || subContext === 'dj' ? 'remote ' : ''} {CP_PROFILES[subContext].role.replace(' Manager', '')} positions · {subContext === 'dj' ? 'USA' : country === 'all' ? 'GLOBAL' : country.toUpperCase()} · Updated {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>
 
             {/* Sort dropdown — DJ only */}
@@ -473,7 +488,7 @@ export function JobHub() {
                       <div key={card.id} className="glass" style={s.kanbanCard}>
                         <div style={s.kCardTitle}>{card.title}</div>
                         <div style={s.kCardSub}>{card.company}</div>
-                        <div style={s.kCardDate}>{new Date(card.createdAt || Date.now()).toLocaleDateString()}</div>
+                        <div style={s.kCardDate}>{new Date(card.created_at || Date.now()).toLocaleDateString()}</div>
                         <div style={s.kCardActions}>
                           <button onClick={() => advanceCard(card.id, col)} style={s.kBtn}>→ Advance</button>
                           <button onClick={() => removeCard(card.id)} style={{ ...s.kBtn, color: '#f43f5e' }}>✕</button>
