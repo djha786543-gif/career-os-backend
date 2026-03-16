@@ -150,9 +150,17 @@ router.post('/pathway', async (req: Request, res: Response) => {
   try {
     const systemPrompt = `You are a career pathway architect. Profile: ${PROFILE_CONTEXT[profile]}`;
     const userPrompt = `Create a detailed certification and learning pathway to reach the role of "${targetRole}" within ${timeline}.\n\nInclude:\n- Required certifications (with exam details, cost, prep time)\n- Recommended courses/platforms\n- Milestone checkpoints\n- Common pitfalls to avoid\n\nBe specific and realistic for 2026.`;
-    const text = await deepseekGenerate(systemPrompt, userPrompt, 2000);
+    let text: string;
+    let model = 'deepseek';
+    try {
+      text = await deepseekGenerate(systemPrompt, userPrompt, 2000);
+    } catch (dsErr: any) {
+      console.warn('[/api/ai/pathway] DeepSeek failed, falling back to Gemini:', dsErr.message);
+      text = await geminiGenerate(systemPrompt, userPrompt, 2000);
+      model = 'gemini';
+    }
     setCache(ck, text, TTL.pathway);
-    return res.json({ result: text, cached: false, profile, model: 'deepseek' });
+    return res.json({ result: text, cached: false, profile, model });
   } catch (err: any) {
     console.error('[/api/ai/pathway]', err.message);
     if (!res.headersSent) return res.status(502).json({ error: 'AI service temporarily unavailable' });
@@ -170,9 +178,17 @@ router.post('/track', async (req: Request, res: Response) => {
 
   try {
     const systemPrompt = `You are a structured learning architect. Profile: ${PROFILE_CONTEXT[profile]}\n\nCreate practical, week-by-week learning tracks.`;
-    const text = await deepseekGenerate(systemPrompt, query, 2000);
+    let text: string;
+    let model = 'deepseek';
+    try {
+      text = await deepseekGenerate(systemPrompt, query, 2000);
+    } catch (dsErr: any) {
+      console.warn('[/api/ai/track] DeepSeek failed, falling back to Gemini:', dsErr.message);
+      text = await geminiGenerate(systemPrompt, query, 2000);
+      model = 'gemini';
+    }
     setCache(ck, text, TTL.track);
-    return res.json({ result: text, cached: false, profile, model: 'deepseek' });
+    return res.json({ result: text, cached: false, profile, model });
   } catch (err: any) {
     console.error('[/api/ai/track]', err.message);
     if (!res.headersSent) return res.status(502).json({ error: 'AI service temporarily unavailable' });

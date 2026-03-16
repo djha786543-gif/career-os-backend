@@ -586,6 +586,7 @@ a.key-link:hover{text-decoration:underline}
         style="flex:1;padding:10px 14px;background:var(--bg-secondary);border:1px solid var(--border-subtle);border-radius:8px;color:var(--text-primary);font-family:var(--font-sans);font-size:13px;outline:none"
         onkeydown="if(event.key==='Enter')genCustomTrack()">
       <button class="btn btn-primary" onclick="genCustomTrack()">Generate Track</button>
+      <button class="btn btn-outline btn-sm" onclick="clearAndRefreshAI('track',()=>{})">&#x1F5D1; Clear Cache</button>
     </div>
     <div class="ai-panel" id="aiTrackPanel">
       <div style="color:var(--text-muted);font-size:13px">Enter a topic above and Claude will generate a structured week-by-week learning track.</div>
@@ -615,10 +616,11 @@ a.key-link:hover{text-decoration:underline}
   </div>
 
   <div class="sec-label" style="margin-bottom:12px">AI TREND ANALYSIS â€” LIVE</div>
-  <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+  <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
     <button class="btn btn-primary btn-sm" onclick="runTrendAnalysis('6months')">Next 6 Months</button>
     <button class="btn btn-outline btn-sm" onclick="runTrendAnalysis('disruption')">Disruption Risks</button>
     <button class="btn btn-outline btn-sm" onclick="runTrendAnalysis('opportunity')">Hidden Opportunities</button>
+    <button class="btn btn-outline btn-sm" style="margin-left:auto" onclick="clearAndRefreshAI('trend',()=>{})">&#x1F5D1; Clear Cache</button>
   </div>
   <div class="ai-panel" id="trendAiPanel">
     <div style="color:var(--text-muted);font-size:13px">Select a trend analysis mode above.</div>
@@ -1391,6 +1393,18 @@ async function callClaude(prompt, systemPrompt = "") {
   return text;
 }
 
+// New backend AI endpoints (Gemini/DeepSeek/Claude routing)
+async function callBackendAI(endpoint, body) {
+  const data = await backendPost(endpoint, body);
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
+async function clearAndRefreshAI(cacheType, refreshFn) {
+  try { await backendPost('/api/ai/clear-cache', { profile: currentProfile, type: cacheType }); showToast("🗑 Cache cleared — fetching fresh..."); } catch(e) {}
+  await refreshFn();
+}
+
 function setLoading(panelId, msg = "Analyzing market signals...") {
   const el = document.getElementById(panelId);
   if (!el) return;
@@ -1525,52 +1539,16 @@ function refreshHeatmap() {
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 async function runSkillAnalysis(mode) {
   const p = PROFILES[currentProfile];
-  const cacheKey = `skill_${currentProfile}_${mode}`;
-  const cached = cacheGet(cacheKey);
-
-  const modeLabels = {
-    immediate: "top 6 immediate-win skills to add in the next 30 days",
-    strategic: "top 5 strategic skill gaps that are limiting career ceiling",
-    emerging: "top 5 emerging technology skills that will be critical in 12â€“24 months",
-    salary: "top 5 skills with highest salary impact and ROI"
-  };
-
-  setLoading('skillAiPanel', `Analyzing ${modeLabels[mode]} for ${p.name}...`);
+  setLoading('skillAiPanel', `Analyzing skills for ${p.name}...`);
   document.getElementById('skillRecoArea').innerHTML = '';
 
-  const prompt = `You are a job market intelligence analyst specializing in ${p.domain}.
-
-PROFILE: ${p.name} â€” ${p.currentRole}
-CURRENT SKILLS: ${p.skills}
-ACTIVE CERTIFICATION: ${p.activeCert}
-TARGET ROLE: ${p.targetRole}
-EXPERIENCE: ${p.yoe}
-
-Analyze the current job market and provide ${modeLabels[mode]} for this professional.
-
-For each skill provide:
-- Skill name
-- Market demand score (0-100)
-- Why it matters right now (specific market signal)
-- How to acquire it (specific action, course, or cert)
-- Time to competency
-- Salary impact estimate
-
-Be specific to the current 2026 job market for ${p.domain}. Reference real certifications, platforms, companies, and industry trends.`;
-
   try {
-    let result;
-    if (cached) {
-      result = cached.data;
-    } else {
-      result = await callClaude(prompt);
-      cacheSet(cacheKey, result);
-    }
-    setAiResult('skillAiPanel', result, !!cached);
-    document.getElementById('skillCacheAge').textContent = cacheAge(cacheKey);
+    const data = await callBackendAI('/api/ai/skill', { profile: currentProfile, mode });
+    setAiResult('skillAiPanel', data.result, data.cached);
+    document.getElementById('skillCacheAge').textContent = data.cached ? 'Cached (24h)' : 'Fresh — cached 24h';
     renderSkillRecos(p, mode);
   } catch(e) {
-    document.getElementById('skillAiPanel').innerHTML = `<div style="color:var(--accent-rose);font-size:13px">âš  API error: ${e.message}</div>`;
+    document.getElementById('skillAiPanel').innerHTML = `<div style="color:var(--accent-rose);font-size:13px">⚠ API error: ${e.message}</div>`;
   }
 }
 
@@ -1597,27 +1575,20 @@ function renderSkillRecos(p, mode) {
 async function askCustom() {
   const q = document.getElementById('customQuery').value.trim();
   if (!q) return;
-  const p = PROFILES[currentProfile];
-  const cacheKey = `custom_${currentProfile}_${btoa(q).slice(0,20)}`;
-  const cached = cacheGet(cacheKey);
   const panel = document.getElementById('customAiPanel');
   panel.style.display = '';
   setLoading('customAiPanel', 'Querying market intelligence...');
 
-  const prompt = `Context: ${p.name}, ${p.currentRole}, skills: ${p.skills}, target: ${p.targetRole}, domain: ${p.domain}.\n\nQuestion: ${q}\n\nProvide a specific, data-driven answer grounded in current 2026 job market realities.`;
-
   try {
-    let result;
-    if (cached) { result = cached.data; }
-    else { result = await callClaude(prompt); cacheSet(cacheKey, result); }
-    setAiResult('customAiPanel', result, !!cached);
+    const data = await callBackendAI('/api/ai/skill', { profile: currentProfile, query: q });
+    setAiResult('customAiPanel', data.result, data.cached);
   } catch(e) {
-    panel.innerHTML = `<div style="color:var(--accent-rose);font-size:13px">âš  ${e.message}</div>`;
+    panel.innerHTML = `<div style="color:var(--accent-rose);font-size:13px">⚠ ${e.message}</div>`;
   }
 }
 
 function clearSkillCache() {
-  Object.keys(CACHE).filter(k=>k.startsWith('skill_')||k.startsWith('custom_')).forEach(k=>delete CACHE[k]);
+  clearAndRefreshAI('skill', () => {});
   document.getElementById('skillCacheAge').textContent = 'Cache cleared';
 }
 
@@ -1659,41 +1630,17 @@ function renderVault() {
 async function generatePathway() {
   const role = document.getElementById('pathRole').value.trim();
   const timeline = document.getElementById('pathTimeline').value;
-  const p = PROFILES[currentProfile];
   if (!role) { alert('Please enter a target role.'); return; }
-
-  const cacheKey = `pathway_${currentProfile}_${btoa(role+timeline).slice(0,24)}`;
-  const cached = cacheGet(cacheKey);
 
   const panel = document.getElementById('pathwayPanel');
   panel.style.display = '';
   setLoading('pathwayPanel', `Generating AI pathway for "${role}" in ${timeline}...`);
 
-  const prompt = `Generate a specific, market-validated certification pathway for:
-
-PERSON: ${p.name}
-CURRENT ROLE: ${p.currentRole}
-CURRENT SKILLS + CERTS: ${p.skills} | ${p.certs}
-TARGET ROLE: ${role}
-TIMELINE: ${timeline}
-DOMAIN: ${p.domain}
-
-Provide:
-1. The exact sequence of certifications to earn (with issuer, exam cost estimate, study time)
-2. Skills to build in parallel
-3. Key milestones at each stage
-4. Salary range at target role in current 2026 market
-5. Critical success factors and common pitfalls
-
-Be specific to real certifications and grounded in current job market data. Format with clear headers and steps.`;
-
   try {
-    let result;
-    if (cached) { result = cached.data; }
-    else { result = await callClaude(prompt); cacheSet(cacheKey, result); }
-    setAiResult('pathwayPanel', result, !!cached);
+    const data = await callBackendAI('/api/ai/pathway', { profile: currentProfile, targetRole: role, timeline });
+    setAiResult('pathwayPanel', data.result, data.cached);
   } catch(e) {
-    panel.innerHTML = `<div style="color:var(--accent-rose);font-size:13px">âš  ${e.message}</div>`;
+    panel.innerHTML = `<div style="color:var(--accent-rose);font-size:13px">⚠ ${e.message}</div>`;
   }
 }
 
@@ -1733,33 +1680,13 @@ function toggleTrack(id) {
 async function genCustomTrack() {
   const q = document.getElementById('trackQuery').value.trim();
   if (!q) return;
-  const p = PROFILES[currentProfile];
-  const cacheKey = `track_${currentProfile}_${btoa(q).slice(0,20)}`;
-  const cached = cacheGet(cacheKey);
   setLoading('aiTrackPanel', 'Generating structured learning track...');
 
-  const prompt = `Create a detailed week-by-week learning track for:
-
-TOPIC: ${q}
-PERSON: ${p.name} | ${p.currentRole} | Domain: ${p.domain}
-EXISTING SKILLS: ${p.skills}
-
-Format the track as:
-- Track title and description
-- Prerequisites
-- Total duration
-- Week-by-week breakdown (each week: focus area + 3â€“4 specific tasks with concrete resources, tools, or platforms)
-- Success criteria and deliverables
-
-Be specific â€” name exact courses, books, platforms, tools, and exercises. Make it immediately actionable.`;
-
   try {
-    let result;
-    if (cached) { result = cached.data; }
-    else { result = await callClaude(prompt); cacheSet(cacheKey, result); }
-    setAiResult('aiTrackPanel', result, !!cached);
+    const data = await callBackendAI('/api/ai/track', { profile: currentProfile, query: q });
+    setAiResult('aiTrackPanel', data.result, data.cached);
   } catch(e) {
-    document.getElementById('aiTrackPanel').innerHTML = `<div style="color:var(--accent-rose);font-size:13px">âš  ${e.message}</div>`;
+    document.getElementById('aiTrackPanel').innerHTML = `<div style="color:var(--accent-rose);font-size:13px">⚠ ${e.message}</div>`;
   }
 }
 
@@ -1819,27 +1746,13 @@ function renderTrends() {
 }
 
 async function runTrendAnalysis(mode) {
-  const p = PROFILES[currentProfile];
-  const cacheKey = `trend_${currentProfile}_${mode}`;
-  const cached = cacheGet(cacheKey);
-
-  const modePrompts = {
-    "6months": `What are the 5 most important technology and skill market shifts that will occur in the next 6 months (2026 H2) specifically for a professional in ${p.domain}? Focus on high-signal, emerging changes not yet widely recognized.`,
-    "disruption": `Identify the top 3 disruption risks for someone with this profile: ${p.currentRole}, skills: ${p.skills}. What could make their current skills less valuable? What should they do to hedge these risks?`,
-    "opportunity": `What are the 4 hidden or undervalued career opportunities in ${p.domain} in 2026 that most professionals are missing? Focus on niches with high demand and low supply of qualified candidates.`
-  };
-
   setLoading('trendAiPanel', 'Scanning trend signals...');
 
-  const prompt = `Profile: ${p.name}, ${p.currentRole}, domain: ${p.domain}, skills: ${p.skills}.\n\n${modePrompts[mode]}\n\nProvide specific, data-grounded analysis referencing real industry developments, companies, and market signals from 2025â€“2026.`;
-
   try {
-    let result;
-    if (cached) { result = cached.data; }
-    else { result = await callClaude(prompt); cacheSet(cacheKey, result); }
-    setAiResult('trendAiPanel', result, !!cached);
+    const data = await callBackendAI('/api/ai/trend', { profile: currentProfile, mode });
+    setAiResult('trendAiPanel', data.result, data.cached);
   } catch(e) {
-    document.getElementById('trendAiPanel').innerHTML = `<div style="color:var(--accent-rose);font-size:13px">âš  ${e.message}</div>`;
+    document.getElementById('trendAiPanel').innerHTML = `<div style="color:var(--accent-rose);font-size:13px">⚠ ${e.message}</div>`;
   }
 }
 
@@ -2509,67 +2422,21 @@ async function quickGenerate(topic) {
 }
 
 async function _pvGenerate(topic, type) {
-  const p = currentProfile === 'dj' ? PREP_VAULT.dj : PREP_VAULT.pj;
-  const profile = PROFILES[currentProfile];
-  const cacheKey = `pvgen_${currentProfile}_${type}_${btoa(topic).slice(0,22)}`;
-  const cached = cacheGet(cacheKey);
-
   setLoading('pvAiOutput', `Generating ${type} vault entry for "${topic}"...`);
   document.getElementById('pvCacheStatus').textContent = '';
 
-  const typePrompts = {
-    full: `Generate a structured exam preparation vault entry for: "${topic}"
-
-Include ALL of these sections:
-1. KEY DEFINITIONS â€” 4â€“6 concise definitions with bold terms
-2. CORE FORMULAS / FRAMEWORKS â€” any relevant formulas, decision trees, or structured lists
-3. COMPARISON TABLE â€” if applicable, a markdown-style comparison of related concepts
-4. EXAM TRAPS â€” 3â€“4 common wrong-answer traps students fall into, with explanations of WHY they are wrong
-5. EXAM TIPS â€” 2â€“3 specific tips for answering exam questions on this topic
-6. MEMORY AIDS â€” mnemonics or mental models
-
-Format clearly with headers. Be exam-specific for ${profile.activeCert}.`,
-    traps: `List the top 6 most common exam traps for the topic: "${topic}" in the context of ${profile.activeCert}.
-For each trap: (1) State the wrong assumption, (2) Explain why it's wrong, (3) State the correct understanding. Be specific and exam-focused.`,
-    compare: `Create a detailed comparison table for: "${topic}" relevant to ${profile.activeCert}.
-Format as a clear markdown table with 5+ rows and 4+ columns covering the most exam-relevant dimensions. Follow with 3 key exam distinctions to remember.`,
-    flashcards: `Generate 10 high-quality flashcard pairs for: "${topic}" for ${profile.activeCert} exam prep.
-Format each as:
-Q: [exam-style question]
-A: [concise, complete answer with the key insight]
-Make questions exam-style (best/most/first action). Vary difficulty. Include at least 2 tricky questions.`,
-    mnemonics: `Create 4â€“6 memory aids (mnemonics, acronyms, stories, or mental models) for: "${topic}" for ${profile.activeCert}.
-For each: explain what it helps remember and how to use it in exam scenarios. Include at least one acronym and one visual mental model.`
-  };
-
-  const prompt = `You are an expert ${profile.domain} exam prep instructor creating structured reference material.
-Profile: ${profile.name}, preparing for: ${profile.activeCert}.
-Background: ${profile.skills}.
-
-${typePrompts[type]}
-
-Be specific, technical, and exam-focused. Every definition and formula must be exactly correct for the exam context.`;
-
   try {
-    let result;
-    if (cached) {
-      result = cached.data;
-      document.getElementById('pvCacheStatus').textContent = `âœ“ Cached ${Math.round((Date.now()-cached.ts)/60000)}m ago`;
-    } else {
-      result = await callClaude(prompt);
-      cacheSet(cacheKey, result);
-      document.getElementById('pvCacheStatus').textContent = 'âœ“ Cached for 6hrs';
-    }
-    setAiResult('pvAiOutput', result, !!cached);
+    const data = await callBackendAI('/api/ai/vault-entry', { profile: currentProfile, topic, type });
+    document.getElementById('pvCacheStatus').textContent = data.cached ? '✔ Cached (30d)' : '✔ Cached for 30d';
+    setAiResult('pvAiOutput', data.result, data.cached);
   } catch(e) {
-    document.getElementById('pvAiOutput').innerHTML = `<div style="color:var(--accent-rose);font-size:13px">âš  ${e.message}</div>`;
+    document.getElementById('pvAiOutput').innerHTML = `<div style="color:var(--accent-rose);font-size:13px">⚠ ${e.message}</div>`;
   }
 }
 
 function clearPvCache() {
-  Object.keys(CACHE).filter(k => k.startsWith('pvgen_')).forEach(k => delete CACHE[k]);
+  clearAndRefreshAI('vault', () => {});
   document.getElementById('pvCacheStatus').textContent = 'Cache cleared';
-  showToast('ðŸ—‘ Prep vault AI cache cleared');
 }
 
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
@@ -2807,24 +2674,17 @@ function caiJobSelected(){
 
 async function runCareerAI(){
   const idx=document.getElementById('cai-job-select').value;
-  if(idx===''){showToast('âš  Select a job first');return;}
-  const job=JH[currentProfile].jobs[parseInt(idx)];if(!job){showToast('âš  Job not found');return;}
-  const p=PROFILES[currentProfile];
-  const prompts={
-    cover:`Write a compelling, personalized 3â€“4 paragraph cover letter.\nRole: ${job.title} at ${job.company} (${job.location})\nJob: ${job.snippet}\nRequired: ${(job.keySkills||[]).join(', ')}\nCandidate: ${p.name}, ${p.currentRole}, certs: ${p.certs}, domain: ${p.domain}\nReference company by name. Connect specific credentials to requirements. Professional and warm, not generic.`,
-    prep:`Generate 8 targeted interview questions with ideal answer frameworks.\nRole: ${job.title} at ${job.company}\nContext: ${job.snippet}\nRequired: ${(job.keySkills||[]).join(', ')}\nCandidate: ${p.name} â€” ${p.currentRole} â€” ${p.domain} â€” ${p.certs}\nFormat: 3 technical, 3 behavioral (STAR), 2 situational. Use Q: and IDEAL ANSWER: labels. Include 2 curveballs.`,
-    gap:`Skill gap analysis.\nCANDIDATE: ${p.name} | ${p.currentRole} | ${p.yoe}\nSkills: ${p.skills}\nCerts: ${p.certs}\nTARGET: ${job.title} at ${job.company}\nRequired: ${(job.keySkills||[]).join(', ')}\nContext: ${job.snippet}\nStructure:\n1. âœ… STRONG MATCHES\n2. ðŸ”¶ PARTIAL MATCHES (action per item)\n3. âŒ SKILL GAPS (30-day plan per gap)\n4. ðŸŽ¯ VERDICT (fit score X/10 + 2-line rec)`,
-    pitch:`60-second elevator pitch (â‰ˆ150 words spoken).\nPerson: ${p.name}, ${p.currentRole}\nDomain: ${p.domain}, Creds: ${p.certs}, Experience: ${p.yoe}\nTarget: ${job.title} at ${job.company}\nNatural, confident, specific. Include: who they are, unique value, key credential, one achievement, clear ask.`,
-  };
-  const btn=document.getElementById('cai-run-btn');btn.disabled=true;btn.textContent='âŸ³ Generatingâ€¦';
+  if(idx===''){showToast('⚠ Select a job first');return;}
+  const job=JH[currentProfile].jobs[parseInt(idx)];if(!job){showToast('⚠ Job not found');return;}
+  const btn=document.getElementById('cai-run-btn');btn.disabled=true;btn.textContent='⟳ Generating…';
   document.getElementById('cai-output-area').style.display='none';
   try{
-    const result=await callClaude(prompts[caiMode]||prompts.cover,`You are an expert career coach specializing in ${p.domain}. Helping ${p.name} â€” ${p.currentRole}. Be specific, personalized, and practical. No generic templates.`);
-    document.getElementById('cai-output').textContent=result;
+    const data=await callBackendAI('/api/ai/assist',{profile:currentProfile,mode:caiMode,job:{title:job.title,company:job.company,snippet:job.snippet,keySkills:job.keySkills}});
+    document.getElementById('cai-output').textContent=data.result;
     document.getElementById('cai-output-area').style.display='block';
     document.getElementById('cai-copy-btn').textContent='Copy';
-  }catch(e){showToast('âš  '+e.message.slice(0,80));}
-  btn.disabled=false;btn.textContent='âš¡ Generate';
+  }catch(e){showToast('⚠ '+e.message.slice(0,80));}
+  btn.disabled=false;btn.textContent='⚡ Generate';
 }
 
 function copyCaiOutput(){const text=document.getElementById('cai-output').textContent;navigator.clipboard?.writeText(text).then(()=>{document.getElementById('cai-copy-btn').textContent='âœ“ Copied';setTimeout(()=>document.getElementById('cai-copy-btn').textContent='Copy',2000);});}
