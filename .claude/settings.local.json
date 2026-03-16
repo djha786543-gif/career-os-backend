@@ -17,7 +17,11 @@
       "Bash(curl:*)",
       "Bash(echo:*)",
       "Bash(cat:*)",
-      "Bash(sleep:*)"
+      "Bash(sleep:*)",
+      "Bash(awk:*)",
+      "Bash(powershell -Command \"Invoke-RestMethod 'https://career-os-backend-production.up.railway.app/api/monitor/stats' | ConvertTo-Json -Depth 5\" 2>&1)",
+      "Bash(powershell -Command \"\n\\\\$r = Invoke-RestMethod 'https://career-os-backend-production.up.railway.app/api/monitor/orgs'\nWrite-Host 'Total orgs:' \\\\$r.orgs.Count\n\\\\$r.orgs | Group-Object sector | Select-Object Name, Count | Format-Table\n\" 2>&1)",
+      "Bash(powershell -Command \"\n\\\\$scan = Invoke-RestMethod -Method POST 'https://career-os-backend-production.up.railway.app/api/monitor/scan' -ContentType 'application/json' -Body '{}'\nWrite-Host 'Scan response:' \\(\\\\$scan | ConvertTo-Json\\)\n\n\\\\$jobs = Invoke-RestMethod 'https://career-os-backend-production.up.railway.app/api/monitor/jobs?sector=india'\nWrite-Host 'Jobs response status:' \\\\$jobs.status\n\n\\\\$djJobs = Invoke-RestMethod 'https://career-os-backend-production.up.railway.app/api/jobs?candidate=dj'\nWrite-Host 'DJ jobs count:' \\\\$djJobs.jobs.Count\n\n\\\\$poojaJobs = Invoke-RestMethod 'https://career-os-backend-production.up.railway.app/api/jobs?candidate=pooja'\nWrite-Host 'Pooja jobs count:' \\\\$poojaJobs.jobs.Count\n\n\\\\$health = Invoke-RestMethod 'https://career-os-backend-production.up.railway.app/health'\nWrite-Host 'Health:' \\\\$health.status\n\" 2>&1)"
     ]
   }
 }

@@ -18,6 +18,7 @@ import { searchPoojaJobsViaWebSearch } from '../services/webSearchJobService';
 import { Track } from '../models/Track';
 import { Job } from '../models/Job';
 import { classifyAcademicIndustry } from '../utils/classifyAcademicIndustry';
+import { getCache, setCache } from '../utils/cache';
 
 const router = express.Router();
 const VALID_TRACKS: Track[] = ['Academic', 'Industry'];
@@ -194,6 +195,19 @@ router.get('/', async (req, res) => {
     const rawProfile = q.profile || q.candidate || '';
     const candidateId = PROFILE_MAP[rawProfile.toLowerCase().trim()] || rawProfile;
     const profileShort = ID_TO_PROFILE[candidateId] || rawProfile.toLowerCase();
+
+    // forceRefresh: bypass cache — rate-limited to once per hour per profile
+    const forceRefresh = q.forceRefresh === 'true';
+    const frKey = `forceRefresh:${profileShort}`;
+    if (forceRefresh) {
+      const lastUsed = getCache(frKey) as number | undefined;
+      const now = Date.now();
+      if (lastUsed && now - lastUsed < 3600 * 1000) {
+        return res.status(429).json({ error: 'Force refresh rate-limited — please wait 1 hour between force refreshes.' });
+      }
+      setCache(frKey, Date.now(), 3600);
+      console.log(`[Jobs] forceRefresh=true for ${profileShort}`);
+    }
 
     const candidate = candidates.find(c => c.id === candidateId);
     if (!candidate) return res.status(400).json({ error: 'Invalid candidate' });
@@ -374,7 +388,7 @@ router.get('/', async (req, res) => {
             console.log(`[Jobs] Pooja: ${countryKey} → webSearch (${countryName})`);
             let webJobs: Job[] = [];
             try {
-                webJobs = await searchPoojaJobsViaWebSearch(countryName, q.track);
+                webJobs = await searchPoojaJobsViaWebSearch(countryName, q.track, forceRefresh);
             } catch (err) {
                 console.error(`[Jobs] webSearch(${countryName}) error:`, err instanceof Error ? err.message : err);
             }

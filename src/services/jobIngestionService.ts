@@ -25,7 +25,7 @@ import { getCache, setCache } from '../utils/cache';
 import { getSearchProfile, regionToAdzunaCountry, AdzunaCountry } from '../config/searchProfiles';
 import { fetchAdzunaJobs } from './adzunaFetcher';
 
-const LIVE_CACHE_TTL = 6 * 60 * 60; // 6 hours
+const LIVE_CACHE_TTL = 24 * 60 * 60; // 24 hours (cost optimisation)
 
 function buildCacheKey(candidateId: string, track: string | undefined, country: AdzunaCountry): string {
   return `adzuna:${candidateId}:${track || '_'}:${country}`;

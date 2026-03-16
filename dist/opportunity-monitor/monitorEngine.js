@@ -296,9 +296,12 @@ async function runFullScan() {
             return;
         }
         console.log('[Monitor] Advisory lock acquired, starting full scan...');
+        // Cost optimisation: scan only 10 orgs per run (oldest-first).
+        // All 65 orgs rotate over 6-7 days.
         const orgs = await client_1.pool.query(`SELECT id, name FROM monitor_orgs
        WHERE is_active = true
-       ORDER BY last_scanned_at ASC NULLS FIRST`);
+       ORDER BY last_scanned_at ASC NULLS FIRST
+       LIMIT 10`);
         for (const row of orgs.rows) {
             const orgConfig = orgConfig_1.MONITOR_ORGS.find(o => o.name === row.name);
             if (!orgConfig)

@@ -26,7 +26,7 @@ const deduplicateJobs_1 = require("../utils/deduplicateJobs");
 const cache_1 = require("../utils/cache");
 const searchProfiles_1 = require("../config/searchProfiles");
 const adzunaFetcher_1 = require("./adzunaFetcher");
-const LIVE_CACHE_TTL = 6 * 60 * 60; // 6 hours
+const LIVE_CACHE_TTL = 24 * 60 * 60; // 24 hours (cost optimisation)
 function buildCacheKey(candidateId, track, country) {
     return `adzuna:${candidateId}:${track || '_'}:${country}`;
 }

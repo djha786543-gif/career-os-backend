@@ -330,10 +330,23 @@ export async function fetchWebSearchJobs(opts: WebSearchOptions): Promise<Job[]>
  * Country-specific web search for Pooja — used for non-US/UK countries
  * where Adzuna has no coverage.
  */
+const COUNTRY_CACHE_TTL = 24 * 60 * 60; // 24 hours per country (cost optimisation)
+
 export async function searchPoojaJobsViaWebSearch(
   country: string,
   track?: string,
+  forceRefresh = false,
 ): Promise<Job[]> {
+  // Country-level 24h cache — prevents repeated expensive webSearch for same country
+  const countryCacheKey = `websearch_pooja_${country.toLowerCase()}_${track || 'all'}`;
+  if (!forceRefresh) {
+    const cached = getCache(countryCacheKey);
+    if (Array.isArray(cached)) {
+      console.log(`[WebSearch/${country}] Cache hit (24h TTL)`);
+      return cached as Job[];
+    }
+  }
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     console.warn('[WebSearch] ANTHROPIC_API_KEY not set');
@@ -430,5 +443,12 @@ Return [] if no relevant open positions found.`;
   });
 
   const track_: Track = (track as Track | undefined) ?? 'Academic';
-  return deduped.map(r => normalizeWebSearchJob(r, track_));
+  const results = deduped.map(r => normalizeWebSearchJob(r, track_));
+
+  // Cache at country level for 24 hours to prevent repeat API calls
+  if (results.length > 0) {
+    setCache(countryCacheKey, results, COUNTRY_CACHE_TTL);
+    console.log(`[WebSearch/${country}] Cached ${results.length} jobs for 24h`);
+  }
+  return results;
 }

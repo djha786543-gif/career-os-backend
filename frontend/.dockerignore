@@ -1,0 +1,10 @@
+node_modules/
+frontend/node_modules/
+.next/
+frontend/.next/
+*.tsbuildinfo
+.env
+.env.local
+.env.production
+.git/
+.claude/

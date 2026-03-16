@@ -14,9 +14,9 @@ async function initMonitorScheduler() {
     catch (err) {
         console.error('[Monitor] Seed error:', err.message);
     }
-    // RECOMMENDATION 2: Only one cron instance runs due to advisory lock in runFullScan
-    // Schedule: 0:00, 6:00, 12:00, 18:00 UTC daily
-    node_cron_1.default.schedule('0 0,6,12,18 * * *', async () => {
+    // Cost optimisation: once daily at 08:00 UTC, scanning 10 orgs per run.
+    // All 65 orgs rotate through over 6-7 days (oldest-first ordering in runFullScan).
+    node_cron_1.default.schedule('0 8 * * *', async () => {
         console.log('[Monitor] Cron triggered at', new Date().toISOString());
         try {
             await (0, monitorEngine_1.runFullScan)();
@@ -25,5 +25,5 @@ async function initMonitorScheduler() {
             console.error('[Monitor] Cron scan error:', err.message);
         }
     });
-    console.log('[Monitor] Scheduler ready — scans at 0:00, 6:00, 12:00, 18:00 UTC');
+    console.log('[Monitor] Scheduler ready — daily scan at 08:00 UTC (10 orgs per run)');
 }

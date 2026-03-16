@@ -8,9 +8,12 @@ export interface MonitorOrg {
   searchQuery: string
 }
 
+// ─── webSearch is ONLY used for orgs with no free source ─────────────────────
+// Max 15 websearch orgs. All others use RSS or USAJobs (free, no AI cost).
+// Cost: ~60 webSearch calls/month @ ~$0.03/call = ~$1-2/month for monitor
+
 export const MONITOR_ORGS: MonitorOrg[] = [
-  // ═══ ACADEMIA — Top 20 US Research Institutions ═══
-  // USAJobs for NIH (official government API — free, structured)
+  // ═══ ACADEMIA — US Government (USAJobs — free, no AI cost) ═══
   { name: "NIH NHLBI", sector: "academia", country: "USA",
     apiType: "usajobs",
     searchQuery: "cardiovascular postdoc researcher NHLBI" },
@@ -20,12 +23,52 @@ export const MONITOR_ORGS: MonitorOrg[] = [
   { name: "NIH NCI", sector: "academia", country: "USA",
     apiType: "usajobs",
     searchQuery: "research scientist cancer biology NCI" },
-  // RSS feeds where available
+  { name: "FDA", sector: "academia", country: "USA",
+    apiType: "usajobs",
+    searchQuery: "research scientist molecular biology FDA" },
+  { name: "CDC", sector: "academia", country: "USA",
+    apiType: "usajobs",
+    searchQuery: "research scientist cardiovascular molecular biology CDC" },
+
+  // ═══ ACADEMIA — RSS feeds (free, no AI cost) ═══
   { name: "Cold Spring Harbor Laboratory", sector: "academia", country: "USA",
     apiType: "rss",
     rssUrl: "https://cshl.edu/careers/feed/",
     searchQuery: "Cold Spring Harbor postdoc molecular biology genomics" },
-  // websearch fallback for institutions without RSS/API
+  { name: "Nature Jobs", sector: "academia", country: "Global",
+    apiType: "rss",
+    rssUrl: "https://www.nature.com/naturecareers/rss/latest",
+    searchQuery: "postdoc cardiovascular molecular biology nature jobs" },
+  { name: "Science Careers", sector: "academia", country: "Global",
+    apiType: "rss",
+    rssUrl: "https://jobs.sciencecareers.org/rss/jobs/",
+    searchQuery: "postdoc cardiovascular molecular biology science careers" },
+  { name: "Jobs.ac.uk", sector: "international", country: "UK",
+    apiType: "rss",
+    rssUrl: "https://www.jobs.ac.uk/search/?rss=1&keywords=cardiovascular+postdoc+molecular+biology",
+    searchQuery: "cardiovascular postdoc molecular biology UK" },
+  { name: "EuroScienceJobs", sector: "international", country: "Europe",
+    apiType: "rss",
+    rssUrl: "https://www.eurosciencejobs.com/rss/jobs",
+    searchQuery: "postdoc cardiovascular molecular biology Europe" },
+  { name: "EMBL Jobs", sector: "international", country: "Germany",
+    apiType: "rss",
+    rssUrl: "https://www.embl.org/jobs/rss/",
+    searchQuery: "EMBL postdoctoral fellowship cardiovascular molecular biology" },
+  { name: "Wellcome Sanger Institute", sector: "international", country: "UK",
+    apiType: "rss",
+    rssUrl: "https://www.sanger.ac.uk/careers/rss/",
+    searchQuery: "Wellcome Sanger postdoctoral researcher genomics cardiovascular" },
+  { name: "Francis Crick Institute", sector: "international", country: "UK",
+    apiType: "rss",
+    rssUrl: "https://www.crick.ac.uk/careers/vacancies/rss",
+    searchQuery: "Francis Crick postdoc cardiovascular molecular biology" },
+  { name: "HigherEdJobs", sector: "academia", country: "USA",
+    apiType: "rss",
+    rssUrl: "https://www.higheredjobs.com/rss/jobFeed.cfm?JobCat=203",
+    searchQuery: "postdoc cardiovascular molecular biology US university" },
+
+  // ═══ ACADEMIA — webSearch (no free source — keep to 15 total) ═══
   { name: "Harvard Medical School", sector: "academia", country: "USA",
     apiType: "websearch",
     searchQuery: "Harvard Medical School postdoc cardiovascular molecular biology 2026",
@@ -34,14 +77,6 @@ export const MONITOR_ORGS: MonitorOrg[] = [
     apiType: "websearch",
     searchQuery: "Stanford Medicine postdoctoral researcher cardiovascular 2026",
     careersUrl: "https://med.stanford.edu/careers" },
-  { name: "UCSF", sector: "academia", country: "USA",
-    apiType: "websearch",
-    searchQuery: "UCSF postdoc cardiovascular cell biology molecular biology 2026",
-    careersUrl: "https://jobs.ucsf.edu" },
-  { name: "Johns Hopkins Medicine", sector: "academia", country: "USA",
-    apiType: "websearch",
-    searchQuery: "Johns Hopkins postdoctoral researcher cardiovascular 2026",
-    careersUrl: "https://jobs.jhu.edu" },
   { name: "Mayo Clinic Research", sector: "academia", country: "USA",
     apiType: "websearch",
     searchQuery: "Mayo Clinic postdoc research scientist cardiovascular 2026",
@@ -50,13 +85,21 @@ export const MONITOR_ORGS: MonitorOrg[] = [
     apiType: "websearch",
     searchQuery: "Broad Institute postdoctoral associate genomics molecular biology 2026",
     careersUrl: "https://www.broadinstitute.org/careers" },
+  { name: "MIT Biology", sector: "academia", country: "USA",
+    apiType: "websearch",
+    searchQuery: "MIT postdoctoral researcher molecular biology cardiovascular 2026" },
+  { name: "UCSF", sector: "academia", country: "USA",
+    apiType: "websearch",
+    searchQuery: "UCSF postdoc cardiovascular cell biology molecular biology 2026",
+    careersUrl: "https://jobs.ucsf.edu" },
+  { name: "Johns Hopkins Medicine", sector: "academia", country: "USA",
+    apiType: "websearch",
+    searchQuery: "Johns Hopkins postdoctoral researcher cardiovascular 2026",
+    careersUrl: "https://jobs.jhu.edu" },
   { name: "Salk Institute", sector: "academia", country: "USA",
     apiType: "websearch",
     searchQuery: "Salk Institute postdoc cardiovascular cell biology 2026",
     careersUrl: "https://www.salk.edu/careers" },
-  { name: "MIT Biology", sector: "academia", country: "USA",
-    apiType: "websearch",
-    searchQuery: "MIT postdoctoral researcher molecular biology cardiovascular 2026" },
   { name: "Columbia University Medical Center", sector: "academia", country: "USA",
     apiType: "websearch",
     searchQuery: "Columbia University postdoc cardiovascular research 2026" },
@@ -83,7 +126,7 @@ export const MONITOR_ORGS: MonitorOrg[] = [
     apiType: "websearch",
     searchQuery: "Weill Cornell postdoc cardiovascular research scientist 2026" },
 
-  // ═══ INDUSTRY — Top 20 Biotech/Pharma ═══
+  // ═══ INDUSTRY — webSearch (no free API for these orgs) ═══
   { name: "Genentech", sector: "industry", country: "USA",
     apiType: "websearch",
     searchQuery: "Genentech research scientist cardiovascular molecular biology 2026",
@@ -149,22 +192,10 @@ export const MONITOR_ORGS: MonitorOrg[] = [
     apiType: "websearch",
     searchQuery: "PacBio scientist molecular biology genomics sequencing 2026" },
 
-  // ═══ INTERNATIONAL — Top 10 EU + Asia-Pacific ═══
-  { name: "Francis Crick Institute", sector: "international", country: "UK",
-    apiType: "rss",
-    rssUrl: "https://www.crick.ac.uk/careers/vacancies/rss",
-    searchQuery: "Francis Crick postdoc cardiovascular molecular biology" },
-  { name: "Wellcome Sanger Institute", sector: "international", country: "UK",
-    apiType: "websearch",
-    searchQuery: "Wellcome Sanger postdoctoral researcher genomics cardiovascular 2026",
-    careersUrl: "https://www.sanger.ac.uk/careers" },
+  // ═══ INTERNATIONAL — RSS feeds (free, no AI cost) ═══
   { name: "MRC LMS London", sector: "international", country: "UK",
     apiType: "websearch",
     searchQuery: "MRC London Institute Medical Sciences postdoc cardiovascular 2026" },
-  { name: "EMBL Heidelberg", sector: "international", country: "Germany",
-    apiType: "websearch",
-    searchQuery: "EMBL postdoctoral fellowship cardiovascular molecular biology 2026",
-    careersUrl: "https://www.embl.org/jobs" },
   { name: "Max Planck Heart and Lung", sector: "international", country: "Germany",
     apiType: "websearch",
     searchQuery: "Max Planck Institute Heart Lung postdoc cardiovascular 2026" },
@@ -187,7 +218,7 @@ export const MONITOR_ORGS: MonitorOrg[] = [
     apiType: "websearch",
     searchQuery: "Peter MacCallum postdoc molecular biology genomics 2026" },
 
-  // ═══ INDIA — Top 15 Research Institutes + Industry ═══
+  // ═══ INDIA — webSearch (no free API available for Indian institutes) ═══
   { name: "NCBS Bangalore", sector: "india", country: "India",
     apiType: "websearch",
     searchQuery: "NCBS Bangalore postdoc cardiovascular molecular biology position 2026",
