@@ -38,6 +38,8 @@ app.get('/health', (req, res) => {
         env: {
             anthropic: !!process.env.ANTHROPIC_API_KEY,
             adzuna: !!process.env.ADZUNA_APP_ID,
+            gemini: !!process.env.GEMINI_API_KEY,
+            deepseek: !!process.env.DEEPSEEK_API_KEY,
         },
     });
 });

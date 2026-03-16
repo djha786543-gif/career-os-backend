@@ -143,9 +143,18 @@ router.post('/pathway', async (req, res) => {
     try {
         const systemPrompt = `You are a career pathway architect. Profile: ${PROFILE_CONTEXT[profile]}`;
         const userPrompt = `Create a detailed certification and learning pathway to reach the role of "${targetRole}" within ${timeline}.\n\nInclude:\n- Required certifications (with exam details, cost, prep time)\n- Recommended courses/platforms\n- Milestone checkpoints\n- Common pitfalls to avoid\n\nBe specific and realistic for 2026.`;
-        const text = await (0, deepseekClient_1.deepseekGenerate)(systemPrompt, userPrompt, 2000);
+        let text;
+        let model = 'deepseek';
+        try {
+            text = await (0, deepseekClient_1.deepseekGenerate)(systemPrompt, userPrompt, 2000);
+        }
+        catch (dsErr) {
+            console.warn('[/api/ai/pathway] DeepSeek failed, falling back to Gemini:', dsErr.message);
+            text = await (0, geminiClient_1.geminiGenerate)(systemPrompt, userPrompt, 2000);
+            model = 'gemini';
+        }
         (0, cache_1.setCache)(ck, text, TTL.pathway);
-        return res.json({ result: text, cached: false, profile, model: 'deepseek' });
+        return res.json({ result: text, cached: false, profile, model });
     }
     catch (err) {
         console.error('[/api/ai/pathway]', err.message);
@@ -163,9 +172,18 @@ router.post('/track', async (req, res) => {
         return res.json({ result: cached, cached: true, profile, model: 'deepseek' });
     try {
         const systemPrompt = `You are a structured learning architect. Profile: ${PROFILE_CONTEXT[profile]}\n\nCreate practical, week-by-week learning tracks.`;
-        const text = await (0, deepseekClient_1.deepseekGenerate)(systemPrompt, query, 2000);
+        let text;
+        let model = 'deepseek';
+        try {
+            text = await (0, deepseekClient_1.deepseekGenerate)(systemPrompt, query, 2000);
+        }
+        catch (dsErr) {
+            console.warn('[/api/ai/track] DeepSeek failed, falling back to Gemini:', dsErr.message);
+            text = await (0, geminiClient_1.geminiGenerate)(systemPrompt, query, 2000);
+            model = 'gemini';
+        }
         (0, cache_1.setCache)(ck, text, TTL.track);
-        return res.json({ result: text, cached: false, profile, model: 'deepseek' });
+        return res.json({ result: text, cached: false, profile, model });
     }
     catch (err) {
         console.error('[/api/ai/track]', err.message);
