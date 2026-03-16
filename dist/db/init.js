@@ -157,6 +157,12 @@ async function dbInit() {
         ON monitor_scans(scanned_at DESC);
       CREATE INDEX IF NOT EXISTS idx_monitor_scans_org
         ON monitor_scans(org_id, scanned_at DESC);
+
+      -- ─── Idempotent column migrations (safe to run every boot) ───────────────
+      -- Adds job_board to tables created before this column existed in the schema
+      ALTER TABLE jobs         ADD COLUMN IF NOT EXISTS job_board TEXT         DEFAULT 'Adzuna';
+      ALTER TABLE monitor_jobs ADD COLUMN IF NOT EXISTS job_board VARCHAR(100);
+      ALTER TABLE kanban_cards ADD COLUMN IF NOT EXISTS job_board VARCHAR(100);
     `);
         console.log('✅ DB tables verified / created');
     }

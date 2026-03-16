@@ -14,20 +14,20 @@ export interface JobFilters {
 function toBool(v: string | boolean | undefined) { if (v === undefined) return undefined; if (typeof v === 'boolean') return v; return v === 'true'; }
 function toNum(v: string | number | undefined) { if (v === undefined) return undefined; const n = Number(v); return isNaN(n) ? undefined : n; }
 
-// Word-boundary regex — 'intern' must not match 'internal'
+// Titles with these patterns are ALWAYS kept for DJ regardless of other matches.
+// "internal aud" covers "Internal Audit", "Internal Auditor", "Internal Audit/SOX", etc.
+const DJ_SAFE_REGEX = /\b(senior|manager|director)\b|internal\s+aud/i;
+
+// Block ONLY genuine junior/entry-level roles.
+// Uses \b (true word boundary) so "intern" does NOT match inside "Internal".
+const DJ_BLOCK_REGEX = /\b(intern|internship|trainee|entry[\s-]level|junior|new\s+grad|co-?op)\b/i;
+
+// Pooja: postdoc researcher — block undergrad/tech/student roles
 function makeBlockRegex(keywords: string[]): RegExp {
   const escaped = keywords.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
   return new RegExp('(?<![a-z])(' + escaped.join('|') + ')(?![a-z])', 'i');
 }
 
-// Deobrat: 10yr Manager — block only genuine junior/entry terms (word-boundary safe)
-const DJ_BLOCK_REGEX = makeBlockRegex([
-  'intern', 'internship', 'trainee',
-  'entry level', 'entry-level', 'junior',
-  'new grad', 'co-op',
-]);
-
-// Pooja: postdoc researcher — block undergrad/tech/student roles
 const PJ_BLOCK_REGEX = makeBlockRegex([
   'intern', 'internship', 'trainee', 'undergraduate', 'undergrad',
   'lab aide', 'lab assistant', 'lab technician',
@@ -58,8 +58,9 @@ export function filterAndScoreJobs(
 
   const filtered = jobs.filter(job => {
     const title = job.title || '';
-    // Word-boundary safe blocking — 'intern' won't match 'internal'
-    if (isDJ && DJ_BLOCK_REGEX.test(title)) {
+    // Always keep senior/manager/director/internal-audit roles for DJ.
+    // For anything else, block genuine junior/entry patterns.
+    if (isDJ && !DJ_SAFE_REGEX.test(title) && DJ_BLOCK_REGEX.test(title)) {
       console.log(`[Filter] Blocking DJ title: "${title}"`);
       return false;
     }
