@@ -8,6 +8,7 @@ import kanbanRouter from './api/kanban';
 import intelligenceRouter from './api/intelligence';
 import aiRouter from './api/ai';
 import monitorRouter from './api/monitor';
+import adminRouter from './api/admin';
 import { initMonitorScheduler } from './opportunity-monitor/scheduler';
 import { dbInit } from './db/init';
 
@@ -92,6 +93,7 @@ app.use('/api/jobs',          jobsRouter);
 app.use('/api/kanban',        kanbanRouter);
 app.use('/api/ai',            aiRouter);            // /api/ai/skill, /api/ai/trend, /api/ai/assist, etc.
 app.use('/api/monitor',       monitorRouter);       // /api/monitor/jobs, /api/monitor/orgs, /api/monitor/scan, /api/monitor/stats
+app.use('/api/admin',         adminRouter);         // /api/admin/usage
 app.use('/api',               intelligenceRouter);  // /api/trends, /api/skills, /api/salary, /api/market, /api/market/heatmap, /api/study/plan
 
 // Global error handler (must be last)
