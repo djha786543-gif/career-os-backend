@@ -13,35 +13,46 @@ const poojasInstitutions = [
   { name: 'Kyoto University', sector: 'academic', country: 'Japan' },
   { name: 'Seoul National University', sector: 'academic', country: 'South Korea' },
   { name: 'Pohang University of Science and Technology', sector: 'academic', country: 'South Korea' },
-  // Example government organization:
   { name: 'European Space Agency', sector: 'government', country: 'International' }
 ];
 
+function toTitleCase(str: string): string {
+  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+}
+
 async function seedPoojasInstitutions() {
   const client = await pool.connect();
+  let successCount = 0;
   
   try {
     await client.query('BEGIN');
 
-    const insertQuery = `
-      INSERT INTO monitor_orgs (name, sector, country, is_active)
-      VALUES ($1, $2, $3, true)
-      ON CONFLICT (name) DO NOTHING
-    `;
-
     for (const institution of poojasInstitutions) {
-      await client.query(insertQuery, [
-        institution.name,
-        institution.sector,
-        institution.country
-      ]);
+      try {
+        const sector = toTitleCase(institution.sector);
+        const country = toTitleCase(institution.country);
+        
+        await client.query(`
+          INSERT INTO monitor_orgs (name, sector, country, is_active)
+          VALUES ($1, $2, $3, true)
+          ON CONFLICT (name) DO NOTHING
+        `, [
+          institution.name,
+          sector,
+          country
+        ]);
+        successCount++;
+      } catch (rowError) {
+        console.error(`⚠️ Failed to insert ${institution.name}:`, (rowError as Error).message);
+        // Continue to next row
+      }
     }
 
     await client.query('COMMIT');
-    console.log(`✅ Successfully seeded ${poojasInstitutions.length} institutions for Pooja`);
+    console.log(`✅ Successfully seeded ${successCount}/${poojasInstitutions.length} institutions`);
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('❌ Error seeding Pooja institutions:', error);
+    console.error('❌ Transaction failed:', (error as Error).message);
     throw error;
   } finally {
     client.release();
