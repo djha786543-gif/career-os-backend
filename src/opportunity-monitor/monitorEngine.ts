@@ -19,19 +19,60 @@ const RELEVANT_KEYWORDS = [
 
 // RECOMMENDATION 1: Strict location filtering
 const RELEVANT_LOCATIONS = [
+  // USA
   'usa', 'united states', 'new york', 'boston', 'san francisco',
   'seattle', 'chicago', 'houston', 'los angeles', 'bethesda',
   'cambridge, ma', 'cambridge ma', 'la jolla', 'san diego',
+  'atlanta', 'philadelphia', 'dallas', 'durham', 'baltimore',
+  'pittsburgh', 'denver', 'minneapolis', 'st. louis', 'saint louis',
+  'nashville', 'raleigh', 'research triangle', 'ann arbor',
+  'new haven', 'stanford', 'palo alto', 'south san francisco',
+  // UK
   'uk', 'united kingdom', 'london', 'edinburgh', 'oxford',
-  'cambridge, uk', 'cambridge uk', 'manchester', 'glasgow',
-  'germany', 'berlin', 'heidelberg', 'munich', 'frankfurt',
-  'sweden', 'stockholm', 'gothenburg',
-  'switzerland', 'zurich', 'basel', 'geneva',
-  'canada', 'toronto', 'montreal', 'vancouver',
+  'cambridge, uk', 'cambridge uk', 'manchester', 'glasgow', 'birmingham',
+  // Europe (broad — covers EuroScienceJobs and any pan-European listings)
+  'europe', 'european',
+  // Germany
+  'germany', 'berlin', 'heidelberg', 'munich', 'frankfurt', 'hamburg',
+  'cologne', 'bonn', 'freiburg', 'göttingen', 'bad nauheim', 'dortmund',
+  // Sweden
+  'sweden', 'stockholm', 'gothenburg', 'solna', 'umeå',
+  // Switzerland
+  'switzerland', 'zurich', 'basel', 'geneva', 'lausanne', 'bern',
+  // Netherlands
+  'netherlands', 'amsterdam', 'leiden', 'utrecht', 'rotterdam', 'groningen',
+  // France
+  'france', 'paris', 'lyon', 'marseille', 'strasbourg', 'grenoble',
+  // Belgium
+  'belgium', 'brussels', 'ghent', 'leuven', 'liège',
+  // Austria
+  'austria', 'vienna', 'graz', 'innsbruck',
+  // Denmark
+  'denmark', 'copenhagen',
+  // Norway
+  'norway', 'oslo', 'bergen',
+  // Finland
+  'finland', 'helsinki',
+  // Italy
+  'italy', 'milan', 'rome', 'florence', 'bologna', 'trieste', 'padua',
+  // Spain
+  'spain', 'barcelona', 'madrid', 'valencia', 'bilbao',
+  // Portugal
+  'portugal', 'lisbon', 'porto',
+  // Other international hubs
+  'israel', 'tel aviv', 'rehovot', 'jerusalem',
+  'japan', 'tokyo', 'osaka', 'kyoto', 'yokohama',
+  // Canada
+  'canada', 'toronto', 'montreal', 'vancouver', 'ottawa', 'calgary',
+  // Singapore
   'singapore',
-  'australia', 'melbourne', 'sydney',
-  'india', 'bangalore', 'bengaluru', 'mumbai', 'delhi',
-  'hyderabad', 'pune', 'faridabad', 'trivandrum', 'kolkata'
+  // Australia
+  'australia', 'melbourne', 'sydney', 'brisbane', 'perth', 'adelaide',
+  // India — all major research cities
+  'india', 'bangalore', 'bengaluru', 'mumbai', 'delhi', 'new delhi',
+  'hyderabad', 'pune', 'faridabad', 'trivandrum', 'thiruvananthapuram',
+  'kolkata', 'chennai', 'mysore', 'mysuru', 'chandigarh', 'jaipur',
+  'ahmedabad', 'bhopal', 'lucknow', 'nagpur'
 ]
 
 // RECOMMENDATION 8: Relevance scoring instead of binary match
