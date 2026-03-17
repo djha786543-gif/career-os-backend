@@ -25,48 +25,36 @@ async function safeInsert(name: string, sector: string | null, country: string) 
     await pool.query(
       `INSERT INTO monitor_orgs (name, sector, country, is_active)
        VALUES ($1, $2, $3, true)
-       ON CONFLICT (name) DO NOTHING`,
+       ON CONFLICT (name) DO UPDATE 
+       SET sector = EXCLUDED.sector, 
+           is_active = EXCLUDED.is_active`,
       [name, sector, country]
     );
     return true;
   } catch (error) {
+    console.error(`⚠️ Insert failed for ${name}:`, (error as Error).message);
     return false;
   }
 }
 
 async function seedPoojasInstitutions() {
-  console.log('🚀 Starting Pooja institution seeding');
+  console.log('🚀 Starting Pooja institution seeding with UPSERT');
   await checkExistingSectors();
 
-  let successCount = 0;
+  let updateCount = 0;
   const client = await pool.connect();
 
   try {
     for (const institution of poojasInstitutions) {
-      let sector = institution.sector === 'academic' ? 'Education' : 
-                  institution.sector === 'government' ? 'Public Sector' : 
+      let sector = institution.sector === 'academic' ? 'academia' : 
+                  institution.sector === 'government' ? 'international' : 
                   institution.sector;
 
-      // First try with mapped sector
-      let inserted = await safeInsert(institution.name, sector, institution.country);
-
-      // If failed, try with NULL sector
-      if (!inserted) continue; // Skip if already exists
-
-      // Try again with alternative approaches if first insert failed
-      if (!inserted) {
-        console.log(`⚠️ Retrying ${institution.name} with NULL sector...`);
-        inserted = await safeInsert(institution.name, null, institution.country);        
-      }
-
-      if (!inserted) {
-        console.log(`⚠️ Could not insert ${institution.name} (conflict or constraints)`);
-      } else {
-        successCount++;
-      }
+      const inserted = await safeInsert(institution.name, sector, institution.country);
+      if (inserted) updateCount++;
     }
 
-    console.log(`✅ Results: ${successCount} succeeded, ${poojasInstitutions.length - successCount} skipped/failed`);
+    console.log(`✅ Results: ${updateCount} institutions upserted`);
   } catch (error) {
     console.error('❌ Fatal error during seeding:', (error as Error).message);
   } finally {
