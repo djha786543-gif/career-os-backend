@@ -13,6 +13,7 @@ const kanban_1 = __importDefault(require("./api/kanban"));
 const intelligence_1 = __importDefault(require("./api/intelligence"));
 const ai_1 = __importDefault(require("./api/ai"));
 const monitor_1 = __importDefault(require("./api/monitor"));
+const admin_1 = __importDefault(require("./api/admin"));
 const scheduler_1 = require("./opportunity-monitor/scheduler");
 const init_1 = require("./db/init");
 dotenv_1.default.config();
@@ -88,6 +89,7 @@ app.use('/api/jobs', jobs_1.default);
 app.use('/api/kanban', kanban_1.default);
 app.use('/api/ai', ai_1.default); // /api/ai/skill, /api/ai/trend, /api/ai/assist, etc.
 app.use('/api/monitor', monitor_1.default); // /api/monitor/jobs, /api/monitor/orgs, /api/monitor/scan, /api/monitor/stats
+app.use('/api/admin', admin_1.default); // /api/admin/usage
 app.use('/api', intelligence_1.default); // /api/trends, /api/skills, /api/salary, /api/market, /api/market/heatmap, /api/study/plan
 // Global error handler (must be last)
 app.use((err, req, res, next) => {

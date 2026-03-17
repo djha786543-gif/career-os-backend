@@ -141,8 +141,13 @@ async function scanViaWebSearch(org: MonitorOrg): Promise<ScannedJob[]> {
   try {
     const response = await withTimeout(
       anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
+        model: 'claude-haiku-4-5',
         max_tokens: 2000,
+        system: [{
+          type: 'text',
+          text: 'You are a job search assistant. When asked to find jobs, always use the web_search tool to search the web first, then return results as a JSON array. Never fabricate job listings — only return jobs found via web search.',
+          cache_control: { type: 'ephemeral' }
+        }],
         tools: [{ type: 'web_search_20250305' as any, name: 'web_search' }],
         tool_choice: { type: 'any' } as any,
         messages: [{
