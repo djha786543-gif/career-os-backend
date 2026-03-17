@@ -24,19 +24,60 @@ const RELEVANT_KEYWORDS = [
 ];
 // RECOMMENDATION 1: Strict location filtering
 const RELEVANT_LOCATIONS = [
+    // USA
     'usa', 'united states', 'new york', 'boston', 'san francisco',
     'seattle', 'chicago', 'houston', 'los angeles', 'bethesda',
     'cambridge, ma', 'cambridge ma', 'la jolla', 'san diego',
+    'atlanta', 'philadelphia', 'dallas', 'durham', 'baltimore',
+    'pittsburgh', 'denver', 'minneapolis', 'st. louis', 'saint louis',
+    'nashville', 'raleigh', 'research triangle', 'ann arbor',
+    'new haven', 'stanford', 'palo alto', 'south san francisco',
+    // UK
     'uk', 'united kingdom', 'london', 'edinburgh', 'oxford',
-    'cambridge, uk', 'cambridge uk', 'manchester', 'glasgow',
-    'germany', 'berlin', 'heidelberg', 'munich', 'frankfurt',
-    'sweden', 'stockholm', 'gothenburg',
-    'switzerland', 'zurich', 'basel', 'geneva',
-    'canada', 'toronto', 'montreal', 'vancouver',
+    'cambridge, uk', 'cambridge uk', 'manchester', 'glasgow', 'birmingham',
+    // Europe (broad — covers EuroScienceJobs and any pan-European listings)
+    'europe', 'european',
+    // Germany
+    'germany', 'berlin', 'heidelberg', 'munich', 'frankfurt', 'hamburg',
+    'cologne', 'bonn', 'freiburg', 'göttingen', 'bad nauheim', 'dortmund',
+    // Sweden
+    'sweden', 'stockholm', 'gothenburg', 'solna', 'umeå',
+    // Switzerland
+    'switzerland', 'zurich', 'basel', 'geneva', 'lausanne', 'bern',
+    // Netherlands
+    'netherlands', 'amsterdam', 'leiden', 'utrecht', 'rotterdam', 'groningen',
+    // France
+    'france', 'paris', 'lyon', 'marseille', 'strasbourg', 'grenoble',
+    // Belgium
+    'belgium', 'brussels', 'ghent', 'leuven', 'liège',
+    // Austria
+    'austria', 'vienna', 'graz', 'innsbruck',
+    // Denmark
+    'denmark', 'copenhagen',
+    // Norway
+    'norway', 'oslo', 'bergen',
+    // Finland
+    'finland', 'helsinki',
+    // Italy
+    'italy', 'milan', 'rome', 'florence', 'bologna', 'trieste', 'padua',
+    // Spain
+    'spain', 'barcelona', 'madrid', 'valencia', 'bilbao',
+    // Portugal
+    'portugal', 'lisbon', 'porto',
+    // Other international hubs
+    'israel', 'tel aviv', 'rehovot', 'jerusalem',
+    'japan', 'tokyo', 'osaka', 'kyoto', 'yokohama',
+    // Canada
+    'canada', 'toronto', 'montreal', 'vancouver', 'ottawa', 'calgary',
+    // Singapore
     'singapore',
-    'australia', 'melbourne', 'sydney',
-    'india', 'bangalore', 'bengaluru', 'mumbai', 'delhi',
-    'hyderabad', 'pune', 'faridabad', 'trivandrum', 'kolkata'
+    // Australia
+    'australia', 'melbourne', 'sydney', 'brisbane', 'perth', 'adelaide',
+    // India — all major research cities
+    'india', 'bangalore', 'bengaluru', 'mumbai', 'delhi', 'new delhi',
+    'hyderabad', 'pune', 'faridabad', 'trivandrum', 'thiruvananthapuram',
+    'kolkata', 'chennai', 'mysore', 'mysuru', 'chandigarh', 'jaipur',
+    'ahmedabad', 'bhopal', 'lucknow', 'nagpur'
 ];
 // RECOMMENDATION 8: Relevance scoring instead of binary match
 function relevanceScore(title, description = '') {
@@ -74,19 +115,20 @@ async function withTimeout(promise, ms, label) {
 async function scanViaWebSearch(org) {
     try {
         const response = await withTimeout(anthropic.messages.create({
-            model: 'claude-sonnet-4-20250514',
+            model: 'claude-sonnet-4-6',
             max_tokens: 2000,
             tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+            tool_choice: { type: 'any' },
             messages: [{
                     role: 'user',
-                    content: `Search for current open job positions at ${org.name}.
+                    content: `Use web_search to find current open job positions at ${org.name}.
 Query: "${org.searchQuery}"
 
-Find ONLY real, currently open positions posted in 2025 or 2026.
+Search the web NOW and find ONLY real, currently open positions posted in 2025 or 2026.
 Include ONLY positions in these locations: USA, UK, Germany, Sweden,
 Switzerland, Canada, Singapore, Australia, or India.
 
-Return ONLY a JSON array, no markdown, no explanation:
+After searching, return ONLY a JSON array, no markdown, no explanation:
 [{
   "title": "exact job title",
   "location": "city, country (must be specific — not just 'remote')",
@@ -96,7 +138,7 @@ Return ONLY a JSON array, no markdown, no explanation:
 }]
 If no relevant open positions found, return: []`
                 }]
-        }), 15000, `webSearch for ${org.name}`);
+        }), 45000, `webSearch for ${org.name}`);
         let raw = '';
         for (const block of response.content) {
             if (block.type === 'text')
@@ -108,9 +150,14 @@ If no relevant open positions found, return: []`
         if (start === -1 || end === -1)
             return [];
         const parsed = JSON.parse(raw.slice(start, end + 1));
-        return parsed
-            .filter((j) => j.title && isRelevant(j.title, j.snippet))
-            .filter((j) => j.location && isRelevantLocation(j.location))
+        const afterTitleFilter = parsed.filter((j) => j.title && isRelevant(j.title, j.snippet));
+        const afterLocationFilter = afterTitleFilter.filter((j) => j.location && isRelevantLocation(j.location));
+        console.log(`[Monitor] ${org.name}: raw=${parsed.length}, after-title-filter=${afterTitleFilter.length}, after-location-filter=${afterLocationFilter.length}`);
+        if (afterTitleFilter.length > afterLocationFilter.length) {
+            const dropped = afterTitleFilter.filter((j) => !j.location || !isRelevantLocation(j.location));
+            console.log(`[Monitor] ${org.name}: dropped locations: ${dropped.map((j) => `"${j.location}"`).join(', ')}`);
+        }
+        return afterLocationFilter
             .map((j) => ({
             externalId: hashContent(j.title, org.name, j.location || ''),
             title: j.title,
