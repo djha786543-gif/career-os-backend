@@ -134,19 +134,20 @@ async function scanViaWebSearch(org: MonitorOrg): Promise<ScannedJob[]> {
   try {
     const response = await withTimeout(
       anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: 2000,
         tools: [{ type: 'web_search_20250305' as any, name: 'web_search' }],
+        tool_choice: { type: 'any' } as any,
         messages: [{
           role: 'user',
-          content: `Search for current open job positions at ${org.name}.
+          content: `Use web_search to find current open job positions at ${org.name}.
 Query: "${org.searchQuery}"
 
-Find ONLY real, currently open positions posted in 2025 or 2026.
+Search the web NOW and find ONLY real, currently open positions posted in 2025 or 2026.
 Include ONLY positions in these locations: USA, UK, Germany, Sweden,
 Switzerland, Canada, Singapore, Australia, or India.
 
-Return ONLY a JSON array, no markdown, no explanation:
+After searching, return ONLY a JSON array, no markdown, no explanation:
 [{
   "title": "exact job title",
   "location": "city, country (must be specific — not just 'remote')",
@@ -157,7 +158,7 @@ Return ONLY a JSON array, no markdown, no explanation:
 If no relevant open positions found, return: []`
         }]
       }),
-      15000,
+      45000,
       `webSearch for ${org.name}`
     )
 
@@ -173,9 +174,15 @@ If no relevant open positions found, return: []`
 
     const parsed = JSON.parse(raw.slice(start, end + 1))
 
-    return parsed
-      .filter((j: any) => j.title && isRelevant(j.title, j.snippet))
-      .filter((j: any) => j.location && isRelevantLocation(j.location))
+    const afterTitleFilter = parsed.filter((j: any) => j.title && isRelevant(j.title, j.snippet))
+    const afterLocationFilter = afterTitleFilter.filter((j: any) => j.location && isRelevantLocation(j.location))
+    console.log(`[Monitor] ${org.name}: raw=${parsed.length}, after-title-filter=${afterTitleFilter.length}, after-location-filter=${afterLocationFilter.length}`)
+    if (afterTitleFilter.length > afterLocationFilter.length) {
+      const dropped = afterTitleFilter.filter((j: any) => !j.location || !isRelevantLocation(j.location))
+      console.log(`[Monitor] ${org.name}: dropped locations: ${dropped.map((j: any) => `"${j.location}"`).join(', ')}`)
+    }
+
+    return afterLocationFilter
       .map((j: any) => ({
         externalId: hashContent(j.title, org.name, j.location || ''),
         title: j.title,
