@@ -89,11 +89,18 @@ function isRelevant(title: string, description: string = ''): boolean {
   return relevanceScore(title, description) >= 1
 }
 
+// US state abbreviations pattern — catches "Thousand Oaks, CA", "Tarrytown, NY", etc.
+const US_STATE_ABBREV_RE = /,\s*(al|ak|az|ar|ca|co|ct|de|fl|ga|hi|id|il|in|ia|ks|ky|la|me|md|ma|mi|mn|ms|mo|mt|ne|nv|nh|nj|nm|ny|nc|nd|oh|ok|or|pa|ri|sc|sd|tn|tx|ut|vt|va|wa|wv|wi|wy|dc)\b/i
+
 // RECOMMENDATION 1: Fixed location filter — require explicit location match
 function isRelevantLocation(location: string = ''): boolean {
   if (!location || location.trim() === '') return false
   const loc = location.toLowerCase()
-  return RELEVANT_LOCATIONS.some(l => loc.includes(l))
+  // Direct match against known cities/countries
+  if (RELEVANT_LOCATIONS.some(l => loc.includes(l))) return true
+  // Catch any US city with a state abbreviation e.g. "Thousand Oaks, CA" or "Rahway, NJ"
+  if (US_STATE_ABBREV_RE.test(location)) return true
+  return false
 }
 
 function hashContent(title: string, org: string, location: string): string {
