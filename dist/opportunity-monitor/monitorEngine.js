@@ -19,8 +19,10 @@ const RELEVANT_KEYWORDS = [
     'research fellow', 'scientist i', 'scientist ii', 'scientist iii',
     'associate scientist', 'junior scientist', 'postdoctoral associate',
     'postdoctoral fellow', 'research officer',
-    // Industry titles: "Scientist, Oncology" / "Scientist II" without prefix
+    // Industry titles without prefix: "Scientist, Oncology" / "Scientist II"
     'scientist',
+    // Domain terms that anchor scientific roles
+    'biology', 'researcher',
     // Additional patterns common at pharma/biotech and Indian institutes
     'junior research fellow', 'senior research fellow', 'project associate',
     'project scientist', 'research assistant', 'lab technician',
@@ -149,9 +151,10 @@ async function scanViaWebSearch(org) {
                 continue;
             if (!isRelevant(title, snippet))
                 continue;
-            // Location: scan snippet for known city names, fallback to org.country
+            // Location: scan snippet for known city names, fallback to org.country.
+            // List ordered roughly by frequency in biotech/academic job postings.
             let location = org.country;
-            const locMatch = snippet.match(/\b(bangalore|bengaluru|mumbai|delhi|hyderabad|pune|boston|cambridge|san francisco|south san francisco|la jolla|san diego|palo alto|stanford|seattle|new york|bethesda|london|oxford|heidelberg|munich|berlin|zurich|stockholm|singapore|toronto|montreal|melbourne|sydney)\b/i);
+            const locMatch = snippet.match(/\b(bangalore|bengaluru|mumbai|delhi|new delhi|hyderabad|pune|kolkata|chennai|boston|cambridge|san francisco|south san francisco|la jolla|san diego|palo alto|stanford|seattle|new york|bethesda|gaithersburg|thousand oaks|tarrytown|london|oxford|cambridge uk|edinburgh|heidelberg|munich|berlin|frankfurt|hamburg|zurich|basel|geneva|stockholm|solna|amsterdam|leiden|paris|singapore|toronto|montreal|vancouver|melbourne|sydney|brisbane)\b/i);
             if (locMatch)
                 location = locMatch[0];
             jobs.push({
