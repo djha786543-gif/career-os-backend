@@ -5,16 +5,51 @@ import crypto from 'crypto'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-// Pooja-relevant job title and domain keywords
+// ─── Pooja-Core Profile ────────────────────────────────────────────────────
+// Rank 1 job title keywords — positions Pooja is actually targeting
+const POOJA_RANK1_KEYWORDS = [
+  'assistant professor', 'scientist', 'investigator', 'research scientist',
+  'group leader', 'tenure track', 'tenure-track', 'faculty', 'staff scientist',
+  'senior scientist', 'principal scientist', 'research fellow'
+]
+
+// Technical domain anchors — Pooja's core expertise areas
+const TECHNICAL_ANCHORS = [
+  'molecular', 'genetics', 'cardiovascular', 'genomics', 'bioinformatics',
+  'cell biology', 'molecular biology', 'cardiac', 'transcriptomics',
+  'proteomics', 'crispr', 'rna', 'heart'
+]
+
+// Hard filter: discard these title terms UNLESS the title is 'Assistant Professor'
+const HARD_FILTER_TERMS = [
+  'technician', 'postdoc', 'postdoctoral', 'intern', 'internship',
+  'junior', 'admin', 'administrative', 'coordinator', 'assistant'
+]
+
+// Tier 1 orgs for +1 suitability bonus
+const TIER1_ORG_NAMES = new Set([
+  'Harvard Medical School', 'Stanford Medicine', 'MIT Biology', 'UCSF',
+  'Broad Institute', 'Johns Hopkins Medicine', 'Mayo Clinic Research',
+  'Salk Institute', 'Columbia University Medical Center', 'Yale School of Medicine',
+  'Gladstone Institutes', 'Scripps Research', 'UT Southwestern Medical Center',
+  'Baylor College of Medicine', 'Washington University St Louis', 'Weill Cornell Medicine',
+  'NIH NHLBI', 'NIH NIGMS', 'NIH NCI',
+  'Karolinska Institute', 'ETH Zurich', 'EMBL Jobs', 'Francis Crick Institute',
+  'Wellcome Sanger Institute', 'Max Planck Heart and Lung', 'Roche',
+  'Genentech', 'Regeneron', 'Amgen', 'Pfizer Research', 'Merck Research',
+  'NCBS Bangalore', 'IISc Bangalore', 'TIFR Mumbai'
+])
+
+// Pooja-relevant job title and domain keywords (used for legacy relevance scoring)
 const RELEVANT_KEYWORDS = [
-  'postdoc', 'postdoctoral', 'research scientist', 'research associate',
+  'research scientist', 'research associate',
   'senior scientist', 'staff scientist', 'principal scientist',
   'cardiovascular', 'molecular biology', 'cell biology', 'genomics',
   'sequencing', 'crispr', 'rna', 'cardiac', 'heart failure',
   'cardiomyopathy', 'transcriptomics', 'proteomics', 'bioinformatics',
   'research fellow', 'scientist i', 'scientist ii', 'scientist iii',
-  'associate scientist', 'junior scientist', 'postdoctoral associate',
-  'postdoctoral fellow', 'research officer'
+  'associate scientist', 'assistant professor', 'group leader',
+  'investigator', 'faculty', 'tenure track'
 ]
 
 // RECOMMENDATION 1: Strict location filtering
@@ -55,6 +90,36 @@ function isRelevantLocation(location: string = ''): boolean {
   return RELEVANT_LOCATIONS.some(l => loc.includes(l))
 }
 
+// Hard filter: returns false for roles Pooja should not see
+// Exception: "assistant professor" is always allowed despite containing 'assistant'
+function passesHardFilter(title: string): boolean {
+  const t = title.toLowerCase()
+  if (t.includes('assistant professor')) return true
+  return !HARD_FILTER_TERMS.some(term => t.includes(term))
+}
+
+// Pooja suitability scorer (0–5 scale). Jobs must score ≥ 3 to be stored.
+function poojaSuitabilityScore(title: string, snippet: string, orgName: string): number {
+  const text = (title + ' ' + snippet).toLowerCase()
+  let score = 0
+  if (POOJA_RANK1_KEYWORDS.some(kw => text.includes(kw))) score += 2
+  if (TECHNICAL_ANCHORS.some(anchor => text.includes(anchor))) score += 2
+  if (TIER1_ORG_NAMES.has(orgName)) score += 1
+  return score
+}
+
+// Filter out generic social/landing-page URLs that don't point to actual job postings
+function extractCanonicalUrl(url: string, fallback: string): string {
+  if (!url) return fallback
+  const GENERIC_DOMAINS = [
+    'linkedin.com/company', 'linkedin.com/in/', 'linkedin.com/jobs',
+    'twitter.com', 'x.com', 'facebook.com', 'instagram.com',
+    'youtube.com', 'glassdoor.com/Overview'
+  ]
+  if (GENERIC_DOMAINS.some(d => url.includes(d))) return fallback
+  return url
+}
+
 function hashContent(title: string, org: string, location: string): string {
   return crypto
     .createHash('sha256')
@@ -86,6 +151,7 @@ interface ScannedJob {
   postedDate?: string
   contentHash: string
   relevanceScore: number
+  highSuitability: boolean
 }
 
 // RECOMMENDATION 4: websearch is last resort — RSS and USAJobs preferred
@@ -135,17 +201,20 @@ If no relevant open positions found, return: []`
     return parsed
       .filter((j: any) => j.title && isRelevant(j.title, j.snippet))
       .filter((j: any) => j.location && isRelevantLocation(j.location))
+      .filter((j: any) => passesHardFilter(j.title))
+      .filter((j: any) => poojaSuitabilityScore(j.title, j.snippet || '', org.name) >= 3)
       .map((j: any) => ({
         externalId: hashContent(j.title, org.name, j.location || ''),
         title: j.title,
         orgName: org.name,
         location: j.location,
         country: org.country,
-        applyUrl: j.applyUrl || org.careersUrl || '',
+        applyUrl: extractCanonicalUrl(j.applyUrl || '', org.careersUrl || ''),
         snippet: j.snippet || '',
         postedDate: j.postedDate || 'Recent',
         contentHash: hashContent(j.title, org.name, j.location || ''),
-        relevanceScore: relevanceScore(j.title, j.snippet)
+        relevanceScore: relevanceScore(j.title, j.snippet),
+        highSuitability: true
       }))
       .sort((a: ScannedJob, b: ScannedJob) => b.relevanceScore - a.relevanceScore)
 
@@ -182,12 +251,19 @@ async function scanViaUSAJobs(org: MonitorOrg): Promise<ScannedJob[]> {
     return items
       .filter((item: any) => {
         const title = item.MatchedObjectDescriptor?.PositionTitle || ''
-        return isRelevant(title)
+        return isRelevant(title) && passesHardFilter(title)
+      })
+      .filter((item: any) => {
+        const d = item.MatchedObjectDescriptor
+        const title = d.PositionTitle || ''
+        const snippet = (d.UserArea?.Details?.JobSummary || '').slice(0, 150)
+        return poojaSuitabilityScore(title, snippet, org.name) >= 3
       })
       .map((item: any) => {
         const d = item.MatchedObjectDescriptor
         const title = d.PositionTitle || ''
         const location = d.PositionLocation?.[0]?.LocationName || 'Washington DC, USA'
+        const snippet = (d.UserArea?.Details?.JobSummary || '').slice(0, 150)
         return {
           externalId: d.PositionID || hashContent(title, org.name, location),
           title,
@@ -195,10 +271,11 @@ async function scanViaUSAJobs(org: MonitorOrg): Promise<ScannedJob[]> {
           location,
           country: 'USA',
           applyUrl: d.ApplyURI?.[0] || '',
-          snippet: (d.UserArea?.Details?.JobSummary || '').slice(0, 150),
+          snippet,
           postedDate: d.PublicationStartDate?.split('T')[0] || 'Recent',
           contentHash: hashContent(title, org.name, location),
-          relevanceScore: relevanceScore(title)
+          relevanceScore: relevanceScore(title),
+          highSuitability: true
         }
       })
   } catch (err) {
@@ -240,10 +317,14 @@ async function scanViaRSS(org: MonitorOrg): Promise<ScannedJob[]> {
       const pubDate = item.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] || 'Recent'
 
       if (!isRelevant(title, desc)) continue
+      if (!passesHardFilter(title)) continue
 
       const location = org.country
 
       if (!isRelevantLocation(location)) continue
+
+      const suitability = poojaSuitabilityScore(title, desc, org.name)
+      if (suitability < 3) continue
 
       items.push({
         externalId: hashContent(title, org.name, location),
@@ -251,11 +332,12 @@ async function scanViaRSS(org: MonitorOrg): Promise<ScannedJob[]> {
         orgName: org.name,
         location,
         country: org.country,
-        applyUrl: link,
+        applyUrl: extractCanonicalUrl(link, org.careersUrl || ''),
         snippet: desc,
         postedDate: pubDate,
         contentHash: hashContent(title, org.name, location),
-        relevanceScore: relevanceScore(title, desc)
+        relevanceScore: relevanceScore(title, desc),
+        highSuitability: suitability >= 3
       })
     }
 
@@ -305,11 +387,12 @@ export async function scanOrg(orgId: string, org: MonitorOrg): Promise<{
         `INSERT INTO monitor_jobs
            (org_id, external_id, title, org_name, location, country,
             sector, apply_url, snippet, posted_date, content_hash,
-            is_new, is_active, last_seen_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,true,true,NOW())
+            high_suitability, is_new, is_active, last_seen_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,true,true,NOW())
          ON CONFLICT (org_id, external_id) DO UPDATE
            SET is_active = true,
                last_seen_at = NOW(),
+               high_suitability = $12,
                is_new = CASE
                  WHEN monitor_jobs.content_hash != $11 THEN true
                  ELSE monitor_jobs.is_new
@@ -318,7 +401,8 @@ export async function scanOrg(orgId: string, org: MonitorOrg): Promise<{
          RETURNING (xmax = 0) as inserted`,
         [orgId, job.externalId, job.title, job.orgName,
          job.location, job.country, org.sector,
-         job.applyUrl, job.snippet, job.postedDate, job.contentHash]
+         job.applyUrl, job.snippet, job.postedDate, job.contentHash,
+         job.highSuitability]
       )
       if (result.rows[0]?.inserted) newCount++
     } catch (err) {
@@ -369,7 +453,7 @@ export async function runFullScan(): Promise<void> {
     console.log('[Monitor] Advisory lock acquired, starting full scan...')
 
     // Cost optimisation: scan only 10 orgs per run (oldest-first).
-    // All 65 orgs rotate over 6-7 days.
+    // All 82 orgs rotate over 8-9 days.
     const orgs = await pool.query(
       `SELECT id, name FROM monitor_orgs
        WHERE is_active = true
@@ -381,7 +465,9 @@ export async function runFullScan(): Promise<void> {
       const orgConfig = MONITOR_ORGS.find(o => o.name === row.name)
       if (!orgConfig) continue
       await scanOrg(row.id, orgConfig)
-      await new Promise(r => setTimeout(r, 3000))
+      // slowFetch orgs get extra delay to respect their rate limits
+      const delay = orgConfig.slowFetch ? 8000 : 3000
+      await new Promise(r => setTimeout(r, delay))
     }
 
     // RECOMMENDATION 6: Clean up jobs not seen in 30 days

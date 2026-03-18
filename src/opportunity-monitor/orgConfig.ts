@@ -6,6 +6,7 @@ export interface MonitorOrg {
   rssUrl?: string
   apiType: 'rss' | 'usajobs' | 'websearch' | 'adzuna' | 'natureJobs'
   searchQuery: string
+  slowFetch?: boolean  // Add extra inter-scan delay to respect org rate limits
 }
 
 // ─── webSearch is ONLY used for orgs with no free source ─────────────────────
@@ -132,11 +133,11 @@ export const MONITOR_ORGS: MonitorOrg[] = [
     searchQuery: "Genentech research scientist cardiovascular molecular biology 2026",
     careersUrl: "https://www.gene.com/careers" },
   { name: "AstraZeneca US", sector: "industry", country: "USA",
-    apiType: "websearch",
+    apiType: "websearch", slowFetch: true,
     searchQuery: "AstraZeneca research scientist cardiovascular postdoc 2026",
     careersUrl: "https://careers.astrazeneca.com" },
   { name: "Novartis US", sector: "industry", country: "USA",
-    apiType: "websearch",
+    apiType: "websearch", slowFetch: true,
     searchQuery: "Novartis research scientist cardiovascular molecular biology 2026" },
   { name: "Pfizer Research", sector: "industry", country: "USA",
     apiType: "websearch",
@@ -220,8 +221,8 @@ export const MONITOR_ORGS: MonitorOrg[] = [
 
   // ═══ INDIA — webSearch (no free API available for Indian institutes) ═══
   { name: "NCBS Bangalore", sector: "india", country: "India",
-    apiType: "websearch",
-    searchQuery: "NCBS Bangalore postdoc cardiovascular molecular biology position 2026",
+    apiType: "websearch", slowFetch: true,
+    searchQuery: "NCBS Bangalore research scientist faculty cardiovascular molecular biology 2026",
     careersUrl: "https://www.ncbs.res.in/jobs" },
   { name: "TIFR Mumbai", sector: "india", country: "India",
     apiType: "websearch",
@@ -245,8 +246,8 @@ export const MONITOR_ORGS: MonitorOrg[] = [
     apiType: "websearch",
     searchQuery: "JNCASR Bangalore postdoc molecular biology 2026" },
   { name: "IISER Pune", sector: "india", country: "India",
-    apiType: "websearch",
-    searchQuery: "IISER Pune postdoc biology cardiovascular molecular 2026" },
+    apiType: "websearch", slowFetch: true,
+    searchQuery: "IISER Pune faculty scientist biology cardiovascular molecular 2026" },
   { name: "RCB Faridabad", sector: "india", country: "India",
     apiType: "websearch",
     searchQuery: "RCB Faridabad postdoc molecular biology cardiovascular 2026" },
@@ -264,8 +265,49 @@ export const MONITOR_ORGS: MonitorOrg[] = [
     apiType: "websearch",
     searchQuery: "Syngene research scientist molecular biology cardiovascular 2026" },
   { name: "AstraZeneca India", sector: "india", country: "India",
-    apiType: "websearch",
+    apiType: "websearch", slowFetch: true,
     searchQuery: "AstraZeneca India research scientist cardiovascular molecular biology 2026" },
+
+  // ═══ INDIA — Tier 1 IITs (Biology / Biosciences) ═══
+  { name: "IIT Bombay Biosciences", sector: "india", country: "India",
+    apiType: "websearch",
+    searchQuery: "IIT Bombay assistant professor faculty biosciences molecular biology cardiovascular 2026" },
+  { name: "IIT Delhi Biochemical Engineering", sector: "india", country: "India",
+    apiType: "websearch",
+    searchQuery: "IIT Delhi assistant professor faculty biochemistry molecular biology 2026" },
+
+  // ═══ INDIA — IISERs (Tier 2 India Academics) ═══
+  { name: "IISER Kolkata", sector: "india", country: "India",
+    apiType: "websearch", slowFetch: true,
+    searchQuery: "IISER Kolkata faculty scientist assistant professor cardiovascular molecular biology 2026" },
+  { name: "IISER Bhopal", sector: "india", country: "India",
+    apiType: "websearch", slowFetch: true,
+    searchQuery: "IISER Bhopal faculty scientist assistant professor biology genomics 2026" },
+  { name: "IISER Mohali", sector: "india", country: "India",
+    apiType: "websearch", slowFetch: true,
+    searchQuery: "IISER Mohali faculty scientist assistant professor molecular biology 2026" },
+  { name: "IISER Thiruvananthapuram", sector: "india", country: "India",
+    apiType: "websearch", slowFetch: true,
+    searchQuery: "IISER Thiruvananthapuram faculty scientist molecular biology cardiovascular 2026" },
+
+  // ═══ GLOBAL PHARMA — International sector ═══
+  { name: "Roche", sector: "international", country: "Switzerland",
+    apiType: "websearch", slowFetch: true,
+    searchQuery: "Roche research scientist investigator cardiovascular genomics molecular biology 2026",
+    careersUrl: "https://www.roche.com/careers" },
+  { name: "GlaxoSmithKline GSK", sector: "industry", country: "UK",
+    apiType: "websearch",
+    searchQuery: "GSK GlaxoSmithKline research scientist cardiovascular molecular biology 2026",
+    careersUrl: "https://www.gsk.com/en-gb/careers/" },
+
+  // ═══ INTERNATIONAL — Additional Research Labs ═══
+  { name: "WEHI Melbourne", sector: "international", country: "Australia",
+    apiType: "websearch",
+    searchQuery: "WEHI Walter Eliza Hall Institute research scientist cardiovascular genomics 2026",
+    careersUrl: "https://www.wehi.edu.au/careers" },
+  { name: "MRC Harwell", sector: "international", country: "UK",
+    apiType: "websearch",
+    searchQuery: "MRC Harwell Institute scientist researcher cardiovascular genomics molecular biology 2026" },
 ]
 
-// Force Update: 82 Orgs Sync
+// Total: 82 Orgs — Tier 1-4 India Academics, Global Pharma, International Research Labs
