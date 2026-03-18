@@ -263,7 +263,17 @@ async function scanViaRSS(org) {
         for (const item of itemMatches.slice(0, 15)) {
             const title = (item.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/)?.[1] ||
                 item.match(/<title>(.*?)<\/title>/)?.[1] || '').trim();
-            const link = (item.match(/<link>(.*?)<\/link>/)?.[1] || '').trim();
+            // Try multiple link patterns in priority order:
+            // 1. Standard <link>url</link>
+            // 2. CDATA-wrapped <link><![CDATA[url]]></link>
+            // 3. Atom-style <link href="url"/>
+            // 4. <guid isPermaLink="true"> or plain <guid> (common fallback in RSS 2.0)
+            // 5. org.careersUrl so the button always goes somewhere useful
+            const link = (item.match(/<link><!\[CDATA\[(.*?)\]\]><\/link>/)?.[1] ||
+                item.match(/<link>([^<]+)<\/link>/)?.[1] ||
+                item.match(/<link[^>]+href=["']([^"']+)["']/)?.[1] ||
+                item.match(/<guid[^>]*>([^<]+)<\/guid>/)?.[1] ||
+                org.careersUrl || '').trim();
             const desc = (item.match(/<description><!\[CDATA\[(.*?)\]\]><\/description>/)?.[1] ||
                 item.match(/<description>(.*?)<\/description>/)?.[1] || '').replace(/<[^>]+>/g, '').slice(0, 150).trim();
             const pubDate = item.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] || 'Recent';
@@ -331,6 +341,11 @@ async function scanOrg(orgId, org) {
          ON CONFLICT (org_id, external_id) DO UPDATE
            SET is_active = true,
                last_seen_at = NOW(),
+               apply_url = CASE
+                 WHEN monitor_jobs.apply_url IS NULL OR monitor_jobs.apply_url = ''
+                 THEN EXCLUDED.apply_url
+                 ELSE monitor_jobs.apply_url
+               END,
                is_new = CASE
                  WHEN monitor_jobs.content_hash != $11 THEN true
                  ELSE monitor_jobs.is_new
