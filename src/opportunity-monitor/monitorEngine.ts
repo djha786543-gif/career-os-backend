@@ -364,6 +364,8 @@ export async function scanOrg(orgId: string, org: MonitorOrg): Promise<{
   found: number, newJobs: number, error?: string
 }> {
   let jobs: ScannedJob[] = []
+  // Record time before any upserts so we can expire jobs not seen in this scan
+  const scanStart = new Date()
 
   try {
     switch (org.apiType) {
@@ -416,6 +418,29 @@ export async function scanOrg(orgId: string, org: MonitorOrg): Promise<{
       if (result.rows[0]?.inserted) newCount++
     } catch (err) {
       console.error(`[Monitor] Failed to save job "${job.title}":`, (err as Error).message)
+    }
+  }
+
+  // RSS and USAJobs return the complete current feed — any of this org's jobs
+  // that weren't refreshed (last_seen_at < scanStart) have been removed from
+  // the source and should be marked inactive immediately rather than waiting
+  // for the 14-day global expiry.
+  if ((org.apiType === 'rss' || org.apiType === 'usajobs') && jobs.length > 0) {
+    try {
+      const expired = await pool.query(
+        `UPDATE monitor_jobs
+         SET is_active = false
+         WHERE org_id = $1
+           AND is_active = true
+           AND last_seen_at < $2
+         RETURNING id`,
+        [orgId, scanStart]
+      )
+      if (expired.rows.length > 0) {
+        console.log(`[Monitor] ${org.name}: expired ${expired.rows.length} stale listing(s)`)
+      }
+    } catch (err) {
+      console.error('[Monitor] Stale-job cleanup failed:', (err as Error).message)
     }
   }
 
@@ -481,11 +506,12 @@ export async function runFullScan(): Promise<void> {
       await new Promise(r => setTimeout(r, 3000))
     }
 
-    // RECOMMENDATION 6: Clean up jobs not seen in 30 days
+    // Global safety-net expiry: any job not seen in 14 days is considered gone.
+    // RSS/USAJobs orgs get per-scan cleanup above; this catches websearch orgs.
     const cleaned = await pool.query(
       `UPDATE monitor_jobs
        SET is_active = false
-       WHERE last_seen_at < NOW() - INTERVAL '30 days'
+       WHERE last_seen_at < NOW() - INTERVAL '14 days'
        AND is_active = true
        RETURNING id`
     )
