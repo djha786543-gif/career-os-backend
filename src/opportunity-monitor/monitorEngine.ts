@@ -14,7 +14,13 @@ const RELEVANT_KEYWORDS = [
   'cardiomyopathy', 'transcriptomics', 'proteomics', 'bioinformatics',
   'research fellow', 'scientist i', 'scientist ii', 'scientist iii',
   'associate scientist', 'junior scientist', 'postdoctoral associate',
-  'postdoctoral fellow', 'research officer'
+  'postdoctoral fellow', 'research officer',
+  // Industry titles: "Scientist, Oncology" / "Scientist II" without prefix
+  'scientist',
+  // Additional patterns common at pharma/biotech and Indian institutes
+  'junior research fellow', 'senior research fellow', 'project associate',
+  'project scientist', 'research assistant', 'lab technician',
+  'computational biologist', 'bioinformatician'
 ]
 
 // RECOMMENDATION 1: Strict location filtering
@@ -155,7 +161,7 @@ async function scanViaWebSearch(org: MonitorOrg): Promise<ScannedJob[]> {
           content: `Use web_search to find current open job positions at ${org.name}.
 Query: "${org.searchQuery}"
 
-Search the web NOW and find ONLY real, currently open positions posted in 2025 or 2026.
+Search the web NOW and find ONLY real, currently open positions.
 Include ONLY positions in these locations: USA, UK, Germany, Sweden,
 Switzerland, Canada, Singapore, Australia, or India.
 
