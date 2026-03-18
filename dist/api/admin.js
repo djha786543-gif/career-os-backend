@@ -48,8 +48,21 @@ router.get('/usage', async (req, res) => {
         const total_scans = row.total_scans_month || 0;
         const jobs_found = row.jobs_found_month || 0;
         const estimated_cost = parseFloat((ai_calls * COST_PER_AI_CALL).toFixed(3));
+        // ── 3. Budget fallback ───────────────────────────────────────────────────
+        // If no admin key, use ANTHROPIC_MONTHLY_BUDGET env var (e.g. 20) to
+        // synthesise a pseudo available_balance = budget - estimated_monthly_cost.
+        let source = 'estimated';
+        if (available_balance !== null) {
+            source = 'anthropic_api';
+        }
+        else {
+            const budget = parseFloat(process.env.ANTHROPIC_MONTHLY_BUDGET || '');
+            if (!isNaN(budget) && budget > 0) {
+                available_balance = parseFloat((budget - estimated_cost).toFixed(3));
+                source = 'budgeted';
+            }
+        }
         res.json({
-            // Credit balance — only populated when ANTHROPIC_ADMIN_KEY is set
             available_balance,
             total_spent: total_spent_api ?? estimated_cost,
             // Local scan tracking (always available)
@@ -60,8 +73,8 @@ router.get('/usage', async (req, res) => {
             // Rates for frontend calculations
             cost_per_ai_call: COST_PER_AI_CALL,
             cost_per_scan_cycle: COST_PER_SCAN_CYCLE,
-            // Lets the widget know whether balance is real or estimated
-            source: available_balance !== null ? 'anthropic_api' : 'estimated',
+            // 'anthropic_api' | 'budgeted' | 'estimated'
+            source,
         });
     }
     catch (err) {
