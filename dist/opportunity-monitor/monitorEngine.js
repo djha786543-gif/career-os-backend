@@ -430,11 +430,21 @@ async function seedOrgs() {
              country = EXCLUDED.country,
              careers_url = EXCLUDED.careers_url,
              rss_url = EXCLUDED.rss_url,
-             api_type = EXCLUDED.api_type
+             api_type = EXCLUDED.api_type,
+             is_active = true
        RETURNING (xmax = 0) as inserted`, [org.name, org.sector, org.country,
             org.careersUrl || null, org.rssUrl || null, org.apiType]);
         if (result.rows[0]?.inserted)
             added++;
     }
-    console.log(`[Monitor] Org sync complete: ${added} new, ${orgConfig_1.MONITOR_ORGS.length} total in config`);
+    // Deactivate orgs that are no longer in MONITOR_ORGS — otherwise they fill
+    // scan batch slots and get skipped (config not found), starving real orgs.
+    const configNames = orgConfig_1.MONITOR_ORGS.map(o => o.name);
+    const deactivated = await client_1.pool.query(`UPDATE monitor_orgs SET is_active = false
+     WHERE name != ALL($1::text[]) AND is_active = true
+     RETURNING name`, [configNames]);
+    if (deactivated.rows.length > 0) {
+        console.log(`[Monitor] Deactivated ${deactivated.rows.length} removed orgs: ${deactivated.rows.map((r) => r.name).join(', ')}`);
+    }
+    console.log(`[Monitor] Org sync complete: ${added} new, ${orgConfig_1.MONITOR_ORGS.length} active in config`);
 }
