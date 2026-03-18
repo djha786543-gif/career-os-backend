@@ -187,10 +187,25 @@ If no relevant open positions found, return: []`
     const parsed = JSON.parse(raw.slice(start, end + 1))
 
     const afterTitleFilter = parsed.filter((j: any) => j.title && isRelevant(j.title, j.snippet))
-    const afterLocationFilter = afterTitleFilter.filter((j: any) => j.location && isRelevantLocation(j.location))
+
+    // Task 2: location normalizer — if AI returned a vague/empty location but
+    // we already know which country this org is in, substitute org.country so
+    // the location filter passes instead of silently dropping real results.
+    const VAGUE_LOCATIONS = ['remote', 'hybrid', 'multiple locations', 'worldwide', 'global', 'anywhere', '']
+    const normalizedFilter = afterTitleFilter.map((j: any) => {
+      const loc: string = (j.location || '').toLowerCase().trim()
+      if (VAGUE_LOCATIONS.includes(loc)) {
+        const original = j.location || ''
+        console.log(`[Monitor] ${org.name}: location fallback "${original}" → "${org.country}"`)
+        return { ...j, location: org.country }
+      }
+      return j
+    })
+
+    const afterLocationFilter = normalizedFilter.filter((j: any) => j.location && isRelevantLocation(j.location))
     console.log(`[Monitor] ${org.name}: raw=${parsed.length}, after-title-filter=${afterTitleFilter.length}, after-location-filter=${afterLocationFilter.length}`)
     if (afterTitleFilter.length > afterLocationFilter.length) {
-      const dropped = afterTitleFilter.filter((j: any) => !j.location || !isRelevantLocation(j.location))
+      const dropped = normalizedFilter.filter((j: any) => !j.location || !isRelevantLocation(j.location))
       console.log(`[Monitor] ${org.name}: dropped locations: ${dropped.map((j: any) => `"${j.location}"`).join(', ')}`)
     }
 
@@ -216,6 +231,9 @@ If no relevant open positions found, return: []`
 }
 
 async function scanViaUSAJobs(org: MonitorOrg): Promise<ScannedJob[]> {
+  if (!process.env.USAJOBS_API_KEY) {
+    console.warn('[Monitor] USAJOBS_API_KEY not set — USAJobs orgs will fall back to websearch')
+  }
   try {
     const query = encodeURIComponent(org.searchQuery)
     const url = `https://data.usajobs.gov/api/search?Keyword=${query}&ResultsPerPage=10`
@@ -428,13 +446,16 @@ export async function runFullScan(): Promise<void> {
 
     console.log('[Monitor] Advisory lock acquired, starting full scan...')
 
-    // Cost optimisation: scan only 10 orgs per run (oldest-first).
-    // All 65 orgs rotate over 6-7 days.
+    // Cost optimisation: RSS and USAJobs orgs run first (they're free and fast ~100ms).
+    // Websearch orgs fill remaining slots ordered by oldest-scanned-first.
+    // Limit raised to 20 because free-source orgs don't add AI cost and are ~100ms each.
     const orgs = await pool.query(
-      `SELECT id, name FROM monitor_orgs
+      `SELECT id, name, api_type FROM monitor_orgs
        WHERE is_active = true
-       ORDER BY last_scanned_at ASC NULLS FIRST
-       LIMIT 10`
+       ORDER BY
+         CASE WHEN api_type = 'websearch' THEN 1 ELSE 0 END ASC,
+         last_scanned_at ASC NULLS FIRST
+       LIMIT 20`
     )
 
     for (const row of orgs.rows) {
