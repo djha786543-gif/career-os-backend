@@ -1,0 +1,227 @@
+
+# 2026-03-16 21:43:13.236289
++Y
+
+# 2026-03-16 21:44:17.072314
++Architect: Create a standalone, non-destructive seed script.
++
++1. File: Create scripts/seed_pooja_only.ts.
++2. Safety First: Do NOT modify the database schema or any existing files. Do NOT use Prisma.
++3. Connection: Import the existing database pool from src/db.ts to ensure we use the established Railway connection.
++4. Data: Add the 50 international research institutions (TUM, NUS, McGill, etc.) to the TargetCompanies table.
++5. RLS Protection: Explicitly set candidate_id = 'pooja' for all 50 rows so they do not show up in DJ's audit dashboard.
++6. Idempotency: Use ON CONFLICT (name) DO NOTHING so that if the script is run twice, it doesn't create duplicates or overwrite your hard-earned data
+
+# 2026-03-16 21:44:20.401873
++y
+
+# 2026-03-16 21:51:14.496735
++The table check reveals the correct table name is monitor_orgs.
++
++1. Update scripts/seed_pooja_only.ts to use the table name monitor_orgs instead of TargetCompanies.
++2. Map the data correctly:
++
++Institution Name goes into the name column.
++
++Sector (academic/government) goes into the sector column.
++
++Candidate ID ('pooja') goes into the candidate_id column.
++3. Add a column check: If the table has a url column, just leave it as an empty string or null for now.
++4. Use the ON CONFLICT (name) DO NOTHING logic to prevent duplicates.
+
+# 2026-03-16 21:51:17.050214
++y
+
+# 2026-03-16 21:56:01.264909
++The schema check for monitor_orgs is complete. The table does NOT have a candidate_id column.
++
++1. Update scripts/seed_pooja_only.ts to remove all references to candidate_id.
++2. Map the data to these existing columns:
++
++Name: Institution Name (e.g., 'Technical University of Munich')
++
++Sector: Set this to 'academic' or 'government'.
++
++Country: Set this to the appropriate country (e.g., 'Germany', 'Canada', 'Singapore', 'India').
++
++Is_active: Set this to true.
++3. Logic: Keep the ON CONFLICT (name) DO NOTHING to prevent duplicates.
+
+# 2026-03-16 22:02:18.499226
++Task: Final One-Shot Fix for seed_pooja_only.ts
++
++1. Fix Constraint Violation: The database rejected 'academic'. Update the seed data to use 'Academic' and 'Government' (Capitalized) as these are the standard PostgreSQL check constraint defaults.
++
++2. Defensive Mapping:
++
++Convert the sector values to Title Case (e.g., .charAt(0).toUpperCase() + s.slice(1)) before inserting, just in case.
++
++If the country also has a constraint, ensure countries are also Title Case (e.g., 'Germany', 'Canada').
++
++3. Safe Fallback: Wrap the pool.query in a try/catch that logs the exact failing sector so we can see it, but allows the script to keep trying the other rows.
++
++4. Data Finalization: Ensure is_active is true and the table name remains monitor_orgs.
++
++Goal: Successfully seed the 50 institutions by matching the expected database casing."
++
+
+# 2026-03-16 22:08:21.122653
++Architect: I need a foolproof version of scripts/seed_pooja_only.ts.
++
++1. Fix Transaction Lock: Change the logic so each insert happens in its own try/catch block. Do NOT use a global transaction. This ensures that if one row fails, the script continues to the next.
++
++2. Sector Discovery: >    * First, add a line at the start of the script that queries the database for any existing sectors: SELECT DISTINCT sector FROM monitor_orgs. Log these to the console so I can see them.
++
++For the seeding, change 'Academic' to 'Education' and 'Government' to 'Public Sector'—these are common alternatives.
++
++3. Fallback Sector: If an insert fails with a constraint error, catch it and try one more time with the sector set to NULL or 'Other'.
++
++4. Data: Keep all 50+ institutions, countries, and the is_active: true flag. Use the monitor_orgs table."
++
+
+# 2026-03-16 22:13:31.348736
++We found the allowed sectors! They are: industry, india, international, academia.
++
++Update the mapping in scripts/seed_pooja_only.ts:
++
++Map 'academic' to 'academia'.
++
++Map 'government' to 'international' (or 'academia' if preferred).
++
++Because the rows might already exist but with the wrong sector, change the SQL to an UPSERT:
++ON CONFLICT (name) DO UPDATE SET sector = EXCLUDED.sector, is_active = EXCLUDED.is_active
++
++Run the script one last time
+
+# 2026-03-17 10:05:21.071046
++Perform a full rewrite of src/components/tabs/OpportunityMonitor.tsx. Do not use partial updates or diff markers to avoid syntax errors.
++
++1. Data Fetching: Use useEffect to fetch from http://localhost:8080/api/monitor/jobs?sector=${activeSector} whenever activeSector changes.
++
++2. Robust Filtering: > * Add a 'Region' filter (ALL, DE, CA, SG).
++
++If a region is selected, filter the jobs list in the frontend by checking if job.location includes the region code.
++
++3. UI & Debugging:
++
++Add console.log("API Response:", data) inside the fetch function so I can see the raw data in the browser console.
++
++Use a dark theme (#0f172a) with green buttons (#22c55e).
++
++Ensure each job card is a clickable <a> tag using the link property.
++
++Display a 'Searching...' message when loading is true, without chaning other tab or fuctionalality
+
+# 2026-03-17 10:37:43.334616
++Act as a Backend Architect. We are migrating our job fetching engine from Adzuna to SerpApi + Gemini for maximum reliability.
++
++1. LIBRARIES & SETUP:
++
++Install google-genai and google-search-results.
++
++Update the project to use GEMINI_API_KEY and SERPAPI_KEY from environment variables.
++
++2. ENGINE REWRITE (The "Scraper"):
++
++Create a robust function fetch_jobs_via_serp(sector, region) that uses the google_jobs engine in SerpApi.
++
++Mapping Logic:
++
++academia: Query "Postdoctoral OR Research Scientist" targeting your target universities.
++
++industry: Query "Senior Internal Auditor OR IT Audit Manager" with "SOX ITGC" keywords.
++
++india: Query "Research Scientist OR Faculty at IIT OR IISc".
++
++Use the gl parameter in SerpApi to match the region (e.g., de for Germany, sg for Singapore).
++
++3. DATA NORMALIZATION (The "Contract"):
++
++The backend MUST return a list of dictionaries with these EXACT keys: title, organization_name, location, link.
++
++Ensure link is extracted from the related_links or the apply_options field in the SerpApi response.
++
++4. FAIL-SAFES:
++
++Wrap the API calls in a try/except block.
++
++If the API is down or returns zero results, return an empty list [] instead of throwing a 500 error.
++
++Add a print statement: print(f"DEBUG: Found {len(jobs)} jobs for {sector}") to the terminal logs.
++
++5. ENDPOINT:
++
++Ensure the /api/monitor/jobs endpoint correctly parses the sector and optional region query params and passes them to the new scraper function, and please make sure, you dont touch any other functinallity or tabs
+
+# 2026-03-17 10:41:55.267900
++# Short version (Aider aliases 'flash' to the latest Gemini Flash)
++aider --model flash
++
++# Explicit version
++aider --model gemini/gemini-2.5-flash
+
+# 2026-03-17 10:43:53.869207
++Act as a Backend Architect. We are migrating our job fetching engine from Adzuna to SerpApi + Gemini for maximum reliability.
++
++1. LIBRARIES & SETUP:
++
++Install google-genai and google-search-results.
++
++Update the project to use GEMINI_API_KEY and SERPAPI_KEY from environment variables.
++
++2. ENGINE REWRITE (The "Scraper"):
++
++Create a robust function fetch_jobs_via_serp(sector, region) that uses the google_jobs engine in SerpApi.
++
++Mapping Logic:
++
++academia: Query "Postdoctoral OR Research Scientist" targeting your target universities.
++
++industry: Query "Senior Internal Auditor OR IT Audit Manager" with "SOX ITGC" keywords.
++
++india: Query "Research Scientist OR Faculty at IIT OR IISc".
++
++Use the gl parameter in SerpApi to match the region (e.g., de for Germany, sg for Singapore).
++
++3. DATA NORMALIZATION (The "Contract"):
++
++The backend MUST return a list of dictionaries with these EXACT keys: title, organization_name, location, link.
++
++Ensure link is extracted from the related_links or the apply_options field in the SerpApi response.
++
++4. FAIL-SAFES:
++
++Wrap the API calls in a try/except block.
++
++If the API is down or returns zero results, return an empty list [] instead of throwing a 500 error.
++
++Add a print statement: print(f"DEBUG: Found {len(jobs)} jobs for {sector}") to the terminal logs.
++
++5. ENDPOINT:
++
++Ensure the /api/monitor/jobs endpoint correctly parses the sector and optional region query params and passes them to the new scraper function.
+
+# 2026-03-17 10:46:37.818297
++Migration Task: > 1. Core: Replace the Adzuna job fetching logic with SerpApi (google_jobs engine).
++2. Environment: Use GEMINI_API_KEY and SERPAPI_KEY.
++3. Search Terms: >    - academia: "Postdoc OR Research Scientist"
++
++industry: "Senior IT Auditor OR SOX ITGC"
++
++india: "Faculty OR Scientist at IIT OR IISc"
++
++Standardize JSON: Return a list of objects with keys: title, organization_name, location, link.
++
++Robustness: Wrap in try/except; return [] if no jobs found. Clean up any leftover Adzuna code.
+
+# 2026-03-17 11:23:18.088171
++Role: Backend Engineer. 
++Task: Optimize job fetching exclusively for Pooja's Cardiovascular Research.
++
++1. Logic: In the fetch_jobs function, implement a mapping where:
++   - 'Top 20 Universities' adds 'site:.edu' to the query.
++   - 'NIH/Government' adds 'site:nih.gov' to the query.
++2. Integration: Use the 'google-search-results' library with SerpApi. 
++3. Params: Pass 'google_jobs' as the engine. Use 'q' for the query and 'gl' for the country.
++4. Security: Pull the SerpApi key using os.getenv('SERPAPI_KEY'). Do not hardcode it.
++5. Return: Ensure the JSON output keys are exactly: title, organization_name, location, and link., wihtout hurting other tabs and functionality
