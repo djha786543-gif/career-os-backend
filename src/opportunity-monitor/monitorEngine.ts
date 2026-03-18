@@ -293,31 +293,47 @@ async function scanViaRSS(org: MonitorOrg): Promise<ScannedJob[]> {
     const text = await resp.text()
     console.log(`[RSS] ${org.name}: body preview=${text.slice(0, 200).replace(/\n/g, ' ')}`)
 
-    const itemMatches = text.match(/<item>([\s\S]*?)<\/item>/g) || []
-    console.log(`[RSS] ${org.name}: raw items found=${itemMatches.length}`)
+    // Support both RSS 2.0 (<item>) and Atom (<entry>) feed formats
+    const rssItems   = text.match(/<item>([\s\S]*?)<\/item>/g)   || []
+    const atomItems  = text.match(/<entry>([\s\S]*?)<\/entry>/g) || []
+    const allItems   = rssItems.length >= atomItems.length ? rssItems : atomItems
+    const feedFormat = rssItems.length >= atomItems.length ? 'RSS' : 'Atom'
+    console.log(`[RSS] ${org.name}: format=${feedFormat}, raw items found=${allItems.length}`)
 
     const items: ScannedJob[] = []
 
-    for (const item of itemMatches.slice(0, 20)) {
+    for (const item of allItems.slice(0, 20)) {
       const title = (
         item.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/)?.[1] ||
-        item.match(/<title>(.*?)<\/title>/)?.[1] || ''
-      ).trim()
+        item.match(/<title[^>]*>(.*?)<\/title>/)?.[1] || ''
+      ).replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim()
 
       const link = (
         item.match(/<link><!\[CDATA\[(.*?)\]\]><\/link>/)?.[1] ||
+        item.match(/<link[^>]+href=["']([^"']+)["']/)?.[1] ||   // Atom: <link href="url"/>
         item.match(/<link>([^<]+)<\/link>/)?.[1] ||
-        item.match(/<link[^>]+href=["']([^"']+)["']/)?.[1] ||
+        item.match(/<guid[^>]*isPermaLink="true"[^>]*>([^<]+)<\/guid>/)?.[1] ||
         item.match(/<guid[^>]*>([^<]+)<\/guid>/)?.[1] ||
         org.careersUrl || ''
       ).trim()
 
       const desc = (
+        // RSS 2.0 description (CDATA or plain)
         item.match(/<description><!\[CDATA\[([\s\S]*?)\]\]><\/description>/)?.[1] ||
-        item.match(/<description>([\s\S]*?)<\/description>/)?.[1] || ''
+        item.match(/<description>([\s\S]*?)<\/description>/)?.[1] ||
+        // Atom summary / content
+        item.match(/<summary[^>]*><!\[CDATA\[([\s\S]*?)\]\]><\/summary>/)?.[1] ||
+        item.match(/<summary[^>]*>([\s\S]*?)<\/summary>/)?.[1] ||
+        item.match(/<content[^>]*><!\[CDATA\[([\s\S]*?)\]\]><\/content>/)?.[1] ||
+        item.match(/<content[^>]*>([\s\S]*?)<\/content>/)?.[1] || ''
       ).replace(/<[^>]+>/g, '').slice(0, 150).trim()
 
-      const pubDate = item.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] || 'Recent'
+      const pubDate = (
+        item.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] ||
+        item.match(/<published>(.*?)<\/published>/)?.[1] ||  // Atom
+        item.match(/<updated>(.*?)<\/updated>/)?.[1] ||      // Atom fallback
+        'Recent'
+      )
 
       // Title-only check first; description fallback is optional
       if (!title || !isRelevant(title, desc)) continue
