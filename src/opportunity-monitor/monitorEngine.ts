@@ -464,6 +464,7 @@ export async function runFullScan(): Promise<void> {
     if (!lockAcquired) {
       console.log('[Monitor] Another instance is already scanning, skipping...')
       client.release()
+      client = undefined  // prevent finally from double-releasing
       return
     }
 

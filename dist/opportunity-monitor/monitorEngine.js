@@ -6,11 +6,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.scanOrg = scanOrg;
 exports.runFullScan = runFullScan;
 exports.seedOrgs = seedOrgs;
-const sdk_1 = __importDefault(require("@anthropic-ai/sdk"));
 const client_1 = require("../db/client");
 const orgConfig_1 = require("./orgConfig");
 const crypto_1 = __importDefault(require("crypto"));
-const anthropic = new sdk_1.default({ apiKey: process.env.ANTHROPIC_API_KEY });
 // Pooja-relevant job title and domain keywords
 const RELEVANT_KEYWORDS = [
     'postdoc', 'postdoctoral', 'research scientist', 'research associate',
@@ -20,9 +18,14 @@ const RELEVANT_KEYWORDS = [
     'cardiomyopathy', 'transcriptomics', 'proteomics', 'bioinformatics',
     'research fellow', 'scientist i', 'scientist ii', 'scientist iii',
     'associate scientist', 'junior scientist', 'postdoctoral associate',
-    'postdoctoral fellow', 'research officer'
+    'postdoctoral fellow', 'research officer',
+    // Industry titles: "Scientist, Oncology" / "Scientist II" without prefix
+    'scientist',
+    // Additional patterns common at pharma/biotech and Indian institutes
+    'junior research fellow', 'senior research fellow', 'project associate',
+    'project scientist', 'research assistant', 'lab technician',
+    'computational biologist', 'bioinformatician'
 ];
-// RECOMMENDATION 1: Strict location filtering
 const RELEVANT_LOCATIONS = [
     // USA
     'usa', 'united states', 'new york', 'boston', 'san francisco',
@@ -35,7 +38,7 @@ const RELEVANT_LOCATIONS = [
     // UK
     'uk', 'united kingdom', 'london', 'edinburgh', 'oxford',
     'cambridge, uk', 'cambridge uk', 'manchester', 'glasgow', 'birmingham',
-    // Europe (broad — covers EuroScienceJobs and any pan-European listings)
+    // Europe (broad)
     'europe', 'european',
     // Germany
     'germany', 'berlin', 'heidelberg', 'munich', 'frankfurt', 'hamburg',
@@ -79,7 +82,6 @@ const RELEVANT_LOCATIONS = [
     'kolkata', 'chennai', 'mysore', 'mysuru', 'chandigarh', 'jaipur',
     'ahmedabad', 'bhopal', 'lucknow', 'nagpur'
 ];
-// RECOMMENDATION 8: Relevance scoring instead of binary match
 function relevanceScore(title, description = '') {
     const text = (title + ' ' + description).toLowerCase();
     let score = 0;
@@ -92,17 +94,14 @@ function relevanceScore(title, description = '') {
 function isRelevant(title, description = '') {
     return relevanceScore(title, description) >= 1;
 }
-// US state abbreviations pattern — catches "Thousand Oaks, CA", "Tarrytown, NY", etc.
+// US state abbreviations — catches "Thousand Oaks, CA", "Tarrytown, NY", etc.
 const US_STATE_ABBREV_RE = /,\s*(al|ak|az|ar|ca|co|ct|de|fl|ga|hi|id|il|in|ia|ks|ky|la|me|md|ma|mi|mn|ms|mo|mt|ne|nv|nh|nj|nm|ny|nc|nd|oh|ok|or|pa|ri|sc|sd|tn|tx|ut|vt|va|wa|wv|wi|wy|dc)\b/i;
-// RECOMMENDATION 1: Fixed location filter — require explicit location match
 function isRelevantLocation(location = '') {
     if (!location || location.trim() === '')
         return false;
     const loc = location.toLowerCase();
-    // Direct match against known cities/countries
     if (RELEVANT_LOCATIONS.some(l => loc.includes(l)))
         return true;
-    // Catch any US city with a state abbreviation e.g. "Thousand Oaks, CA" or "Rahway, NJ"
     if (US_STATE_ABBREV_RE.test(location))
         return true;
     return false;
@@ -114,98 +113,73 @@ function hashContent(title, org, location) {
         .digest('hex')
         .slice(0, 64);
 }
-// RECOMMENDATION 3: Timeout wrapper for all external calls
 async function withTimeout(promise, ms, label) {
     const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error(`Timeout after ${ms}ms: ${label}`)), ms));
     return Promise.race([promise, timeout]);
 }
-// RECOMMENDATION 4: websearch is last resort — RSS and USAJobs preferred
+// ── Serper.dev web search (free tier: 2,500 queries/month) ──────────────────
 async function scanViaWebSearch(org) {
+    const apiKey = process.env.SERPER_API_KEY;
+    if (!apiKey) {
+        console.warn(`[Monitor] SERPER_API_KEY not set — skipping ${org.name}`);
+        return [];
+    }
     try {
-        const response = await withTimeout(anthropic.messages.create({
-            model: 'claude-haiku-4-5',
-            max_tokens: 2000,
-            system: [{
-                    type: 'text',
-                    text: 'You are a job search assistant. When asked to find jobs, always use the web_search tool to search the web first, then return results as a JSON array. Never fabricate job listings — only return jobs found via web search.',
-                    cache_control: { type: 'ephemeral' }
-                }],
-            tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-            tool_choice: { type: 'any' },
-            messages: [{
-                    role: 'user',
-                    content: `Use web_search to find current open job positions at ${org.name}.
-Query: "${org.searchQuery}"
-
-Search the web NOW and find ONLY real, currently open positions posted in 2025 or 2026.
-Include ONLY positions in these locations: USA, UK, Germany, Sweden,
-Switzerland, Canada, Singapore, Australia, or India.
-
-After searching, return ONLY a JSON array, no markdown, no explanation:
-[{
-  "title": "exact job title",
-  "location": "city, country (must be specific — not just 'remote')",
-  "applyUrl": "direct URL to job posting",
-  "snippet": "job description under 150 characters",
-  "postedDate": "date posted or Recent"
-}]
-If no relevant open positions found, return: []`
-                }]
-        }), 45000, `webSearch for ${org.name}`);
-        let raw = '';
-        for (const block of response.content) {
-            if (block.type === 'text')
-                raw += block.text;
-        }
-        raw = raw.replace(/```json|```/g, '').trim();
-        const start = raw.indexOf('[');
-        const end = raw.lastIndexOf(']');
-        if (start === -1 || end === -1)
+        const response = await withTimeout(fetch('https://google.serper.dev/search', {
+            method: 'POST',
+            headers: {
+                'X-API-KEY': apiKey,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ q: org.searchQuery, num: 10 })
+        }), 10000, `Serper search for ${org.name}`);
+        if (!response.ok) {
+            console.error(`[Monitor] Serper returned ${response.status} for ${org.name}`);
             return [];
-        const parsed = JSON.parse(raw.slice(start, end + 1));
-        const afterTitleFilter = parsed.filter((j) => j.title && isRelevant(j.title, j.snippet));
-        // Task 2: location normalizer — if AI returned a vague/empty location but
-        // we already know which country this org is in, substitute org.country so
-        // the location filter passes instead of silently dropping real results.
-        const VAGUE_LOCATIONS = ['remote', 'hybrid', 'multiple locations', 'worldwide', 'global', 'anywhere', ''];
-        const normalizedFilter = afterTitleFilter.map((j) => {
-            const loc = (j.location || '').toLowerCase().trim();
-            if (VAGUE_LOCATIONS.includes(loc)) {
-                const original = j.location || '';
-                console.log(`[Monitor] ${org.name}: location fallback "${original}" → "${org.country}"`);
-                return { ...j, location: org.country };
-            }
-            return j;
-        });
-        const afterLocationFilter = normalizedFilter.filter((j) => j.location && isRelevantLocation(j.location));
-        console.log(`[Monitor] ${org.name}: raw=${parsed.length}, after-title-filter=${afterTitleFilter.length}, after-location-filter=${afterLocationFilter.length}`);
-        if (afterTitleFilter.length > afterLocationFilter.length) {
-            const dropped = normalizedFilter.filter((j) => !j.location || !isRelevantLocation(j.location));
-            console.log(`[Monitor] ${org.name}: dropped locations: ${dropped.map((j) => `"${j.location}"`).join(', ')}`);
         }
-        return afterLocationFilter
-            .map((j) => ({
-            externalId: hashContent(j.title, org.name, j.location || ''),
-            title: j.title,
-            orgName: org.name,
-            location: j.location,
-            country: org.country,
-            applyUrl: j.applyUrl || org.careersUrl || '',
-            snippet: j.snippet || '',
-            postedDate: j.postedDate || 'Recent',
-            contentHash: hashContent(j.title, org.name, j.location || ''),
-            relevanceScore: relevanceScore(j.title, j.snippet)
-        }))
-            .sort((a, b) => b.relevanceScore - a.relevanceScore);
+        const data = await response.json();
+        const results = data.organic || [];
+        console.log(`[Monitor] ${org.name}: Serper returned ${results.length} results`);
+        const jobs = [];
+        for (const result of results) {
+            const title = (result.title || '').replace(/\s*[-|].*$/, '').trim(); // strip " - Company Name"
+            const snippet = result.snippet || '';
+            const link = result.link || '';
+            if (!title || !link)
+                continue;
+            if (!isRelevant(title, snippet))
+                continue;
+            // Location: scan snippet for known city names, fallback to org.country
+            let location = org.country;
+            const locMatch = snippet.match(/\b(bangalore|bengaluru|mumbai|delhi|hyderabad|pune|boston|cambridge|san francisco|south san francisco|la jolla|san diego|palo alto|stanford|seattle|new york|bethesda|london|oxford|heidelberg|munich|berlin|zurich|stockholm|singapore|toronto|montreal|melbourne|sydney)\b/i);
+            if (locMatch)
+                location = locMatch[0];
+            jobs.push({
+                externalId: hashContent(title, org.name, link),
+                title,
+                orgName: org.name,
+                location,
+                country: org.country,
+                applyUrl: link,
+                snippet: snippet.slice(0, 150),
+                postedDate: 'Recent',
+                contentHash: hashContent(title, org.name, link),
+                relevanceScore: relevanceScore(title, snippet)
+            });
+        }
+        console.log(`[Monitor] ${org.name}: ${jobs.length} relevant after filter`);
+        return jobs.sort((a, b) => b.relevanceScore - a.relevanceScore);
     }
     catch (err) {
-        console.error(`[Monitor] webSearch failed for ${org.name}:`, err.message);
+        console.error(`[Monitor] Serper failed for ${org.name}:`, err.message);
         return [];
     }
 }
+// ── USAJobs (free, requires USAJOBS_API_KEY) ────────────────────────────────
 async function scanViaUSAJobs(org) {
     if (!process.env.USAJOBS_API_KEY) {
-        console.warn('[Monitor] USAJOBS_API_KEY not set — USAJobs orgs will fall back to websearch');
+        console.warn(`[Monitor] USAJOBS_API_KEY not set — skipping ${org.name}`);
+        return [];
     }
     try {
         const query = encodeURIComponent(org.searchQuery);
@@ -217,8 +191,8 @@ async function scanViaUSAJobs(org) {
             }
         }), 10000, `USAJobs for ${org.name}`);
         if (!resp.ok) {
-            console.warn(`[Monitor] USAJobs returned ${resp.status} for ${org.name}, falling back to webSearch`);
-            return scanViaWebSearch(org);
+            console.warn(`[Monitor] USAJobs returned ${resp.status} for ${org.name}`);
+            return [];
         }
         const data = await resp.json();
         const items = data?.SearchResult?.SearchResultItems || [];
@@ -247,41 +221,47 @@ async function scanViaUSAJobs(org) {
     }
     catch (err) {
         console.error(`[Monitor] USAJobs failed for ${org.name}:`, err.message);
-        return scanViaWebSearch(org);
+        return [];
     }
 }
+// ── RSS (free, no API key needed) ───────────────────────────────────────────
 async function scanViaRSS(org) {
-    if (!org.rssUrl)
-        return scanViaWebSearch(org);
+    if (!org.rssUrl) {
+        console.warn(`[RSS] ${org.name}: no rssUrl configured`);
+        return [];
+    }
     try {
         const resp = await withTimeout(fetch(org.rssUrl, {
-            headers: { 'User-Agent': 'career-os-portal@railway.app' }
+            headers: {
+                'User-Agent': 'career-os-portal@railway.app',
+                'Accept': 'application/rss+xml, application/xml, text/xml, */*'
+            }
         }), 8000, `RSS for ${org.name}`);
+        console.log(`[RSS] ${org.name}: status=${resp.status}`);
+        if (!resp.ok) {
+            console.error(`[RSS] ${org.name}: HTTP ${resp.status} — skipping`);
+            return [];
+        }
         const text = await resp.text();
-        const items = [];
+        console.log(`[RSS] ${org.name}: body preview=${text.slice(0, 200).replace(/\n/g, ' ')}`);
         const itemMatches = text.match(/<item>([\s\S]*?)<\/item>/g) || [];
-        for (const item of itemMatches.slice(0, 15)) {
+        console.log(`[RSS] ${org.name}: raw items found=${itemMatches.length}`);
+        const items = [];
+        for (const item of itemMatches.slice(0, 20)) {
             const title = (item.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/)?.[1] ||
                 item.match(/<title>(.*?)<\/title>/)?.[1] || '').trim();
-            // Try multiple link patterns in priority order:
-            // 1. Standard <link>url</link>
-            // 2. CDATA-wrapped <link><![CDATA[url]]></link>
-            // 3. Atom-style <link href="url"/>
-            // 4. <guid isPermaLink="true"> or plain <guid> (common fallback in RSS 2.0)
-            // 5. org.careersUrl so the button always goes somewhere useful
             const link = (item.match(/<link><!\[CDATA\[(.*?)\]\]><\/link>/)?.[1] ||
                 item.match(/<link>([^<]+)<\/link>/)?.[1] ||
                 item.match(/<link[^>]+href=["']([^"']+)["']/)?.[1] ||
                 item.match(/<guid[^>]*>([^<]+)<\/guid>/)?.[1] ||
                 org.careersUrl || '').trim();
-            const desc = (item.match(/<description><!\[CDATA\[(.*?)\]\]><\/description>/)?.[1] ||
-                item.match(/<description>(.*?)<\/description>/)?.[1] || '').replace(/<[^>]+>/g, '').slice(0, 150).trim();
+            const desc = (item.match(/<description><!\[CDATA\[([\s\S]*?)\]\]><\/description>/)?.[1] ||
+                item.match(/<description>([\s\S]*?)<\/description>/)?.[1] || '').replace(/<[^>]+>/g, '').slice(0, 150).trim();
             const pubDate = item.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] || 'Recent';
-            if (!isRelevant(title, desc))
+            // Title-only check first; description fallback is optional
+            if (!title || !isRelevant(title, desc))
                 continue;
             const location = org.country;
-            if (!isRelevantLocation(location))
-                continue;
             items.push({
                 externalId: hashContent(title, org.name, location),
                 title,
@@ -295,15 +275,12 @@ async function scanViaRSS(org) {
                 relevanceScore: relevanceScore(title, desc)
             });
         }
-        if (items.length === 0) {
-            console.log(`[Monitor] RSS empty for ${org.name}, falling back to webSearch`);
-            return scanViaWebSearch(org);
-        }
+        console.log(`[RSS] ${org.name}: ${items.length} relevant after filter`);
         return items.sort((a, b) => b.relevanceScore - a.relevanceScore);
     }
     catch (err) {
-        console.error(`[Monitor] RSS failed for ${org.name}:`, err.message);
-        return scanViaWebSearch(org);
+        console.error(`[RSS] ${org.name}: failed — ${err.message}`);
+        return [];
     }
 }
 async function scanOrg(orgId, org) {
@@ -365,8 +342,7 @@ async function scanOrg(orgId, org) {
     }
     // RSS and USAJobs return the complete current feed — any of this org's jobs
     // that weren't refreshed (last_seen_at < scanStart) have been removed from
-    // the source and should be marked inactive immediately rather than waiting
-    // for the 14-day global expiry.
+    // the source and should be marked inactive immediately.
     if ((org.apiType === 'rss' || org.apiType === 'usajobs') && jobs.length > 0) {
         try {
             const expired = await client_1.pool.query(`UPDATE monitor_jobs
@@ -394,7 +370,7 @@ async function scanOrg(orgId, org) {
     console.log(`[Monitor] ${org.name}: ${jobs.length} found, ${newCount} new`);
     return { found: jobs.length, newJobs: newCount };
 }
-// RECOMMENDATION 2: PostgreSQL advisory lock to prevent duplicate cron runs
+// PostgreSQL advisory lock prevents duplicate concurrent cron runs
 async function runFullScan() {
     const lockId = 987654321;
     let lockAcquired = false;
@@ -406,13 +382,12 @@ async function runFullScan() {
         if (!lockAcquired) {
             console.log('[Monitor] Another instance is already scanning, skipping...');
             client.release();
+            client = undefined; // prevent finally from double-releasing
             return;
         }
         console.log('[Monitor] Advisory lock acquired, starting full scan...');
-        // Free orgs (RSS/USAJobs) always run first — zero AI cost, ~100ms each.
-        // Limit 30: 16 free orgs + 14 websearch slots covers all 8 industry +
-        // 6 india orgs in a single scan (14 websearch total needed).
-        // Cost: ~14 × $0.03 = ~$0.42/scan.
+        // RSS/USAJobs orgs always run first (free, no external quota).
+        // Serper websearch orgs rotate through the remaining slots.
         const orgs = await client_1.pool.query(`SELECT id, name, api_type FROM monitor_orgs
        WHERE is_active = true
        ORDER BY
@@ -424,10 +399,10 @@ async function runFullScan() {
             if (!orgConfig)
                 continue;
             await scanOrg(row.id, orgConfig);
-            await new Promise(r => setTimeout(r, 3000));
+            await new Promise(r => setTimeout(r, 1000)); // 1s between calls is enough for Serper
         }
         // Global safety-net expiry: any job not seen in 14 days is considered gone.
-        // RSS/USAJobs orgs get per-scan cleanup above; this catches websearch orgs.
+        // RSS/USAJobs orgs get per-scan cleanup above; this catches Serper orgs.
         const cleaned = await client_1.pool.query(`UPDATE monitor_jobs
        SET is_active = false
        WHERE last_seen_at < NOW() - INTERVAL '14 days'
@@ -456,8 +431,6 @@ async function runFullScan() {
     }
 }
 async function seedOrgs() {
-    // Always upsert all orgs from config so new entries (e.g. new RSS feeds) are
-    // picked up on deploy without needing to truncate the table.
     console.log('[Monitor] Upserting organizations from config...');
     let added = 0;
     for (const org of orgConfig_1.MONITOR_ORGS) {
@@ -476,8 +449,7 @@ async function seedOrgs() {
         if (result.rows[0]?.inserted)
             added++;
     }
-    // Deactivate orgs that are no longer in MONITOR_ORGS — otherwise they fill
-    // scan batch slots and get skipped (config not found), starving real orgs.
+    // Deactivate orgs removed from config so they don't fill scan slots
     const configNames = orgConfig_1.MONITOR_ORGS.map(o => o.name);
     const deactivated = await client_1.pool.query(`UPDATE monitor_orgs SET is_active = false
      WHERE name != ALL($1::text[]) AND is_active = true
