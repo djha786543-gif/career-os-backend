@@ -267,3 +267,5 @@ export const MONITOR_ORGS: MonitorOrg[] = [
     apiType: "websearch",
     searchQuery: "AstraZeneca India research scientist cardiovascular molecular biology 2026" },
 ]
+
+// Force Update: 82 Orgs Sync
