@@ -209,4 +209,14 @@ export const MONITOR_ORGS: MonitorOrg[] = [
   { name: "IGIB Delhi", sector: "india", country: "India",
     apiType: "websearch",
     searchQuery: "IGIB Delhi postdoc genomics molecular biology 2026 site:igib.res.in" },
+
+  // ═══ INDIA — RSS feeds (free, aggregates NCBS/inStem/CCMB/IGIB/ICMR/DBT/CSIR) ═══
+  { name: "IndiaBioscience Jobs", sector: "india", country: "India",
+    apiType: "rss",
+    rssUrl: "https://indiabioscience.org/jobs/rss",
+    searchQuery: "India bioscience postdoc research scientist cardiovascular molecular biology" },
+  { name: "Employment News Research", sector: "india", country: "India",
+    apiType: "rss",
+    rssUrl: "https://www.employmentnews.gov.in/feed",
+    searchQuery: "ICMR DRDO DST research scientist postdoc India government" },
 ]

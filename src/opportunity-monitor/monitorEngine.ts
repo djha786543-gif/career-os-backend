@@ -496,22 +496,26 @@ export async function runFullScan(): Promise<void> {
 }
 
 export async function seedOrgs(): Promise<void> {
-  const count = await pool.query('SELECT COUNT(*) FROM monitor_orgs')
-  if (parseInt(count.rows[0].count) >= MONITOR_ORGS.length) {
-    console.log(`[Monitor] ${count.rows[0].count} orgs already seeded`)
-    return
-  }
-
-  console.log('[Monitor] Seeding organizations...')
+  // Always upsert all orgs from config so new entries (e.g. new RSS feeds) are
+  // picked up on deploy without needing to truncate the table.
+  console.log('[Monitor] Upserting organizations from config...')
+  let added = 0
   for (const org of MONITOR_ORGS) {
-    await pool.query(
+    const result = await pool.query(
       `INSERT INTO monitor_orgs
          (name, sector, country, careers_url, rss_url, api_type)
        VALUES ($1,$2,$3,$4,$5,$6)
-       ON CONFLICT (name) DO NOTHING`,
+       ON CONFLICT (name) DO UPDATE
+         SET sector = EXCLUDED.sector,
+             country = EXCLUDED.country,
+             careers_url = EXCLUDED.careers_url,
+             rss_url = EXCLUDED.rss_url,
+             api_type = EXCLUDED.api_type
+       RETURNING (xmax = 0) as inserted`,
       [org.name, org.sector, org.country,
        org.careersUrl || null, org.rssUrl || null, org.apiType]
     )
+    if (result.rows[0]?.inserted) added++
   }
-  console.log(`[Monitor] Seeded ${MONITOR_ORGS.length} organizations`)
+  console.log(`[Monitor] Org sync complete: ${added} new, ${MONITOR_ORGS.length} total in config`)
 }

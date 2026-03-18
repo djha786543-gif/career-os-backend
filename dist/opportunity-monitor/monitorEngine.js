@@ -417,18 +417,24 @@ async function runFullScan() {
     }
 }
 async function seedOrgs() {
-    const count = await client_1.pool.query('SELECT COUNT(*) FROM monitor_orgs');
-    if (parseInt(count.rows[0].count) >= orgConfig_1.MONITOR_ORGS.length) {
-        console.log(`[Monitor] ${count.rows[0].count} orgs already seeded`);
-        return;
-    }
-    console.log('[Monitor] Seeding organizations...');
+    // Always upsert all orgs from config so new entries (e.g. new RSS feeds) are
+    // picked up on deploy without needing to truncate the table.
+    console.log('[Monitor] Upserting organizations from config...');
+    let added = 0;
     for (const org of orgConfig_1.MONITOR_ORGS) {
-        await client_1.pool.query(`INSERT INTO monitor_orgs
+        const result = await client_1.pool.query(`INSERT INTO monitor_orgs
          (name, sector, country, careers_url, rss_url, api_type)
        VALUES ($1,$2,$3,$4,$5,$6)
-       ON CONFLICT (name) DO NOTHING`, [org.name, org.sector, org.country,
+       ON CONFLICT (name) DO UPDATE
+         SET sector = EXCLUDED.sector,
+             country = EXCLUDED.country,
+             careers_url = EXCLUDED.careers_url,
+             rss_url = EXCLUDED.rss_url,
+             api_type = EXCLUDED.api_type
+       RETURNING (xmax = 0) as inserted`, [org.name, org.sector, org.country,
             org.careersUrl || null, org.rssUrl || null, org.apiType]);
+        if (result.rows[0]?.inserted)
+            added++;
     }
-    console.log(`[Monitor] Seeded ${orgConfig_1.MONITOR_ORGS.length} organizations`);
+    console.log(`[Monitor] Org sync complete: ${added} new, ${orgConfig_1.MONITOR_ORGS.length} total in config`);
 }
