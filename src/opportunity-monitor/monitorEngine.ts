@@ -446,16 +446,17 @@ export async function runFullScan(): Promise<void> {
 
     console.log('[Monitor] Advisory lock acquired, starting full scan...')
 
-    // Cost optimisation: RSS and USAJobs orgs run first (they're free and fast ~100ms).
-    // Websearch orgs fill remaining slots ordered by oldest-scanned-first.
-    // Limit raised to 20 because free-source orgs don't add AI cost and are ~100ms each.
+    // Free orgs (RSS/USAJobs) always run first — zero AI cost, ~100ms each.
+    // Limit 30: 16 free orgs + 14 websearch slots covers all 8 industry +
+    // 6 india orgs in a single scan (14 websearch total needed).
+    // Cost: ~14 × $0.03 = ~$0.42/scan.
     const orgs = await pool.query(
       `SELECT id, name, api_type FROM monitor_orgs
        WHERE is_active = true
        ORDER BY
          CASE WHEN api_type = 'websearch' THEN 1 ELSE 0 END ASC,
          last_scanned_at ASC NULLS FIRST
-       LIMIT 20`
+       LIMIT 30`
     )
 
     for (const row of orgs.rows) {
