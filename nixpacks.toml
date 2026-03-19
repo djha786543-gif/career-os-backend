@@ -1,6 +1,5 @@
-# Force Rebuild: 20260318-2008
 [phases.build]
-cmds = ["npm install", "npx tsc --skipLibCheck"]
+cmds = ["npm install", "npm run build"]
 
 [start]
-cmd = "node dist/index.js"
+cmd = "npm start"
