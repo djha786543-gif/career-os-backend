@@ -1,4 +1,4 @@
-# Build Trigger: 20260318200513
+# Force Rebuild: 20260318-2008
 [phases.build]
 cmds = ["npm install", "npx tsc --skipLibCheck"]
 
