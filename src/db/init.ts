@@ -159,6 +159,79 @@ export async function dbInit(): Promise<void> {
       ALTER TABLE monitor_jobs ADD COLUMN IF NOT EXISTS job_board VARCHAR(100);
       ALTER TABLE kanban_cards ADD COLUMN IF NOT EXISTS job_board VARCHAR(100);
       ALTER TABLE monitor_jobs ADD COLUMN IF NOT EXISTS high_suitability BOOLEAN DEFAULT FALSE;
+
+      -- ─── DJ Opportunity Monitor — isolated tables (no crossover with Pooja) ──
+
+      CREATE TABLE IF NOT EXISTS dj_monitor_orgs (
+        id               UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+        name             VARCHAR(255) NOT NULL UNIQUE,
+        sector           VARCHAR(50)  NOT NULL
+          CHECK (sector IN ('big4','banking','tech-cloud','manufacturing')),
+        country          VARCHAR(10)  NOT NULL DEFAULT 'USA'
+          CHECK (country IN ('USA','India')),
+        careers_url      TEXT,
+        api_type         VARCHAR(50)  DEFAULT 'websearch',
+        ead_friendly     BOOLEAN      DEFAULT FALSE,
+        managerial_grade BOOLEAN      DEFAULT FALSE,
+        is_active        BOOLEAN      DEFAULT TRUE,
+        last_scanned_at  TIMESTAMPTZ,
+        created_at       TIMESTAMPTZ  DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS dj_monitor_jobs (
+        id               UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+        org_id           UUID         REFERENCES dj_monitor_orgs(id) ON DELETE CASCADE,
+        external_id      VARCHAR(500) NOT NULL,
+        title            VARCHAR(500) NOT NULL,
+        org_name         VARCHAR(255) NOT NULL,
+        location         VARCHAR(255),
+        country          VARCHAR(10),
+        sector           VARCHAR(50),
+        apply_url        TEXT,
+        snippet          TEXT,
+        posted_date      VARCHAR(100),
+        detected_at      TIMESTAMPTZ  DEFAULT NOW(),
+        last_seen_at     TIMESTAMPTZ  DEFAULT NOW(),
+        is_new           BOOLEAN      DEFAULT TRUE,
+        is_active        BOOLEAN      DEFAULT TRUE,
+        content_hash     VARCHAR(64),
+        high_suitability BOOLEAN      DEFAULT FALSE,
+        ead_friendly     BOOLEAN      DEFAULT FALSE,
+        managerial_grade BOOLEAN      DEFAULT FALSE,
+        suitability_score SMALLINT    DEFAULT 0,
+        UNIQUE(org_id, external_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS dj_monitor_scans (
+        id            UUID       PRIMARY KEY DEFAULT gen_random_uuid(),
+        org_id        UUID       REFERENCES dj_monitor_orgs(id) ON DELETE CASCADE,
+        scanned_at    TIMESTAMPTZ DEFAULT NOW(),
+        jobs_found    INTEGER     DEFAULT 0,
+        new_jobs      INTEGER     DEFAULT 0,
+        status        VARCHAR(20) DEFAULT 'success',
+        error_message TEXT
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_dj_monitor_jobs_sector
+        ON dj_monitor_jobs(sector);
+      CREATE INDEX IF NOT EXISTS idx_dj_monitor_jobs_country
+        ON dj_monitor_jobs(country, is_active);
+      CREATE INDEX IF NOT EXISTS idx_dj_monitor_jobs_new
+        ON dj_monitor_jobs(is_new, detected_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_dj_monitor_jobs_org
+        ON dj_monitor_jobs(org_id);
+      CREATE INDEX IF NOT EXISTS idx_dj_monitor_jobs_active
+        ON dj_monitor_jobs(is_active, last_seen_at);
+      CREATE INDEX IF NOT EXISTS idx_dj_monitor_jobs_score
+        ON dj_monitor_jobs(suitability_score DESC);
+      CREATE INDEX IF NOT EXISTS idx_dj_monitor_orgs_sector
+        ON dj_monitor_orgs(sector, is_active);
+      CREATE INDEX IF NOT EXISTS idx_dj_monitor_orgs_country
+        ON dj_monitor_orgs(country, is_active);
+      CREATE INDEX IF NOT EXISTS idx_dj_monitor_scans_time
+        ON dj_monitor_scans(scanned_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_dj_monitor_scans_org
+        ON dj_monitor_scans(org_id, scanned_at DESC);
     `);
     console.log('✅ DB tables verified / created');
   } catch (err) {
