@@ -1,11 +1,8 @@
-
-[phases.install]
-cmds = ["npm install"]
+[phases.setup]
+nixPkgs = ["nodejs", "npm"]
 
 [phases.build]
-cmds = ["npm run build"]
-[phases.setup]
-nixPkgs = ["chromium", "nodejs"]
+cmds = ["npm install", "npx tsc --skipLibCheck"]
 
 [start]
-cmd = "node server.js"
+cmd = "node dist/index.js"
