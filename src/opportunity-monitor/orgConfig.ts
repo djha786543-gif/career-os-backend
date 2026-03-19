@@ -219,6 +219,23 @@ export const MONITOR_ORGS: MonitorOrg[] = [
     apiType: "websearch",
     searchQuery: "Peter MacCallum postdoc molecular biology genomics 2026" },
 
+  // ═══ INDIA — Government Research (Central) ═══
+  { name: "ICMR HQ", sector: "india", country: "India",
+    apiType: "websearch",
+    searchQuery: "ICMR research scientist postdoc cardiovascular molecular biology 2026 site:icmr.gov.in OR site:indiabioscience.org" },
+  { name: "CSIR-IGIB Delhi", sector: "india", country: "India",
+    apiType: "websearch",
+    searchQuery: "IGIB Delhi postdoc genomics molecular biology cardiovascular 2026 site:igib.res.in OR site:indiabioscience.org" },
+  { name: "DBT-THSTI Faridabad", sector: "india", country: "India",
+    apiType: "websearch",
+    searchQuery: "THSTI postdoc translational health science cardiovascular 2026 site:thsti.res.in OR site:indiabioscience.org" },
+  { name: "AIIMS New Delhi", sector: "india", country: "India",
+    apiType: "websearch",
+    searchQuery: "AIIMS Delhi research scientist postdoc cardiology molecular biology 2026 site:aiims.edu" },
+  { name: "JNCASR Bangalore", sector: "india", country: "India",
+    apiType: "websearch",
+    searchQuery: "JNCASR Bangalore postdoc molecular biology cardiovascular 2026 site:jncasr.ac.in OR site:indiabioscience.org" },
+
   // ═══ INDIA — webSearch (no free API available for Indian institutes) ═══
   { name: "NCBS Bangalore", sector: "india", country: "India",
     apiType: "websearch", slowFetch: true,
@@ -229,7 +246,7 @@ export const MONITOR_ORGS: MonitorOrg[] = [
     searchQuery: "TIFR Mumbai postdoc biology cardiovascular research position 2026" },
   { name: "IISc Bangalore", sector: "india", country: "India",
     apiType: "websearch",
-    searchQuery: "IISc Bangalore postdoc molecular biology cardiovascular 2026" },
+    searchQuery: "IISc Bangalore postdoc research associate molecular biology cardiovascular genetics 2026 site:iisc.ac.in OR site:indiabioscience.org" },
   { name: "IGIB Delhi", sector: "india", country: "India",
     apiType: "websearch",
     searchQuery: "IGIB Delhi postdoc genomics molecular biology cardiovascular 2026" },
@@ -242,18 +259,12 @@ export const MONITOR_ORGS: MonitorOrg[] = [
   { name: "NII Delhi", sector: "india", country: "India",
     apiType: "websearch",
     searchQuery: "NII Delhi postdoc immunology molecular biology 2026" },
-  { name: "JNCASR Bangalore", sector: "india", country: "India",
-    apiType: "websearch",
-    searchQuery: "JNCASR Bangalore postdoc molecular biology 2026" },
   { name: "IISER Pune", sector: "india", country: "India",
     apiType: "websearch", slowFetch: true,
-    searchQuery: "IISER Pune faculty scientist biology cardiovascular molecular 2026" },
+    searchQuery: "IISER Pune postdoc biology cardiovascular molecular genetics 2026 site:iiserpune.ac.in OR site:indiabioscience.org" },
   { name: "RCB Faridabad", sector: "india", country: "India",
     apiType: "websearch",
     searchQuery: "RCB Faridabad postdoc molecular biology cardiovascular 2026" },
-  { name: "DBT-THSTI Faridabad", sector: "india", country: "India",
-    apiType: "websearch",
-    searchQuery: "THSTI Faridabad postdoc cardiovascular translational research 2026" },
   { name: "RGCB Trivandrum", sector: "india", country: "India",
     apiType: "websearch",
     searchQuery: "RGCB Trivandrum postdoc molecular biology cardiovascular 2026" },
@@ -261,20 +272,32 @@ export const MONITOR_ORGS: MonitorOrg[] = [
     apiType: "websearch",
     searchQuery: "Biocon research scientist molecular biology 2026",
     careersUrl: "https://www.biocon.com/careers" },
+  { name: "Biocon Research", sector: "india", country: "India",
+    apiType: "websearch",
+    searchQuery: "Biocon research scientist molecular biology cardiovascular 2026 site:biocon.com/careers" },
   { name: "Syngene International", sector: "india", country: "India",
     apiType: "websearch",
-    searchQuery: "Syngene research scientist molecular biology cardiovascular 2026" },
+    searchQuery: "Syngene research scientist molecular biology 2026 site:syngeneintl.com/careers" },
   { name: "AstraZeneca India", sector: "india", country: "India",
     apiType: "websearch", slowFetch: true,
-    searchQuery: "AstraZeneca India research scientist cardiovascular molecular biology 2026" },
+    searchQuery: "AstraZeneca India research scientist cardiovascular molecular biology 2026 site:astrazeneca.com/careers" },
 
   // ═══ INDIA — Tier 1 IITs (Biology / Biosciences) ═══
+  { name: "IISc Bangalore", sector: "india", country: "India",
+    apiType: "websearch",
+    searchQuery: "IISc Bangalore postdoc research associate molecular biology cardiovascular genetics 2026 site:iisc.ac.in OR site:indiabioscience.org" },
+  { name: "IIT Bombay Biology", sector: "india", country: "India",
+    apiType: "websearch",
+    searchQuery: "IIT Bombay postdoc research associate molecular biology cardiovascular 2026 site:iitb.ac.in" },
   { name: "IIT Bombay Biosciences", sector: "india", country: "India",
     apiType: "websearch",
     searchQuery: "IIT Bombay assistant professor faculty biosciences molecular biology cardiovascular 2026" },
   { name: "IIT Delhi Biochemical Engineering", sector: "india", country: "India",
     apiType: "websearch",
     searchQuery: "IIT Delhi assistant professor faculty biochemistry molecular biology 2026" },
+  { name: "JNU School of Life Sciences", sector: "india", country: "India",
+    apiType: "websearch",
+    searchQuery: "JNU postdoc research associate life sciences molecular biology cardiovascular 2026 site:jnu.ac.in" },
 
   // ═══ INDIA — IISERs (Tier 2 India Academics) ═══
   { name: "IISER Kolkata", sector: "india", country: "India",
@@ -310,7 +333,7 @@ export const MONITOR_ORGS: MonitorOrg[] = [
     searchQuery: "MRC Harwell Institute scientist researcher cardiovascular genomics molecular biology 2026" },
 ]
 
-// Total: 82 Orgs — Tier 1-4 India Academics, Global Pharma, International Research Labs
+// Total: 92 Orgs — Tier 1-4 India Academics, Global Pharma, International Research Labs
 
 // Deployment Trigger: 2026-03-18 17:35:42
 

@@ -41,6 +41,8 @@ const TIER1_ORG_NAMES = new Set([
 ])
 
 // Pooja-relevant job title and domain keywords (used for legacy relevance scoring)
+// Roles with relevanceScore >= 3 are HIGH SIGNAL
+// (matches cardiovascular + molecular biology + specific technique)
 const RELEVANT_KEYWORDS = [
   'research scientist', 'research associate',
   'senior scientist', 'staff scientist', 'principal scientist',
@@ -49,7 +51,12 @@ const RELEVANT_KEYWORDS = [
   'cardiomyopathy', 'transcriptomics', 'proteomics', 'bioinformatics',
   'research fellow', 'scientist i', 'scientist ii', 'scientist iii',
   'associate scientist', 'assistant professor', 'group leader',
-  'investigator', 'faculty', 'tenure track'
+  'investigator', 'faculty', 'tenure track',
+  // Pooja-specific expertise additions
+  'heme', 'heme metabolism', 'ptrh2', 'ciliopathy',
+  'cellular senescence', 'rna-seq', 'rnaseq', 'cre-lox', 'langendorff',
+  'echocardiography', 'translational medicine',
+  'scientist b', 'scientist c', 'dbt', 'icmr', 'csir'
 ]
 
 // RECOMMENDATION 1: Strict location filtering
