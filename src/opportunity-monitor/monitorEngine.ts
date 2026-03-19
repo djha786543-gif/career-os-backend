@@ -8,22 +8,30 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 // ─── Pooja-Core Profile ────────────────────────────────────────────────────
 // Rank 1 job title keywords — positions Pooja is actually targeting
 const POOJA_RANK1_KEYWORDS = [
-  'assistant professor', 'scientist', 'investigator', 'research scientist',
-  'group leader', 'tenure track', 'tenure-track', 'faculty', 'staff scientist',
-  'senior scientist', 'principal scientist', 'research fellow'
+  'assistant professor', 'associate professor', 'scientist', 'investigator',
+  'research scientist', 'group leader', 'tenure track', 'tenure-track',
+  'faculty', 'staff scientist', 'senior scientist', 'principal scientist',
+  'research fellow', 'scientist b', 'scientist c', 'scientist d', 'scientist e',
+  'research officer', 'postdoctoral', 'postdoc'
 ]
 
 // Technical domain anchors — Pooja's core expertise areas
 const TECHNICAL_ANCHORS = [
   'molecular', 'genetics', 'cardiovascular', 'genomics', 'bioinformatics',
   'cell biology', 'molecular biology', 'cardiac', 'transcriptomics',
-  'proteomics', 'crispr', 'rna', 'heart'
+  'proteomics', 'crispr', 'rna', 'heart',
+  // Pooja DNA keywords
+  'ptrh2', 'heme', 'heme metabolism', 'cellular senescence',
+  'cardiovascular genetics', 'translational medicine', 'rna-seq'
 ]
 
-// Hard filter: discard these title terms UNLESS the title is 'Assistant Professor'
+// Hard filter: discard these title terms UNLESS exceptions apply.
+// Postdoc/postdoctoral are NO LONGER filtered — Pooja targets these at India orgs.
+// JRF/SRF are filtered — below Pooja's 3+ year postdoc seniority.
 const HARD_FILTER_TERMS = [
-  'technician', 'postdoc', 'postdoctoral', 'intern', 'internship',
-  'junior', 'admin', 'administrative', 'coordinator', 'assistant'
+  'technician', 'intern', 'internship',
+  'junior', 'admin', 'administrative', 'coordinator', 'assistant',
+  'jrf', 'srf', 'junior research fellow', 'senior research fellow'
 ]
 
 // Tier 1 orgs for +1 suitability bonus
@@ -37,7 +45,12 @@ const TIER1_ORG_NAMES = new Set([
   'Karolinska Institute', 'ETH Zurich', 'EMBL Jobs', 'Francis Crick Institute',
   'Wellcome Sanger Institute', 'Max Planck Heart and Lung', 'Roche',
   'Genentech', 'Regeneron', 'Amgen', 'Pfizer Research', 'Merck Research',
-  'NCBS Bangalore', 'IISc Bangalore', 'TIFR Mumbai'
+  // India Tier 1 — now scored equally
+  'NCBS Bangalore', 'IISc Bangalore', 'TIFR Mumbai', 'AIIMS New Delhi',
+  'ICMR HQ', 'CSIR-IGIB Delhi', 'IGIB Delhi', 'JNCASR Bangalore',
+  'CCMB Hyderabad', 'inStem Bangalore', 'DBT-THSTI Faridabad',
+  'JNU School of Life Sciences', 'IISER Pune', 'RCB Faridabad',
+  'Biocon Biologics', 'Biocon Research', 'Syngene International', 'AstraZeneca India'
 ])
 
 // Pooja-relevant job title and domain keywords (used for legacy relevance scoring)
@@ -105,7 +118,8 @@ function passesHardFilter(title: string): boolean {
   return !HARD_FILTER_TERMS.some(term => t.includes(term))
 }
 
-// Pooja suitability scorer (0–5 scale). Jobs must score ≥ 3 to be stored.
+// Pooja suitability scorer (0–5 scale).
+// Global threshold: ≥ 3. India orgs use ≥ 2 (called via suitabilityThreshold).
 function poojaSuitabilityScore(title: string, snippet: string, orgName: string): number {
   const text = (title + ' ' + snippet).toLowerCase()
   let score = 0
@@ -113,6 +127,10 @@ function poojaSuitabilityScore(title: string, snippet: string, orgName: string):
   if (TECHNICAL_ANCHORS.some(anchor => text.includes(anchor))) score += 2
   if (TIER1_ORG_NAMES.has(orgName)) score += 1
   return score
+}
+
+function suitabilityThreshold(orgSector: string): number {
+  return orgSector === 'india' ? 2 : 3
 }
 
 // Filter out generic social/landing-page URLs that don't point to actual job postings
@@ -209,7 +227,7 @@ If no relevant open positions found, return: []`
       .filter((j: any) => j.title && isRelevant(j.title, j.snippet))
       .filter((j: any) => j.location && isRelevantLocation(j.location))
       .filter((j: any) => passesHardFilter(j.title))
-      .filter((j: any) => poojaSuitabilityScore(j.title, j.snippet || '', org.name) >= 3)
+      .filter((j: any) => poojaSuitabilityScore(j.title, j.snippet || '', org.name) >= suitabilityThreshold(org.sector))
       .map((j: any) => ({
         externalId: hashContent(j.title, org.name, j.location || ''),
         title: j.title,
@@ -264,7 +282,7 @@ async function scanViaUSAJobs(org: MonitorOrg): Promise<ScannedJob[]> {
         const d = item.MatchedObjectDescriptor
         const title = d.PositionTitle || ''
         const snippet = (d.UserArea?.Details?.JobSummary || '').slice(0, 150)
-        return poojaSuitabilityScore(title, snippet, org.name) >= 3
+        return poojaSuitabilityScore(title, snippet, org.name) >= suitabilityThreshold(org.sector)
       })
       .map((item: any) => {
         const d = item.MatchedObjectDescriptor
@@ -331,7 +349,7 @@ async function scanViaRSS(org: MonitorOrg): Promise<ScannedJob[]> {
       if (!isRelevantLocation(location)) continue
 
       const suitability = poojaSuitabilityScore(title, desc, org.name)
-      if (suitability < 3) continue
+      if (suitability < suitabilityThreshold(org.sector)) continue
 
       items.push({
         externalId: hashContent(title, org.name, location),

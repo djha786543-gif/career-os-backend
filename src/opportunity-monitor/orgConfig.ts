@@ -283,9 +283,6 @@ export const MONITOR_ORGS: MonitorOrg[] = [
     searchQuery: "AstraZeneca India research scientist cardiovascular molecular biology 2026 site:astrazeneca.com/careers" },
 
   // ═══ INDIA — Tier 1 IITs (Biology / Biosciences) ═══
-  { name: "IISc Bangalore", sector: "india", country: "India",
-    apiType: "websearch",
-    searchQuery: "IISc Bangalore postdoc research associate molecular biology cardiovascular genetics 2026 site:iisc.ac.in OR site:indiabioscience.org" },
   { name: "IIT Bombay Biology", sector: "india", country: "India",
     apiType: "websearch",
     searchQuery: "IIT Bombay postdoc research associate molecular biology cardiovascular 2026 site:iitb.ac.in" },
@@ -333,7 +330,7 @@ export const MONITOR_ORGS: MonitorOrg[] = [
     searchQuery: "MRC Harwell Institute scientist researcher cardiovascular genomics molecular biology 2026" },
 ]
 
-// Total: 92 Orgs — Tier 1-4 India Academics, Global Pharma, International Research Labs
+// Total: 91 Orgs — Tier 1-4 India Academics, Global Pharma, International Research Labs
 
 // Deployment Trigger: 2026-03-18 17:35:42
 

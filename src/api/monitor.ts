@@ -50,6 +50,30 @@ router.get('/jobs', async (req: Request, res: Response) => {
        GROUP BY sector`
     )
 
+    // Broadened fallback for India: if specific sector query returns 0,
+    // return all India-country jobs so the UI always has something to show.
+    if (result.rows.length === 0 && sector === 'india') {
+      const broadened = await pool.query(
+        `SELECT j.*, o.last_scanned_at, o.api_type
+         FROM monitor_jobs j
+         JOIN monitor_orgs o ON j.org_id = o.id
+         WHERE j.is_active = true AND LOWER(j.country) = 'india'
+         ORDER BY j.is_new DESC, j.detected_at DESC
+         LIMIT $1 OFFSET $2`,
+        [limit, offset]
+      )
+      return res.json({
+        status: 'success',
+        jobs: broadened.rows,
+        counts: counts.rows,
+        total: broadened.rows.length,
+        broadened: true,
+        broadenedReason: 'India sector scan pending — showing all available India jobs',
+        limit,
+        offset
+      })
+    }
+
     res.json({
       status: 'success',
       jobs: result.rows,
