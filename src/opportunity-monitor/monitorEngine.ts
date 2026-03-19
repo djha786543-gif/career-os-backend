@@ -37,7 +37,13 @@ const TIER1_ORG_NAMES = new Set([
   'Karolinska Institute', 'ETH Zurich', 'EMBL Jobs', 'Francis Crick Institute',
   'Wellcome Sanger Institute', 'Max Planck Heart and Lung', 'Roche',
   'Genentech', 'Regeneron', 'Amgen', 'Pfizer Research', 'Merck Research',
-  'NCBS Bangalore', 'IISc Bangalore', 'TIFR Mumbai'
+  'NCBS Bangalore', 'IISc Bangalore', 'TIFR Mumbai',
+  // Europe industry tier-1
+  'AstraZeneca UK', 'GSK UK', 'Novartis Basel', 'Roche Research Basel',
+  'Bayer Life Sciences', 'Boehringer Ingelheim', 'Novo Nordisk',
+  'BioNTech Germany', 'Sanofi Paris', 'UCB Pharma Belgium',
+  // Asia industry tier-1
+  'Daiichi Sankyo Japan', 'Takeda Japan', 'AstraZeneca China', 'Roche China',
 ])
 
 // Pooja-relevant job title and domain keywords (used for legacy relevance scoring)
@@ -49,22 +55,45 @@ const RELEVANT_KEYWORDS = [
   'cardiomyopathy', 'transcriptomics', 'proteomics', 'bioinformatics',
   'research fellow', 'scientist i', 'scientist ii', 'scientist iii',
   'associate scientist', 'assistant professor', 'group leader',
-  'investigator', 'faculty', 'tenure track'
+  'investigator', 'faculty', 'tenure track',
+  // Industry-specific expansions
+  'drug discovery', 'in vivo', 'preclinical', 'translational research',
+  'target identification', 'biomarker', 'mRNA', 'gene therapy',
 ]
 
 // RECOMMENDATION 1: Strict location filtering
 const RELEVANT_LOCATIONS = [
+  // North America
   'usa', 'united states', 'new york', 'boston', 'san francisco',
   'seattle', 'chicago', 'houston', 'los angeles', 'bethesda',
   'cambridge, ma', 'cambridge ma', 'la jolla', 'san diego',
+  'canada', 'toronto', 'montreal', 'vancouver',
+  // UK
   'uk', 'united kingdom', 'london', 'edinburgh', 'oxford',
   'cambridge, uk', 'cambridge uk', 'manchester', 'glasgow',
+  'sandwich, uk', 'stevenage',
+  // Germany
   'germany', 'berlin', 'heidelberg', 'munich', 'frankfurt',
-  'sweden', 'stockholm', 'gothenburg',
+  'mainz', 'leverkusen', 'ingelheim', 'hamburg', 'darmstadt',
+  // DACH
   'switzerland', 'zurich', 'basel', 'geneva',
-  'canada', 'toronto', 'montreal', 'vancouver',
+  'austria', 'vienna',
+  // Nordic
+  'sweden', 'stockholm', 'gothenburg',
+  'denmark', 'copenhagen', 'maaloev',
+  // Western Europe
+  'france', 'paris', 'lyon',
+  'ireland', 'dublin',
+  'netherlands', 'leiden', 'amsterdam',
+  'belgium', 'brussels',
+  // Asia
   'singapore',
+  'japan', 'tokyo', 'osaka', 'kyoto',
+  'south korea', 'korea', 'seoul', 'incheon',
+  'china', 'shanghai', 'beijing', 'shenzhen',
+  // Australia
   'australia', 'melbourne', 'sydney',
+  // India
   'india', 'bangalore', 'bengaluru', 'mumbai', 'delhi',
   'hyderabad', 'pune', 'faridabad', 'trivandrum', 'kolkata'
 ]
@@ -169,7 +198,8 @@ Query: "${org.searchQuery}"
 
 Find ONLY real, currently open positions posted in 2025 or 2026.
 Include ONLY positions in these locations: USA, UK, Germany, Sweden,
-Switzerland, Canada, Singapore, Australia, or India.
+Switzerland, France, Denmark, Ireland, Netherlands, Belgium,
+Canada, Singapore, Australia, India, Japan, or South Korea.
 
 Return ONLY a JSON array, no markdown, no explanation:
 [{
