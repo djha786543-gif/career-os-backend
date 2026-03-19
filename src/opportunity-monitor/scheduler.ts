@@ -1,24 +1,33 @@
 import cron from 'node-cron'
 import { runFullScan, seedOrgs } from './monitorEngine'
+import { runFullScanDJ, seedDJOrgs } from './monitorEngineDJ'
 
 export async function initMonitorScheduler(): Promise<void> {
-  // Seed orgs on startup
+  // ── Seed both profiles on startup ──────────────────────────────────────────
   try {
     await seedOrgs()
   } catch (err) {
-    console.error('[Monitor] Seed error:', (err as Error).message)
+    console.error('[Monitor] Pooja seed error:', (err as Error).message)
+  }
+  try {
+    await seedDJOrgs()
+  } catch (err) {
+    console.error('[MonitorDJ] DJ seed error:', (err as Error).message)
   }
 
-  // Cost optimisation: once daily at 08:00 UTC, scanning 10 orgs per run.
-  // All 65 orgs rotate through over 6-7 days (oldest-first ordering in runFullScan).
+  // ── Pooja scan: daily at 08:00 UTC, 10 orgs per run ──────────────────────
   cron.schedule('0 8 * * *', async () => {
-    console.log('[Monitor] Cron triggered at', new Date().toISOString())
-    try {
-      await runFullScan()
-    } catch (err) {
-      console.error('[Monitor] Cron scan error:', (err as Error).message)
-    }
+    console.log('[Monitor] Pooja cron triggered at', new Date().toISOString())
+    try { await runFullScan() }
+    catch (err) { console.error('[Monitor] Pooja cron error:', (err as Error).message) }
   })
 
-  console.log('[Monitor] Scheduler ready — daily scan at 08:00 UTC (10 orgs per run)')
+  // ── DJ scan: daily at 10:00 UTC, 12 orgs per run (offset to avoid concurrency)
+  cron.schedule('0 10 * * *', async () => {
+    console.log('[MonitorDJ] DJ cron triggered at', new Date().toISOString())
+    try { await runFullScanDJ() }
+    catch (err) { console.error('[MonitorDJ] DJ cron error:', (err as Error).message) }
+  })
+
+  console.log('[Monitor] Scheduler ready — Pooja @ 08:00 UTC | DJ @ 10:00 UTC (NULLS FIRST priority)')
 }

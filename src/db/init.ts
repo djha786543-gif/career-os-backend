@@ -159,6 +159,23 @@ export async function dbInit(): Promise<void> {
       ALTER TABLE monitor_jobs ADD COLUMN IF NOT EXISTS job_board VARCHAR(100);
       ALTER TABLE kanban_cards ADD COLUMN IF NOT EXISTS job_board VARCHAR(100);
       ALTER TABLE monitor_jobs ADD COLUMN IF NOT EXISTS high_suitability BOOLEAN DEFAULT FALSE;
+
+      -- ─── DJ Profile isolation (profile + sub_sector columns) ─────────────────
+      -- Drop the sector CHECK constraint so DJ-specific sectors can be used.
+      -- Safe: IF EXISTS means no error if already dropped or never created.
+      ALTER TABLE monitor_orgs DROP CONSTRAINT IF EXISTS monitor_orgs_sector_check;
+
+      -- profile column: 'pooja' (default) or 'dj'
+      ALTER TABLE monitor_orgs ADD COLUMN IF NOT EXISTS profile TEXT NOT NULL DEFAULT 'pooja';
+      ALTER TABLE monitor_jobs ADD COLUMN IF NOT EXISTS profile TEXT NOT NULL DEFAULT 'pooja';
+
+      -- sub_sector: fine-grained sector for DJ (us-big4, us-finance, india-gcc, etc.)
+      ALTER TABLE monitor_orgs ADD COLUMN IF NOT EXISTS sub_sector TEXT;
+      ALTER TABLE monitor_jobs ADD COLUMN IF NOT EXISTS sub_sector TEXT;
+
+      -- Indexes for profile-scoped queries
+      CREATE INDEX IF NOT EXISTS idx_monitor_orgs_profile ON monitor_orgs(profile, is_active);
+      CREATE INDEX IF NOT EXISTS idx_monitor_jobs_profile ON monitor_jobs(profile, is_active, detected_at DESC);
     `);
     console.log('✅ DB tables verified / created');
   } catch (err) {
