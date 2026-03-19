@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express'
 import { pool } from '../db/client'
-import { runFullScan, scanOrg, seedOrgs } from '../opportunity-monitor/monitorEngine'
+import { runFullScan, scanOrg, seedOrgs, scanViaWebSearch } from '../opportunity-monitor/monitorEngine'
 import { MONITOR_ORGS } from '../opportunity-monitor/orgConfig'
 
 const router = Router()
@@ -41,6 +41,88 @@ router.get('/jobs', async (req: Request, res: Response) => {
        OFFSET $${params.length}`,
       params
     )
+
+    // ── Live-search fallback ─────────────────────────────────────────────────
+    // If the DB is empty for this sector (not yet scanned), run a parallel
+    // websearch on the top 4 orgs for immediate results. Trigger a background
+    // full scan so the DB gets populated for future requests.
+    if (result.rows.length === 0 && sector && ['india', 'industry', 'international'].includes(sector)) {
+      // Priority orgs per sector: sample a cross-section for fast coverage
+      const PRIORITY_ORGS: Record<string, string[]> = {
+        india: [
+          'NCBS Bangalore', 'IISc Bangalore', 'inStem Bangalore', 'IGIB Delhi',
+          'CCMB Hyderabad', 'IISER Pune', 'DBT-THSTI Faridabad', 'RCB Faridabad',
+        ],
+        industry: [
+          // North America
+          'Genentech', 'Regeneron', 'AstraZeneca US',
+          // Europe
+          'AstraZeneca UK', 'Novartis Basel', 'Roche Research Basel', 'Novo Nordisk',
+          // Asia
+          'Takeda Japan', 'Daiichi Sankyo Japan', 'Novartis Singapore',
+          'AstraZeneca China', 'Samsung Biologics', 'Astellas Japan',
+        ],
+        international: [
+          'ETH Zurich', 'Karolinska Institute', 'MRC LMS London',
+          'A*STAR Singapore', 'WEHI Melbourne',
+        ],
+      }
+
+      const priorityNames = new Set(PRIORITY_ORGS[sector] ?? [])
+      const liveOrgs = MONITOR_ORGS
+        .filter(o => o.sector === sector && o.apiType === 'websearch' && priorityNames.has(o.name))
+
+      try {
+        const settled = await Promise.allSettled(liveOrgs.map(org => scanViaWebSearch(org)))
+
+        const liveJobs: any[] = []
+        const seen = new Set<string>()
+
+        settled.forEach((r, i) => {
+          if (r.status !== 'fulfilled') return
+          const org = liveOrgs[i]
+          r.value.forEach(j => {
+            const key = `${j.title}|${j.orgName}`
+            if (seen.has(key)) return
+            seen.add(key)
+            liveJobs.push({
+              title:           j.title,
+              company:         j.orgName,
+              org_name:        j.orgName,
+              location:        j.location,
+              country:         org.country,
+              apply_url:       j.applyUrl,
+              applyUrl:        j.applyUrl,
+              snippet:         j.snippet,
+              sector:          org.sector,
+              is_new:          true,
+              fit_score:       Math.min(j.relevanceScore * 15, 85),
+              high_suitability: j.highSuitability,
+            })
+          })
+        })
+
+        if (liveJobs.length > 0) {
+          // Trigger background full scan to populate DB for next time
+          runFullScan().catch(console.error)
+
+          return res.json({
+            status:          'success',
+            jobs:            liveJobs,
+            counts:          [],
+            total:           liveJobs.length,
+            limit,
+            offset,
+            broadened:       true,
+            broadenedReason: `Live search — ${liveJobs.length} positions found. Run Scan to cache to database.`,
+          })
+        }
+      } catch (fallbackErr) {
+        console.error('[Monitor] Live fallback error:', (fallbackErr as Error).message)
+        // Fall through to return empty result set
+      }
+    }
+    // ── End live-search fallback ─────────────────────────────────────────────
 
     const counts = await pool.query(
       `SELECT sector,

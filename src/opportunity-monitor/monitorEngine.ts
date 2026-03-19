@@ -10,7 +10,8 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 const POOJA_RANK1_KEYWORDS = [
   'assistant professor', 'scientist', 'investigator', 'research scientist',
   'group leader', 'tenure track', 'tenure-track', 'faculty', 'staff scientist',
-  'senior scientist', 'principal scientist', 'research fellow'
+  'senior scientist', 'principal scientist', 'research fellow',
+  'research associate', 'project scientist', 'project fellow',
 ]
 
 // Technical domain anchors — Pooja's core expertise areas
@@ -184,7 +185,7 @@ interface ScannedJob {
 }
 
 // RECOMMENDATION 4: websearch is last resort — RSS and USAJobs preferred
-async function scanViaWebSearch(org: MonitorOrg): Promise<ScannedJob[]> {
+export async function scanViaWebSearch(org: MonitorOrg): Promise<ScannedJob[]> {
   try {
     const response = await withTimeout(
       anthropic.messages.create({
