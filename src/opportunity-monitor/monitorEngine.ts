@@ -1,9 +1,6 @@
-import Anthropic from '@anthropic-ai/sdk'
 import { pool } from '../db/client'
 import { MONITOR_ORGS, MonitorOrg } from './orgConfig'
 import crypto from 'crypto'
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 // ─── Pooja-Core Profile ────────────────────────────────────────────────────
 // Rank 1 job title keywords — positions Pooja is actually targeting
@@ -184,73 +181,59 @@ interface ScannedJob {
   highSuitability: boolean
 }
 
-// RECOMMENDATION 4: websearch is last resort — RSS and USAJobs preferred
+// TASK 1: Serper.dev replaces Anthropic web_search (no more 401 errors)
 export async function scanViaWebSearch(org: MonitorOrg): Promise<ScannedJob[]> {
+  const apiKey = process.env.SERPER_API_KEY
+  if (!apiKey) {
+    console.warn(`[Monitor] SERPER_API_KEY not set — skipping ${org.name}`)
+    return []
+  }
   try {
-    const response = await withTimeout(
-      anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 2000,
-        tools: [{ type: 'web_search_20250305' as any, name: 'web_search' }],
-        messages: [{
-          role: 'user',
-          content: `Search for current open job positions at ${org.name}.
-Query: "${org.searchQuery}"
-
-Find ONLY real, currently open positions posted in 2025 or 2026.
-Include ONLY positions in these locations: USA, UK, Germany, Sweden,
-Switzerland, France, Denmark, Ireland, Netherlands, Belgium,
-Canada, Singapore, Australia, India, Japan, or South Korea.
-
-Return ONLY a JSON array, no markdown, no explanation:
-[{
-  "title": "exact job title",
-  "location": "city, country (must be specific — not just 'remote')",
-  "applyUrl": "direct URL to job posting",
-  "snippet": "job description under 150 characters",
-  "postedDate": "date posted or Recent"
-}]
-If no relevant open positions found, return: []`
-        }]
+    const resp = await withTimeout(
+      fetch('https://google.serper.dev/search', {
+        method: 'POST',
+        headers: {
+          'X-API-KEY': apiKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ q: org.searchQuery, num: 10 })
       }),
-      15000,
-      `webSearch for ${org.name}`
+      10000,
+      `Serper for ${org.name}`
     )
-
-    let raw = ''
-    for (const block of response.content) {
-      if (block.type === 'text') raw += block.text
+    if (!resp.ok) {
+      console.error(`[Monitor] Serper ${resp.status} for ${org.name}`)
+      return []
     }
-
-    raw = raw.replace(/```json|```/g, '').trim()
-    const start = raw.indexOf('[')
-    const end = raw.lastIndexOf(']')
-    if (start === -1 || end === -1) return []
-
-    const parsed = JSON.parse(raw.slice(start, end + 1))
-
-    return parsed
-      .filter((j: any) => j.title && isRelevant(j.title, j.snippet))
-      .filter((j: any) => j.location && isRelevantLocation(j.location))
-      .filter((j: any) => passesHardFilter(j.title))
-      .filter((j: any) => poojaSuitabilityScore(j.title, j.snippet || '', org.name) >= 3)
-      .map((j: any) => ({
-        externalId: hashContent(j.title, org.name, j.location || ''),
-        title: j.title,
+    const data = await resp.json()
+    const results = data.organic || []
+    console.log(`[Monitor] ${org.name}: Serper raw=${results.length}`)
+    const jobs: ScannedJob[] = []
+    for (const r of results) {
+      const title = (r.title || '').replace(/\s*[-|·].*$/, '').trim()
+      const snippet = r.snippet || ''
+      if (!title || !isRelevant(title, snippet)) continue
+      const CITY_RE = /\b(bangalore|bengaluru|mumbai|delhi|hyderabad|pune|chennai|tokyo|osaka|yokohama|singapore|seoul|busan|shanghai|beijing|guangzhou|boston|cambridge|london|heidelberg|zurich|basel)\b/i
+      const cityMatch = snippet.match(CITY_RE) || title.match(CITY_RE)
+      const location = cityMatch ? cityMatch[0] : org.country
+      jobs.push({
+        externalId: hashContent(title, org.name, r.link || ''),
+        title,
         orgName: org.name,
-        location: j.location,
+        location,
         country: org.country,
-        applyUrl: extractCanonicalUrl(j.applyUrl || '', org.careersUrl || ''),
-        snippet: j.snippet || '',
-        postedDate: j.postedDate || 'Recent',
-        contentHash: hashContent(j.title, org.name, j.location || ''),
-        relevanceScore: relevanceScore(j.title, j.snippet),
+        applyUrl: r.link || org.careersUrl || '',
+        snippet: snippet.slice(0, 150),
+        postedDate: 'Recent',
+        contentHash: hashContent(title, org.name, r.link || ''),
+        relevanceScore: relevanceScore(title, snippet),
         highSuitability: true
-      }))
-      .sort((a: ScannedJob, b: ScannedJob) => b.relevanceScore - a.relevanceScore)
-
+      })
+    }
+    console.log(`[Monitor] ${org.name}: ${jobs.length} after filter`)
+    return jobs.sort((a, b) => b.relevanceScore - a.relevanceScore)
   } catch (err) {
-    console.error(`[Monitor] webSearch failed for ${org.name}:`, (err as Error).message)
+    console.error(`[Monitor] Serper failed ${org.name}:`, (err as Error).message)
     return []
   }
 }
@@ -320,7 +303,10 @@ async function scanViaRSS(org: MonitorOrg): Promise<ScannedJob[]> {
   try {
     const resp = await withTimeout(
       fetch(org.rssUrl, {
-        headers: { 'User-Agent': 'career-os-portal@railway.app' }
+        headers: {
+          'User-Agent': 'career-os-portal/1.0',
+          'Accept': 'application/rss+xml, application/xml, text/xml, */*'
+        }
       }),
       8000,
       `RSS for ${org.name}`
@@ -329,6 +315,7 @@ async function scanViaRSS(org: MonitorOrg): Promise<ScannedJob[]> {
     const text = await resp.text()
     const items: ScannedJob[] = []
     const itemMatches = text.match(/<item>([\s\S]*?)<\/item>/g) || []
+    console.log(`[RSS] ${org.name}: status=${resp.status} items=${itemMatches.length}`)
 
     for (const item of itemMatches.slice(0, 15)) {
       const title = (
