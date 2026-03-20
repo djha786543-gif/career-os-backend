@@ -62,7 +62,14 @@ router.get('/jobs', async (req: Request, res: Response) => {
         'NCBS Bangalore', 'IISc Bangalore', 'inStem Bangalore',
         'IGIB Delhi', 'CCMB Hyderabad', 'DBT-THSTI Faridabad', 'RCB Faridabad', 'IISER Pune',
       ],
-      india_industry: ['Biocon Biologics', 'Syngene International', 'AstraZeneca India'],
+      india_industry: [
+        'Biocon Biologics', 'Syngene International', 'AstraZeneca India',
+        'Dr Reddys Laboratories', 'Sun Pharmaceutical', 'Cipla', 'Lupin',
+        'Piramal Pharma', 'Zydus Lifesciences', 'Aragen Life Sciences',
+        'Novartis India', 'Pfizer India', 'Abbott India', 'Sanofi India',
+        'Bharat Biotech', 'Biological E', 'Intas Pharmaceuticals',
+        'Emcure Pharmaceuticals', 'Laurus Labs', 'Granules India',
+      ],
       asia: [
         'Takeda Japan', 'Daiichi Sankyo Japan', 'Astellas Japan', 'Eisai Japan',
         'Novartis Singapore', 'GSK Singapore', 'Takeda Singapore',
