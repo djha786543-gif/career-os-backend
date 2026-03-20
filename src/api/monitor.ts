@@ -21,7 +21,8 @@ router.get('/jobs', async (req: Request, res: Response) => {
 
     // ── Region → DB country mapping ──────────────────────────────────────────
     const REGION_COUNTRIES: Record<string, string[]> = {
-      asia:          ['Japan', 'Singapore', 'South Korea', 'China'],
+      asia:          ['Japan', 'Singapore', 'South Korea', 'China', 'Australia',
+                      'India', 'Hong Kong', 'Taiwan'],
       europe:        ['UK', 'Germany', 'Switzerland', 'France', 'Denmark',
                       'Ireland', 'Netherlands', 'Belgium', 'Sweden'],
       north_america: ['USA', 'Canada'],
@@ -34,12 +35,25 @@ router.get('/jobs', async (req: Request, res: Response) => {
       params.push(sector)
       where += ` AND j.sector = $${params.length}`
     }
-    if (region && REGION_COUNTRIES[region]) {
-      params.push(REGION_COUNTRIES[region])
+    if (region && REGION_COUNTRIES[region.toLowerCase()]) {
+      const countries = REGION_COUNTRIES[region.toLowerCase()]
+      params.push(countries)
       where += ` AND j.country = ANY($${params.length}::text[])`
     }
     if (isNew) {
       where += ` AND j.is_new = true`
+    }
+
+    const INDIA_INDUSTRY_ORG_NAMES = [
+      'Biocon Biologics', 'Syngene International', 'AstraZeneca India',
+      'Dr Reddy\'s Laboratories', 'Sun Pharmaceutical', 'Cipla Research',
+      'Piramal Pharma', 'Jubilant Biosys', 'Aragen Bioscience',
+      'Anthem Biosciences', 'Tata Memorial Centre', 'Serum Institute India',
+      'Lupin Research'
+    ]
+    if (subsector === 'industry' && sector === 'india') {
+      params.push(INDIA_INDUSTRY_ORG_NAMES)
+      where += ` AND j.org_name = ANY($${params.length})`
     }
 
     params.push(limit)
@@ -64,16 +78,20 @@ router.get('/jobs', async (req: Request, res: Response) => {
       ],
       india_industry: [
         'Biocon Biologics', 'Syngene International', 'AstraZeneca India',
-        'Dr Reddys Laboratories', 'Sun Pharmaceutical', 'Cipla', 'Lupin',
-        'Piramal Pharma', 'Zydus Lifesciences', 'Aragen Life Sciences',
-        'Novartis India', 'Pfizer India', 'Abbott India', 'Sanofi India',
-        'Bharat Biotech', 'Biological E', 'Intas Pharmaceuticals',
-        'Emcure Pharmaceuticals', 'Laurus Labs', 'Granules India',
+        'Dr Reddy\'s Laboratories', 'Sun Pharmaceutical', 'Cipla Research',
+        'Piramal Pharma', 'Jubilant Biosys', 'Aragen Bioscience',
+        'Anthem Biosciences', 'Tata Memorial Centre', 'Serum Institute India',
+        'Lupin Research',
       ],
       asia: [
         'Takeda Japan', 'Daiichi Sankyo Japan', 'Astellas Japan', 'Eisai Japan',
+        'Takeda Pharmaceuticals Japan', 'Daiichi Sankyo', 'Astellas Pharma',
+        'Eisai Research', 'Ono Pharmaceutical', 'Chugai Pharmaceutical', 'Mitsubishi Tanabe Pharma',
         'Novartis Singapore', 'GSK Singapore', 'Takeda Singapore',
-        'AstraZeneca China', 'Roche China', 'Samsung Biologics', 'Celltrion',
+        'A*STAR Singapore', 'Roche Singapore', 'AbbVie Singapore', 'Bayer Asia',
+        'AstraZeneca China', 'Roche China', 'BeiGene Research', 'Zymeworks China',
+        'Samsung Biologics', 'Celltrion', 'Yuhan Corporation',
+        'CSL Behring', 'Pfizer Australia',
       ],
       europe: [
         'AstraZeneca UK', 'GSK UK', 'Novartis Basel', 'Roche Research Basel',
@@ -97,7 +115,7 @@ router.get('/jobs', async (req: Request, res: Response) => {
       else if (sector === 'international') liveOrgNames = LIVE.international
     } else if (sector === 'industry' && !region) {
       // DB has industry jobs but may be missing regions — supplement selectively
-      const ASIA_C   = new Set(['Japan', 'Singapore', 'South Korea', 'China'])
+      const ASIA_C   = new Set(['Japan', 'Singapore', 'South Korea', 'China', 'Australia', 'Hong Kong', 'Taiwan'])
       const EUROPE_C = new Set(['UK', 'Germany', 'Switzerland', 'France', 'Denmark',
                                 'Ireland', 'Netherlands', 'Belgium', 'Sweden'])
       if (!result.rows.some((r: any) => ASIA_C.has(r.country)))   liveOrgNames.push(...LIVE.asia)
