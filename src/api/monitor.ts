@@ -9,13 +9,23 @@ const router = Router()
 const MAX_LIMIT = 100
 const DEFAULT_LIMIT = 50
 
-// GET /api/monitor/jobs?sector=academia&isNew=true&limit=50&offset=0
+// GET /api/monitor/jobs?sector=academia&region=asia&subsector=industry&isNew=true&limit=50&offset=0
 router.get('/jobs', async (req: Request, res: Response) => {
   try {
-    const sector = req.query.sector as string | undefined
-    const isNew = req.query.isNew === 'true'
-    const limit = Math.min(parseInt(req.query.limit as string || String(DEFAULT_LIMIT)), MAX_LIMIT)
+    const sector    = req.query.sector    as string | undefined  // academia|industry|international|india
+    const region    = req.query.region    as string | undefined  // asia|europe|north_america
+    const subsector = req.query.subsector as string | undefined  // industry  (india sector only)
+    const isNew     = req.query.isNew === 'true'
+    const limit  = Math.min(parseInt(req.query.limit  as string || String(DEFAULT_LIMIT)), MAX_LIMIT)
     const offset = Math.max(parseInt(req.query.offset as string || '0'), 0)
+
+    // ── Region → DB country mapping ──────────────────────────────────────────
+    const REGION_COUNTRIES: Record<string, string[]> = {
+      asia:          ['Japan', 'Singapore', 'South Korea', 'China'],
+      europe:        ['UK', 'Germany', 'Switzerland', 'France', 'Denmark',
+                      'Ireland', 'Netherlands', 'Belgium', 'Sweden'],
+      north_america: ['USA', 'Canada'],
+    }
 
     const params: any[] = []
     let where = 'WHERE j.is_active = true'
@@ -23,6 +33,10 @@ router.get('/jobs', async (req: Request, res: Response) => {
     if (sector && ['academia','industry','international','india'].includes(sector)) {
       params.push(sector)
       where += ` AND j.sector = $${params.length}`
+    }
+    if (region && REGION_COUNTRIES[region]) {
+      params.push(REGION_COUNTRIES[region])
+      where += ` AND j.country = ANY($${params.length}::text[])`
     }
     if (isNew) {
       where += ` AND j.is_new = true`
@@ -42,61 +56,50 @@ router.get('/jobs', async (req: Request, res: Response) => {
       params
     )
 
-    // ── Live-search fallback / regional supplement ───────────────────────────
-    // Two cases handled:
-    //   1. DB empty for sector → full live search on priority orgs
-    //   2. Industry sector with DB results but missing Asia or Europe coverage
-    //      → supplement live search for the missing regions only
-    //
-    // In both cases a background runFullScan() is triggered so the DB
-    // populates for subsequent requests.
-
-    // Countries that define each industry region (must match org.country in orgConfig)
-    const ASIA_COUNTRIES    = new Set(['Japan', 'Singapore', 'South Korea', 'China'])
-    const EUROPE_COUNTRIES  = new Set(['UK', 'Germany', 'Switzerland', 'France',
-                                        'Denmark', 'Ireland', 'Netherlands', 'Belgium', 'Sweden'])
-
-    // Orgs to live-search when a region has no DB coverage
-    const LIVE_ORGS_INDIA: string[] = [
-      // Academic
-      'NCBS Bangalore', 'IISc Bangalore', 'inStem Bangalore', 'IGIB Delhi', 'CCMB Hyderabad',
-      // Govt Research
-      'DBT-THSTI Faridabad', 'RCB Faridabad', 'IISER Pune',
-      // Industry
-      'Biocon Biologics', 'Syngene International', 'AstraZeneca India',
-    ]
-    const LIVE_ORGS_ASIA: string[] = [
-      'Takeda Japan', 'Daiichi Sankyo Japan', 'Astellas Japan', 'Eisai Japan',
-      'Novartis Singapore', 'GSK Singapore', 'Takeda Singapore',
-      'AstraZeneca China', 'Roche China', 'Samsung Biologics', 'Celltrion',
-    ]
-    const LIVE_ORGS_EUROPE: string[] = [
-      'AstraZeneca UK', 'GSK UK', 'Novartis Basel', 'Roche Research Basel',
-      'Novo Nordisk', 'BioNTech Germany', 'Bayer Life Sciences', 'Boehringer Ingelheim',
-    ]
-    const LIVE_ORGS_INTL: string[] = [
-      'ETH Zurich', 'Karolinska Institute', 'MRC LMS London', 'A*STAR Singapore', 'WEHI Melbourne',
-    ]
-
-    // Determine which orgs need live search
-    let liveOrgNames: string[] = []
-
-    if (sector === 'india' && result.rows.length === 0) {
-      liveOrgNames = LIVE_ORGS_INDIA
-    } else if (sector === 'industry') {
-      const hasAsian   = result.rows.some(r => ASIA_COUNTRIES.has(r.country))
-      const hasEuropean = result.rows.some(r => EUROPE_COUNTRIES.has(r.country))
-      if (!hasAsian)   liveOrgNames.push(...LIVE_ORGS_ASIA)
-      if (!hasEuropean) liveOrgNames.push(...LIVE_ORGS_EUROPE)
-      // If DB is also empty of US/Canada jobs, add a few NA orgs too
-      if (result.rows.length === 0) liveOrgNames.push('Genentech', 'Regeneron', 'AstraZeneca US')
-    } else if (sector === 'international' && result.rows.length === 0) {
-      liveOrgNames = LIVE_ORGS_INTL
+    // ── Live-search priority org lists ───────────────────────────────────────
+    const LIVE: Record<string, string[]> = {
+      india_academic: [
+        'NCBS Bangalore', 'IISc Bangalore', 'inStem Bangalore',
+        'IGIB Delhi', 'CCMB Hyderabad', 'DBT-THSTI Faridabad', 'RCB Faridabad', 'IISER Pune',
+      ],
+      india_industry: ['Biocon Biologics', 'Syngene International', 'AstraZeneca India'],
+      asia: [
+        'Takeda Japan', 'Daiichi Sankyo Japan', 'Astellas Japan', 'Eisai Japan',
+        'Novartis Singapore', 'GSK Singapore', 'Takeda Singapore',
+        'AstraZeneca China', 'Roche China', 'Samsung Biologics', 'Celltrion',
+      ],
+      europe: [
+        'AstraZeneca UK', 'GSK UK', 'Novartis Basel', 'Roche Research Basel',
+        'Novo Nordisk', 'BioNTech Germany', 'Bayer Life Sciences', 'Boehringer Ingelheim',
+      ],
+      north_america: ['Genentech', 'Regeneron', 'AstraZeneca US', 'Amgen', 'Pfizer Research'],
+      international: ['ETH Zurich', 'Karolinska Institute', 'MRC LMS London', 'A*STAR Singapore', 'WEHI Melbourne'],
     }
 
+    // ── Decide which live orgs to search ────────────────────────────────────
+    let liveOrgNames: string[] = []
+
+    if (result.rows.length === 0) {
+      // DB empty for this specific query — full live search
+      if (region === 'asia')          liveOrgNames = LIVE.asia
+      else if (region === 'europe')   liveOrgNames = LIVE.europe
+      else if (region === 'north_america') liveOrgNames = LIVE.north_america
+      else if (sector === 'india' && subsector === 'industry') liveOrgNames = LIVE.india_industry
+      else if (sector === 'india')    liveOrgNames = [...LIVE.india_academic, ...LIVE.india_industry]
+      else if (sector === 'industry') liveOrgNames = [...LIVE.asia, ...LIVE.europe, ...LIVE.north_america]
+      else if (sector === 'international') liveOrgNames = LIVE.international
+    } else if (sector === 'industry' && !region) {
+      // DB has industry jobs but may be missing regions — supplement selectively
+      const ASIA_C   = new Set(['Japan', 'Singapore', 'South Korea', 'China'])
+      const EUROPE_C = new Set(['UK', 'Germany', 'Switzerland', 'France', 'Denmark',
+                                'Ireland', 'Netherlands', 'Belgium', 'Sweden'])
+      if (!result.rows.some((r: any) => ASIA_C.has(r.country)))   liveOrgNames.push(...LIVE.asia)
+      if (!result.rows.some((r: any) => EUROPE_C.has(r.country))) liveOrgNames.push(...LIVE.europe)
+    }
+
+    // ── Run live search if needed ────────────────────────────────────────────
     if (liveOrgNames.length > 0) {
-      const nameSet = new Set(liveOrgNames)
-      // Sector for industry supplement can span multiple sectors — match by name only
+      const nameSet  = new Set(liveOrgNames)
       const liveOrgs = MONITOR_ORGS.filter(o => o.apiType === 'websearch' && nameSet.has(o.name))
 
       try {
@@ -113,17 +116,11 @@ router.get('/jobs', async (req: Request, res: Response) => {
             if (existingKeys.has(key)) return
             existingKeys.add(key)
             liveJobs.push({
-              title:            j.title,
-              company:          j.orgName,
-              org_name:         j.orgName,
-              location:         j.location,
-              country:          org.country,
-              apply_url:        j.applyUrl,
-              applyUrl:         j.applyUrl,
-              snippet:          j.snippet,
-              sector:           org.sector,
-              is_new:           true,
-              fit_score:        Math.min(j.relevanceScore * 15, 85),
+              title: j.title, company: j.orgName, org_name: j.orgName,
+              location: j.location, country: org.country,
+              apply_url: j.applyUrl, applyUrl: j.applyUrl,
+              snippet: j.snippet, sector: org.sector,
+              is_new: true, fit_score: Math.min(j.relevanceScore * 15, 85),
               high_suitability: j.highSuitability,
             })
           })
@@ -131,16 +128,10 @@ router.get('/jobs', async (req: Request, res: Response) => {
 
         if (liveJobs.length > 0) {
           runFullScan().catch(console.error)
-
           const allJobs = [...result.rows, ...liveJobs]
           return res.json({
-            status:          'success',
-            jobs:            allJobs,
-            counts:          [],
-            total:           allJobs.length,
-            limit,
-            offset,
-            broadened:       true,
+            status: 'success', jobs: allJobs, counts: [], total: allJobs.length, limit, offset,
+            broadened: true,
             broadenedReason: result.rows.length === 0
               ? `Live search — ${liveJobs.length} positions found. Run Scan to cache to database.`
               : `Supplemented with ${liveJobs.length} live results for uncached regions.`,
@@ -148,7 +139,6 @@ router.get('/jobs', async (req: Request, res: Response) => {
         }
       } catch (fallbackErr) {
         console.error('[Monitor] Live fallback error:', (fallbackErr as Error).message)
-        // Fall through to return DB results
       }
     }
     // ── End live-search fallback ─────────────────────────────────────────────
