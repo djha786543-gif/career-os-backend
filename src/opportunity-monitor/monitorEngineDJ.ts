@@ -186,7 +186,7 @@ async function scanViaWebSearchDJ(org: DJMonitorOrg): Promise<DJScannedJob[]> {
   try {
     const response = await withTimeout(
       anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5-20251001',
         max_tokens: 2000,
         tools: [{ type: 'web_search_20250305' as any, name: 'web_search' }],
         messages: [{
