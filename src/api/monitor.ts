@@ -42,84 +42,113 @@ router.get('/jobs', async (req: Request, res: Response) => {
       params
     )
 
-    // ── Live-search fallback ─────────────────────────────────────────────────
-    // If the DB is empty for this sector (not yet scanned), run a parallel
-    // websearch on the top 4 orgs for immediate results. Trigger a background
-    // full scan so the DB gets populated for future requests.
-    if (result.rows.length === 0 && sector && ['india', 'industry', 'international'].includes(sector)) {
-      // Priority orgs per sector: sample a cross-section for fast coverage
-      const PRIORITY_ORGS: Record<string, string[]> = {
-        india: [
-          'NCBS Bangalore', 'IISc Bangalore', 'inStem Bangalore', 'IGIB Delhi',
-          'CCMB Hyderabad', 'IISER Pune', 'DBT-THSTI Faridabad', 'RCB Faridabad',
-        ],
-        industry: [
-          // North America
-          'Genentech', 'Regeneron', 'AstraZeneca US',
-          // Europe
-          'AstraZeneca UK', 'Novartis Basel', 'Roche Research Basel', 'Novo Nordisk',
-          // Asia
-          'Takeda Japan', 'Daiichi Sankyo Japan', 'Novartis Singapore',
-          'AstraZeneca China', 'Samsung Biologics', 'Astellas Japan',
-        ],
-        international: [
-          'ETH Zurich', 'Karolinska Institute', 'MRC LMS London',
-          'A*STAR Singapore', 'WEHI Melbourne',
-        ],
-      }
+    // ── Live-search fallback / regional supplement ───────────────────────────
+    // Two cases handled:
+    //   1. DB empty for sector → full live search on priority orgs
+    //   2. Industry sector with DB results but missing Asia or Europe coverage
+    //      → supplement live search for the missing regions only
+    //
+    // In both cases a background runFullScan() is triggered so the DB
+    // populates for subsequent requests.
 
-      const priorityNames = new Set(PRIORITY_ORGS[sector] ?? [])
-      const liveOrgs = MONITOR_ORGS
-        .filter(o => o.sector === sector && o.apiType === 'websearch' && priorityNames.has(o.name))
+    // Countries that define each industry region (must match org.country in orgConfig)
+    const ASIA_COUNTRIES    = new Set(['Japan', 'Singapore', 'South Korea', 'China'])
+    const EUROPE_COUNTRIES  = new Set(['UK', 'Germany', 'Switzerland', 'France',
+                                        'Denmark', 'Ireland', 'Netherlands', 'Belgium', 'Sweden'])
+
+    // Orgs to live-search when a region has no DB coverage
+    const LIVE_ORGS_INDIA: string[] = [
+      // Academic
+      'NCBS Bangalore', 'IISc Bangalore', 'inStem Bangalore', 'IGIB Delhi', 'CCMB Hyderabad',
+      // Govt Research
+      'DBT-THSTI Faridabad', 'RCB Faridabad', 'IISER Pune',
+      // Industry
+      'Biocon Biologics', 'Syngene International', 'AstraZeneca India',
+    ]
+    const LIVE_ORGS_ASIA: string[] = [
+      'Takeda Japan', 'Daiichi Sankyo Japan', 'Astellas Japan', 'Eisai Japan',
+      'Novartis Singapore', 'GSK Singapore', 'Takeda Singapore',
+      'AstraZeneca China', 'Roche China', 'Samsung Biologics', 'Celltrion',
+    ]
+    const LIVE_ORGS_EUROPE: string[] = [
+      'AstraZeneca UK', 'GSK UK', 'Novartis Basel', 'Roche Research Basel',
+      'Novo Nordisk', 'BioNTech Germany', 'Bayer Life Sciences', 'Boehringer Ingelheim',
+    ]
+    const LIVE_ORGS_INTL: string[] = [
+      'ETH Zurich', 'Karolinska Institute', 'MRC LMS London', 'A*STAR Singapore', 'WEHI Melbourne',
+    ]
+
+    // Determine which orgs need live search
+    let liveOrgNames: string[] = []
+
+    if (sector === 'india' && result.rows.length === 0) {
+      liveOrgNames = LIVE_ORGS_INDIA
+    } else if (sector === 'industry') {
+      const hasAsian   = result.rows.some(r => ASIA_COUNTRIES.has(r.country))
+      const hasEuropean = result.rows.some(r => EUROPE_COUNTRIES.has(r.country))
+      if (!hasAsian)   liveOrgNames.push(...LIVE_ORGS_ASIA)
+      if (!hasEuropean) liveOrgNames.push(...LIVE_ORGS_EUROPE)
+      // If DB is also empty of US/Canada jobs, add a few NA orgs too
+      if (result.rows.length === 0) liveOrgNames.push('Genentech', 'Regeneron', 'AstraZeneca US')
+    } else if (sector === 'international' && result.rows.length === 0) {
+      liveOrgNames = LIVE_ORGS_INTL
+    }
+
+    if (liveOrgNames.length > 0) {
+      const nameSet = new Set(liveOrgNames)
+      // Sector for industry supplement can span multiple sectors — match by name only
+      const liveOrgs = MONITOR_ORGS.filter(o => o.apiType === 'websearch' && nameSet.has(o.name))
 
       try {
         const settled = await Promise.allSettled(liveOrgs.map(org => scanViaWebSearch(org)))
 
         const liveJobs: any[] = []
-        const seen = new Set<string>()
+        const existingKeys = new Set(result.rows.map((r: any) => `${r.title}|${r.org_name}`))
 
         settled.forEach((r, i) => {
           if (r.status !== 'fulfilled') return
           const org = liveOrgs[i]
           r.value.forEach(j => {
             const key = `${j.title}|${j.orgName}`
-            if (seen.has(key)) return
-            seen.add(key)
+            if (existingKeys.has(key)) return
+            existingKeys.add(key)
             liveJobs.push({
-              title:           j.title,
-              company:         j.orgName,
-              org_name:        j.orgName,
-              location:        j.location,
-              country:         org.country,
-              apply_url:       j.applyUrl,
-              applyUrl:        j.applyUrl,
-              snippet:         j.snippet,
-              sector:          org.sector,
-              is_new:          true,
-              fit_score:       Math.min(j.relevanceScore * 15, 85),
+              title:            j.title,
+              company:          j.orgName,
+              org_name:         j.orgName,
+              location:         j.location,
+              country:          org.country,
+              apply_url:        j.applyUrl,
+              applyUrl:         j.applyUrl,
+              snippet:          j.snippet,
+              sector:           org.sector,
+              is_new:           true,
+              fit_score:        Math.min(j.relevanceScore * 15, 85),
               high_suitability: j.highSuitability,
             })
           })
         })
 
         if (liveJobs.length > 0) {
-          // Trigger background full scan to populate DB for next time
           runFullScan().catch(console.error)
 
+          const allJobs = [...result.rows, ...liveJobs]
           return res.json({
             status:          'success',
-            jobs:            liveJobs,
+            jobs:            allJobs,
             counts:          [],
-            total:           liveJobs.length,
+            total:           allJobs.length,
             limit,
             offset,
             broadened:       true,
-            broadenedReason: `Live search — ${liveJobs.length} positions found. Run Scan to cache to database.`,
+            broadenedReason: result.rows.length === 0
+              ? `Live search — ${liveJobs.length} positions found. Run Scan to cache to database.`
+              : `Supplemented with ${liveJobs.length} live results for uncached regions.`,
           })
         }
       } catch (fallbackErr) {
         console.error('[Monitor] Live fallback error:', (fallbackErr as Error).message)
-        // Fall through to return empty result set
+        // Fall through to return DB results
       }
     }
     // ── End live-search fallback ─────────────────────────────────────────────
