@@ -18,12 +18,9 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-import Anthropic from '@anthropic-ai/sdk'
 import { pool } from '../db/client'
 import { DJ_MONITOR_ORGS, DJMonitorOrg } from './orgConfigDJ'
 import crypto from 'crypto'
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 // ─── DJ Profile Keywords ──────────────────────────────────────────────────────
 
@@ -175,90 +172,71 @@ interface DJScannedJob {
   suitabilityScore: number
 }
 
-// ─── Web Search Scanner (DJ-specific prompt) ──────────────────────────────────
+// ─── Web Search Scanner — Serper.dev (replaces Anthropic web_search) ─────────
 
 async function scanViaWebSearchDJ(org: DJMonitorOrg): Promise<DJScannedJob[]> {
-  const isIndia = org.country === 'India'
-  const countryStrategy = isIndia
-    ? `INDIA STRATEGY: Return ONLY Manager, Senior Manager, Director, AVP, VP, or Head of IT Audit level roles. Hard-reject Associate, Senior Associate, Analyst.`
-    : `US STRATEGY: Prioritize Contract, Consultant, W2, EAD-friendly, and Project-based roles. Include SOX Testing Cycle and Immediate Start positions.`
-
+  const apiKey = process.env.SERPER_API_KEY
+  if (!apiKey) {
+    console.warn(`[MonitorDJ] SERPER_API_KEY not set — skipping ${org.name}`)
+    return []
+  }
   try {
-    const response = await withTimeout(
-      anthropic.messages.create({
-        model: 'claude-sonnet-4-5-20251001',
-        max_tokens: 2000,
-        tools: [{ type: 'web_search_20250305' as any, name: 'web_search' }],
-        messages: [{
-          role: 'user',
-          content: `Search for current open IT Audit or Technology Risk positions at ${org.name}.
-Query: "${org.searchQuery}"
-
-DJ Profile: IT Audit Manager, CISA, AWS Certified. Core expertise: SOX 404, ITGC/ITAC, Cloud Security, SAP S/4HANA, NIST, AI/ML Governance, SOC1/SOC2, GRC.
-
-${countryStrategy}
-
-Exclude ALL of the following: Intern, Entry Level, Staff Auditor, Junior, Graduate, Trainee${isIndia ? ', Associate, Senior Associate, Analyst' : ''}.
-
-Find ONLY real, currently open positions posted in 2025 or 2026.
-
-Return ONLY a JSON array, no markdown, no explanation:
-[{
-  "title": "exact job title",
-  "location": "city, country (specific — not just 'remote')",
-  "applyUrl": "direct URL to job posting",
-  "snippet": "job description under 150 characters",
-  "postedDate": "date posted or Recent"
-}]
-If no relevant open positions found, return: []`,
-        }],
+    const resp = await withTimeout(
+      fetch('https://google.serper.dev/search', {
+        method: 'POST',
+        headers: {
+          'X-API-KEY': apiKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ q: org.searchQuery, num: 10 }),
       }),
-      18000,
-      `DJ webSearch for ${org.name}`
+      10000,
+      `DJ Serper for ${org.name}`
     )
-
-    let raw = ''
-    for (const block of response.content) {
-      if (block.type === 'text') raw += block.text
+    if (!resp.ok) {
+      console.error(`[MonitorDJ] Serper ${resp.status} for ${org.name}`)
+      return []
     }
+    const data = await resp.json()
+    const results = data.organic || []
+    console.log(`[MonitorDJ] ${org.name}: Serper raw=${results.length}`)
 
-    raw = raw.replace(/```json|```/g, '').trim()
-    const start = raw.indexOf('[')
-    const end = raw.lastIndexOf(']')
-    if (start === -1 || end === -1) return []
+    const jobs: DJScannedJob[] = []
+    for (const r of results) {
+      const title = (r.title || '').replace(/\s*[-|·].*$/, '').trim()
+      const snippet = r.snippet || ''
+      if (!title) continue
+      if (!isRelevantDJ(title, snippet)) continue
+      if (!passesHardFilter(title, org.country)) continue
+      const s = djSuitabilityScore(title, snippet, org.name)
+      if (s < 4) continue
 
-    const parsed = JSON.parse(raw.slice(start, end + 1))
+      // Extract city from snippet or title for richer location data
+      const CITY_RE = /\b(new york|chicago|dallas|houston|charlotte|boston|atlanta|denver|phoenix|los angeles|san francisco|seattle|toronto|bangalore|bengaluru|mumbai|delhi|hyderabad|pune|chennai|london|singapore)\b/i
+      const cityMatch = snippet.match(CITY_RE) || title.match(CITY_RE)
+      const location = cityMatch ? cityMatch[0] : org.country
 
-    return parsed
-      .filter((j: any) => j.title && isRelevantDJ(j.title, j.snippet))
-      .filter((j: any) => passesHardFilter(j.title, org.country))
-      .filter((j: any) => {
-        const s = djSuitabilityScore(j.title, j.snippet || '', org.name)
-        return s >= 4
+      jobs.push({
+        externalId: hashContent(title, org.name, r.link || ''),
+        title,
+        orgName: org.name,
+        location,
+        country: org.country,
+        sector: org.sector,
+        applyUrl: extractCanonicalUrl(r.link || '', org.careersUrl || ''),
+        snippet: snippet.slice(0, 150),
+        postedDate: 'Recent',
+        contentHash: hashContent(title, org.name, r.link || ''),
+        highSuitability: s >= 4,
+        eadFriendly: org.eadFriendly === true,
+        managerialGrade: org.managerialGrade === true,
+        suitabilityScore: s,
       })
-      .map((j: any) => {
-        const location = j.location || org.country
-        const s = djSuitabilityScore(j.title, j.snippet || '', org.name)
-        return {
-          externalId: hashContent(j.title, org.name, location),
-          title: j.title,
-          orgName: org.name,
-          location,
-          country: org.country,
-          sector: org.sector,
-          applyUrl: extractCanonicalUrl(j.applyUrl || '', org.careersUrl || ''),
-          snippet: j.snippet || '',
-          postedDate: j.postedDate || 'Recent',
-          contentHash: hashContent(j.title, org.name, location),
-          highSuitability: s >= 4,
-          eadFriendly: org.eadFriendly === true,
-          managerialGrade: org.managerialGrade === true,
-          suitabilityScore: s,
-        }
-      })
-
+    }
+    console.log(`[MonitorDJ] ${org.name}: ${jobs.length} after filter`)
+    return jobs.sort((a, b) => b.suitabilityScore - a.suitabilityScore)
   } catch (err) {
-    console.error(`[MonitorDJ] webSearch failed for ${org.name}:`, (err as Error).message)
+    console.error(`[MonitorDJ] Serper failed ${org.name}:`, (err as Error).message)
     return []
   }
 }

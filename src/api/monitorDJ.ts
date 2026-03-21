@@ -233,4 +233,47 @@ router.post('/seed', async (req: Request, res: Response) => {
   }
 })
 
+// GET /api/monitor/dj/debug — deployment verification
+router.get('/debug', async (req: Request, res: Response) => {
+  try {
+    const tables = await pool.query(
+      `SELECT tablename FROM pg_tables
+       WHERE schemaname = 'public' AND tablename LIKE 'dj_%'
+       ORDER BY tablename`
+    )
+    const orgs = await pool.query(
+      `SELECT sector, country, COUNT(*) as n
+       FROM dj_monitor_orgs WHERE is_active = true
+       GROUP BY sector, country ORDER BY sector, country`
+    )
+    const jobs = await pool.query(
+      `SELECT sector, country, COUNT(*) as n
+       FROM dj_monitor_jobs WHERE is_active = true
+       GROUP BY sector, country ORDER BY sector, country`
+    )
+    const recentScans = await pool.query(
+      `SELECT s.status, s.error_message, s.jobs_found, s.new_jobs,
+              s.scanned_at, o.name as org_name
+       FROM dj_monitor_scans s
+       JOIN dj_monitor_orgs o ON s.org_id = o.id
+       ORDER BY s.scanned_at DESC LIMIT 20`
+    )
+    res.json({
+      codeVersion: process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 7) ?? 'local',
+      env: {
+        serperKey:    !!process.env.SERPER_API_KEY,
+        databaseUrl:  !!process.env.DATABASE_URL,
+      },
+      tables:      tables.rows.map((r: any) => r.tablename),
+      orgs:        { total: orgs.rows.reduce((s: number, r: any) => s + parseInt(r.n), 0), bySector: orgs.rows },
+      jobs:        { total: jobs.rows.reduce((s: number, r: any) => s + parseInt(r.n), 0), bySector: jobs.rows },
+      recentScans: recentScans.rows,
+    })
+  } catch (err) {
+    if (!res.headersSent) {
+      res.status(500).json({ error: (err as Error).message })
+    }
+  }
+})
+
 export default router
