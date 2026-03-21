@@ -38,6 +38,7 @@ app.get('/health', (req: Request, res: Response) => {
 		timestamp: Date.now(),
 		env: {
 			anthropic: !!process.env.ANTHROPIC_API_KEY,
+			serper:    !!process.env.SERPER_API_KEY,
 			adzuna:    !!process.env.ADZUNA_APP_ID,
 			gemini:    !!process.env.GEMINI_API_KEY,
 			deepseek:  !!process.env.DEEPSEEK_API_KEY,
@@ -71,6 +72,9 @@ app.get('/api/status', async (req, res) => {
 
 	// Anthropic API key present
 	checks.anthropic = process.env.ANTHROPIC_API_KEY ? 'ok' : 'not_configured';
+
+	// Serper API key (DJ monitor web search)
+	checks.serper = process.env.SERPER_API_KEY ? 'ok' : 'not_configured';
 
 	// Indeed MCP configured
 	checks.indeed_mcp = process.env.INDEED_MCP_URL ? 'ok' : 'not_configured';
