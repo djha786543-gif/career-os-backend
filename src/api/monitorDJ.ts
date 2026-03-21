@@ -259,7 +259,7 @@ router.get('/debug', async (req: Request, res: Response) => {
        ORDER BY s.scanned_at DESC LIMIT 20`
     )
     res.json({
-      codeVersion: process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 7) ?? 'local',
+      codeVersion: 'Serper-V1-Success',
       env: {
         serperKey:    !!process.env.SERPER_API_KEY,
         databaseUrl:  !!process.env.DATABASE_URL,
