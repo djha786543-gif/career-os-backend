@@ -159,6 +159,7 @@ export async function dbInit(): Promise<void> {
       ALTER TABLE monitor_jobs ADD COLUMN IF NOT EXISTS job_board VARCHAR(100);
       ALTER TABLE kanban_cards ADD COLUMN IF NOT EXISTS job_board VARCHAR(100);
       ALTER TABLE monitor_jobs ADD COLUMN IF NOT EXISTS high_suitability BOOLEAN DEFAULT FALSE;
+      ALTER TABLE dj_monitor_orgs ADD COLUMN IF NOT EXISTS rss_url TEXT;
 
       -- ─── DJ Opportunity Monitor — isolated tables (no crossover with Pooja) ──
 

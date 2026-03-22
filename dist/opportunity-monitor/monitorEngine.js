@@ -151,6 +151,68 @@ function extractCanonicalUrl(url, fallback) {
         return fallback;
     return url;
 }
+/**
+ * URL quality gate — confirms the link points to an actual job posting.
+ * Rejects news sites, company bios, blog posts, social media.
+ */
+function isDirectJobUrl(url) {
+    if (!url || url === '#')
+        return false;
+    const lower = url.toLowerCase();
+    const NOISE_PATTERNS = [
+        'reuters.com', 'bloomberg.com', 'cnbc.com', 'wsj.com', 'forbes.com',
+        'businessinsider.com', 'techcrunch.com', 'nature.com/articles',
+        'sciencedirect.com', 'pubmed.ncbi', 'ncbi.nlm.nih.gov/pubmed',
+        'wikipedia.org', 'twitter.com', 'x.com', 'facebook.com',
+        'instagram.com', 'youtube.com',
+        'linkedin.com/company', 'linkedin.com/in/', 'glassdoor.com/overview',
+        'glassdoor.com/reviews', 'indeed.com/cmp/',
+        '/about-us', '/about/', '/team/', '/leadership/', '/history/',
+        '/blog/', '/news/', '/press/', '/insights/', '/article/', '/resources/',
+        '/culture/', '/overview', '/company/',
+    ];
+    if (NOISE_PATTERNS.some(p => lower.includes(p)))
+        return false;
+    const JOB_PATTERNS = [
+        '/jobs/', '/job/', '/careers/', '/career/', '/openings/', '/vacancies/',
+        '/position/', '/apply', '/requisition', '/job-id', '/jobid',
+        'jobs.', 'careers.', 'apply.',
+        'indeed.com/viewjob', 'linkedin.com/jobs/view',
+        'lever.co/', 'greenhouse.io/', 'workday.com', 'myworkdayjobs.com',
+        'taleo.net', 'icims.com', 'successfactors.com', 'smartrecruiters.com',
+        'bamboohr.com', 'workable.com', 'ashbyhq.com',
+    ];
+    return JOB_PATTERNS.some(p => lower.includes(p));
+}
+/**
+ * Snippet must contain language typical of a job description.
+ * Filters out news summaries, press releases, and research abstracts.
+ */
+function hasJobLanguage(snippet) {
+    if (!snippet)
+        return false;
+    const s = snippet.toLowerCase();
+    const JOB_WORDS = [
+        'responsibilities', 'requirements', 'qualifications', 'years of experience',
+        'required', 'preferred', 'skills', 'bachelor', 'phd', 'postdoc',
+        'apply', 'role', 'position', 'opportunity', 'we are looking',
+        'you will', 'must have', 'salary', 'benefits', 'full-time',
+    ];
+    return JOB_WORDS.some(w => s.includes(w));
+}
+/**
+ * Agency / spam blocker — removes low-quality recruiter spam and mass postings.
+ */
+function isAgencySpam(title, snippet) {
+    const text = (title + ' ' + snippet).toLowerCase();
+    const SPAM_SIGNALS = [
+        'corp to corp', 'c2c', 'w2 only contract', 'no h1b', 'no h-1b',
+        'multiple openings available', 'submit resume to', 'send resume to',
+        'staffing company', 'staffing firm', 'recruiting agency',
+        'on behalf of our client', 'contract corp-to-corp',
+    ];
+    return SPAM_SIGNALS.some(s => text.includes(s));
+}
 function hashContent(title, org, location) {
     return crypto_1.default
         .createHash('sha256')
@@ -163,7 +225,8 @@ async function withTimeout(promise, ms, label) {
     const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error(`Timeout after ${ms}ms: ${label}`)), ms));
     return Promise.race([promise, timeout]);
 }
-// TASK 1: Serper.dev replaces Anthropic web_search (no more 401 errors)
+const POOJA_CITY_RE = /\b(bangalore|bengaluru|mumbai|delhi|hyderabad|pune|chennai|tokyo|osaka|yokohama|singapore|seoul|busan|shanghai|beijing|guangzhou|boston|cambridge|san francisco|san diego|la jolla|los angeles|new york|seattle|bethesda|london|heidelberg|zurich|basel|stockholm|oslo|copenhagen|paris|amsterdam|dublin|toronto|montreal|sydney|melbourne)\b/i;
+// Serper web search — Google Jobs cards prioritised, organic fallback with quality gates.
 async function scanViaWebSearch(org) {
     const apiKey = process.env.SERPER_API_KEY;
     if (!apiKey) {
@@ -184,32 +247,90 @@ async function scanViaWebSearch(org) {
             return [];
         }
         const data = await resp.json();
-        const results = data.organic || [];
-        console.log(`[Monitor] ${org.name}: Serper raw=${results.length}`);
         const jobs = [];
-        for (const r of results) {
+        // ── Tier A: Google for Jobs structured cards (confirmed job listings) ──────
+        const googleJobs = data.jobs || [];
+        console.log(`[Monitor] ${org.name}: Google Jobs cards=${googleJobs.length}`);
+        for (const gj of googleJobs) {
+            const title = (gj.title || '').trim();
+            const company = (gj.companyName || org.name).trim();
+            const location = gj.location || org.country;
+            const snippet = [
+                gj.description || '',
+                ...(gj.jobHighlights || []).flatMap((h) => h.items || []),
+            ].join(' ').slice(0, 200);
+            const link = gj.relatedLinks?.[0]?.link || gj.applyLink || '';
+            const postedDate = gj.extensions?.find((e) => /ago|day|week|month/i.test(e)) || 'Recent';
+            if (!title)
+                continue;
+            if (!isRelevant(title, snippet))
+                continue;
+            if (!passesHardFilter(title))
+                continue;
+            if (isAgencySpam(title, snippet))
+                continue;
+            // Lower suitability threshold for confirmed listings
+            const suitability = poojaSuitabilityScore(title, snippet, company);
+            if (suitability < 2)
+                continue;
+            if (!isRelevantLocation(location))
+                continue;
+            jobs.push({
+                externalId: hashContent(title, company, link || location),
+                title,
+                orgName: company,
+                location,
+                country: org.country,
+                applyUrl: link || org.careersUrl || '',
+                snippet: snippet.slice(0, 150),
+                postedDate,
+                contentHash: hashContent(title, company, link || location),
+                relevanceScore: relevanceScore(title, snippet),
+                highSuitability: suitability >= 3,
+            });
+        }
+        // ── Tier B: Organic results — strict quality gates ────────────────────────
+        const organicResults = data.organic || [];
+        console.log(`[Monitor] ${org.name}: organic=${organicResults.length}`);
+        for (const r of organicResults) {
             const title = (r.title || '').replace(/\s*[-|·].*$/, '').trim();
             const snippet = r.snippet || '';
-            if (!title || !isRelevant(title, snippet))
+            const link = r.link || '';
+            if (!title)
                 continue;
-            const CITY_RE = /\b(bangalore|bengaluru|mumbai|delhi|hyderabad|pune|chennai|tokyo|osaka|yokohama|singapore|seoul|busan|shanghai|beijing|guangzhou|boston|cambridge|london|heidelberg|zurich|basel)\b/i;
-            const cityMatch = snippet.match(CITY_RE) || title.match(CITY_RE);
+            // Strict gates for organic (could be news/blog/aggregator)
+            if (!isDirectJobUrl(link))
+                continue;
+            if (!hasJobLanguage(snippet))
+                continue;
+            if (!isRelevant(title, snippet))
+                continue;
+            if (!passesHardFilter(title))
+                continue;
+            if (isAgencySpam(title, snippet))
+                continue;
+            const suitability = poojaSuitabilityScore(title, snippet, org.name);
+            if (suitability < 3)
+                continue; // Stricter threshold for unverified organic
+            const cityMatch = snippet.match(POOJA_CITY_RE) || title.match(POOJA_CITY_RE);
             const location = cityMatch ? cityMatch[0] : org.country;
+            if (!isRelevantLocation(location))
+                continue;
             jobs.push({
-                externalId: hashContent(title, org.name, r.link || ''),
+                externalId: hashContent(title, org.name, link),
                 title,
                 orgName: org.name,
                 location,
                 country: org.country,
-                applyUrl: r.link || org.careersUrl || '',
+                applyUrl: extractCanonicalUrl(link, org.careersUrl || ''),
                 snippet: snippet.slice(0, 150),
                 postedDate: 'Recent',
-                contentHash: hashContent(title, org.name, r.link || ''),
+                contentHash: hashContent(title, org.name, link),
                 relevanceScore: relevanceScore(title, snippet),
-                highSuitability: true
+                highSuitability: suitability >= 3,
             });
         }
-        console.log(`[Monitor] ${org.name}: ${jobs.length} after filter`);
+        console.log(`[Monitor] ${org.name}: ${jobs.length} total after filter`);
         return jobs.sort((a, b) => b.relevanceScore - a.relevanceScore);
     }
     catch (err) {
@@ -294,11 +415,16 @@ async function scanViaRSS(org) {
                 continue;
             if (!passesHardFilter(title))
                 continue;
-            const location = org.country;
+            if (isAgencySpam(title, desc))
+                continue;
+            // For RSS — extract city from description if available, fall back to org country
+            const rssCity = desc.match(POOJA_CITY_RE) || title.match(POOJA_CITY_RE);
+            const location = rssCity ? rssCity[0] : org.country;
             if (!isRelevantLocation(location))
                 continue;
+            // Lower threshold for RSS (confirmed listings) vs websearch
             const suitability = poojaSuitabilityScore(title, desc, org.name);
-            if (suitability < 3)
+            if (suitability < 2)
                 continue;
             items.push({
                 externalId: hashContent(title, org.name, location),

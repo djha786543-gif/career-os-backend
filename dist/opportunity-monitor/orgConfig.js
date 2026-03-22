@@ -485,8 +485,26 @@ exports.MONITOR_ORGS = [
     { name: "MRC Harwell", sector: "international", country: "UK",
         apiType: "websearch",
         searchQuery: "MRC Harwell Institute scientist researcher cardiovascular genomics molecular biology 2026" },
+    // ═══ FREE SOURCES — Indeed RSS (zero cost, direct confirmed job listings) ═══
+    // These bypass Serper entirely and provide structured job data straight from Indeed.
+    // Fresh listings only (fromage=14 = posted within last 14 days).
+    { name: "Indeed RSS - Research Scientist Cardiovascular US",
+        sector: "industry", country: "USA",
+        apiType: "rss",
+        rssUrl: "https://www.indeed.com/rss?q=research+scientist+cardiovascular+molecular+biology&l=United+States&sort=date&fromage=14",
+        searchQuery: "research scientist cardiovascular molecular biology" },
+    { name: "Indeed RSS - Assistant Professor Biology US",
+        sector: "academia", country: "USA",
+        apiType: "rss",
+        rssUrl: "https://www.indeed.com/rss?q=assistant+professor+molecular+biology+cardiovascular&l=United+States&sort=date&fromage=21",
+        searchQuery: "assistant professor molecular biology cardiovascular" },
+    { name: "Indeed RSS - Scientist Molecular Biology India",
+        sector: "india", country: "India",
+        apiType: "rss",
+        rssUrl: "https://www.indeed.co.in/rss?q=research+scientist+molecular+biology+cardiovascular&l=India&sort=date&fromage=14",
+        searchQuery: "research scientist molecular biology India" },
 ];
-// Total: 82 Orgs — Tier 1-4 India Academics, Global Pharma, International Research Labs
+// Total: 85 Orgs — 82 org-targeted + 3 Indeed RSS free sources
 // Deployment Trigger: 2026-03-18 17:35:42
 // FORCE DEPLOY SYNC: 82 ORGS - 03/18/2026 17:42:31
 // Final Sync Trigger: 03/18/2026 18:03:43
