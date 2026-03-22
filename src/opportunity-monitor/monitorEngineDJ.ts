@@ -516,21 +516,23 @@ async function scanViaWebSearchDJ(org: DJMonitorOrg): Promise<DJScannedJob[]> {
 
         if (isAgencySpam(title, snippet)) continue
 
-        const s = djSuitabilityScore(title, snippet, company || org.name)
+        // Use org.name for Tier1 check — Google may return "EY" instead of "EY US Technology Risk"
+        const s = djSuitabilityScore(title, snippet, org.name)
         console.log(`[MonitorDJ][SCORE] ${org.name}: score=${s} title="${title}"`)
         if (s < 2) continue
 
+        const displayCompany = company || org.name
         jobs.push({
-          externalId: hashContent(title, company || org.name, link || location),
+          externalId: hashContent(title, displayCompany, link || location),
           title,
-          orgName: company || org.name,
+          orgName: displayCompany,
           location,
           country: org.country,
           sector: org.sector,
           applyUrl: extractCanonicalUrl(link || '', org.careersUrl || ''),
           snippet: snippet.slice(0, 150),
           postedDate,
-          contentHash: hashContent(title, company || org.name, link || location),
+          contentHash: hashContent(title, displayCompany, link || location),
           highSuitability: s >= 4,
           eadFriendly: org.eadFriendly === true,
           managerialGrade: org.managerialGrade === true,
