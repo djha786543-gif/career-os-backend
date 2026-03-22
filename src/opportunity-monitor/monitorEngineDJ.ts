@@ -188,7 +188,7 @@ interface DJScannedJob {
 // Raise back to 2 once we confirm jobs are flowing through the pipeline.
 const MIN_SCORE = 0
 
-// ─── Web Search Scanner via Serper.dev ────────────────────────────────────────
+// ─── Web Search Scanner via Serper.dev /jobs API ─────────────────────────────
 
 async function scanViaWebSearchDJ(org: DJMonitorOrg): Promise<DJScannedJob[]> {
   const apiKey = process.env.SERPER_API_KEY
@@ -199,7 +199,7 @@ async function scanViaWebSearchDJ(org: DJMonitorOrg): Promise<DJScannedJob[]> {
 
   try {
     const resp = await withTimeout(
-      fetch('https://google.serper.dev/search', {
+      fetch('https://google.serper.dev/jobs', {
         method: 'POST',
         headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
         body: JSON.stringify({ q: org.searchQuery, num: 10 }),
@@ -214,22 +214,19 @@ async function scanViaWebSearchDJ(org: DJMonitorOrg): Promise<DJScannedJob[]> {
     }
 
     const data = await resp.json()
-    const results: any[] = data.organic || []
-    console.log(`[MonitorDJ] ${org.name}: Serper raw=${results.length}`)
+    const results: any[] = data.jobs || []
+    console.log(`[MonitorDJ] ${org.name}: Serper jobs raw=${results.length}`)
 
     const jobs: DJScannedJob[] = []
     for (const r of results) {
-      const title = (r.title || '').replace(/\s*[-|·].*$/, '').trim()
-      const snippet = r.snippet || ''
+      const title = (r.title || '').trim()
+      const snippet = (r.description || r.snippet || '').slice(0, 300)
 
-      if (!title) {
-        console.log(`[MonitorDJ][REJECT] ${org.name}: empty title — url=${r.link}`)
-        continue
-      }
+      if (!title) continue
 
       const relevant = isRelevantDJ(title, snippet)
       if (!relevant) {
-        console.log(`[MonitorDJ][REJECT] ${org.name}: not relevant — title="${title}" snippet="${snippet.slice(0, 80)}"`)
+        console.log(`[MonitorDJ][REJECT] ${org.name}: not relevant — title="${title}"`)
         continue
       }
 
@@ -241,25 +238,22 @@ async function scanViaWebSearchDJ(org: DJMonitorOrg): Promise<DJScannedJob[]> {
 
       const s = djSuitabilityScore(title, snippet, org.name)
       console.log(`[MonitorDJ][SCORE] ${org.name}: score=${s} title="${title}"`)
-      if (s < MIN_SCORE) {
-        console.log(`[MonitorDJ][REJECT] ${org.name}: score ${s} < MIN_SCORE ${MIN_SCORE} — title="${title}"`)
-        continue
-      }
+      if (s < MIN_SCORE) continue
 
-      const location = extractLocation(snippet, title, org.country)
+      const location = r.location || extractLocation(snippet, title, org.country)
 
       jobs.push({
-        externalId: hashContent(title, org.name, r.link || ''),
+        externalId: hashContent(title, org.name, r.applyLink || r.link || ''),
         title,
         orgName: org.name,
         location,
         country: org.country,
         sector: org.sector,
-        applyUrl: extractCanonicalUrl(r.link || '', org.careersUrl || ''),
+        applyUrl: extractCanonicalUrl(r.applyLink || r.link || '', org.careersUrl || ''),
         snippet: snippet.slice(0, 200),
-        postedDate: 'Recent',
-        contentHash: hashContent(title, org.name, r.link || ''),
-        highSuitability: s >= 4,
+        postedDate: r.date || 'Recent',
+        contentHash: hashContent(title, org.name, r.applyLink || r.link || ''),
+        highSuitability: s >= 3,
         eadFriendly: org.eadFriendly === true,
         managerialGrade: org.managerialGrade === true,
         suitabilityScore: s,
