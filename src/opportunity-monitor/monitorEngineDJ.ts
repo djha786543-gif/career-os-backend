@@ -693,7 +693,12 @@ export async function runFullScanDJ(): Promise<void> {
 
     for (const row of orgs.rows) {
       const orgConfig = DJ_MONITOR_ORGS.find(o => o.name === row.name)
-      if (!orgConfig) continue
+      if (!orgConfig) {
+        // Stale DB row with no matching config — stamp it so it stops blocking the queue
+        console.warn(`[MonitorDJ] No config for org "${row.name}" — marking scanned to clear queue`)
+        await pool.query('UPDATE dj_monitor_orgs SET last_scanned_at = NOW() WHERE id = $1', [row.id])
+        continue
+      }
       await scanOrgDJ(row.id, orgConfig)
       const delay = orgConfig.slowFetch ? 8000 : 3000
       await new Promise(r => setTimeout(r, delay))
@@ -732,11 +737,7 @@ export async function runFullScanDJ(): Promise<void> {
 // ─── seedOrgsDJ ───────────────────────────────────────────────────────────────
 
 export async function seedOrgsDJ(): Promise<void> {
-  const count = await pool.query('SELECT COUNT(*) FROM dj_monitor_orgs')
-  if (parseInt(count.rows[0].count) >= DJ_MONITOR_ORGS.length) {
-    console.log(`[MonitorDJ] ${count.rows[0].count} DJ orgs already seeded`)
-    return
-  }
+  // Always upsert — ON CONFLICT is idempotent, so this safely refreshes names/config
 
   console.log('[MonitorDJ] Seeding DJ organizations...')
   for (const org of DJ_MONITOR_ORGS) {
