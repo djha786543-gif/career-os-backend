@@ -373,118 +373,135 @@ async function scanViaRemotive(org) {
         return [];
     }
 }
-// ─── SOURCE 3: Serper /jobs API (Google Jobs priority) + organic fallback ───────
-// /jobs endpoint returns structured Google for Jobs listings (score ≥ 2).
-// Organic results → strict URL + snippet + score validation (score ≥ 4).
+// ─── SOURCE 3: Serper /jobs API (Google Jobs) + organic fallback ─────────────
+// /jobs endpoint always returns structured Google for Jobs listings (score ≥ 2).
+// Organic results (from /search fallback) → strict URL + snippet + score ≥ 3.
 async function scanViaWebSearchDJ(org) {
     const apiKey = process.env.SERPER_API_KEY;
     if (!apiKey) {
         console.warn(`[MonitorDJ] SERPER_API_KEY not set — skipping ${org.name}`);
         return [];
     }
+    // Country-appropriate Google locale
+    const gl = org.country === 'India' ? 'in' : 'us';
     try {
-        const resp = await withTimeout(fetch('https://google.serper.dev/search', {
+        // ── PRIMARY: Serper /jobs endpoint — dedicated Google Jobs index ───────────
+        // This always returns structured job listings (title, company, location,
+        // description, apply links). Unlike /search, it never returns news/blogs.
+        const jobsResp = await withTimeout(fetch('https://google.serper.dev/jobs', {
             method: 'POST',
             headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ q: org.searchQuery, num: 10, gl: 'us' }),
-        }), 10000, `Serper for ${org.name}`);
-        if (!resp.ok) {
-            console.error(`[MonitorDJ] Serper ${resp.status} for ${org.name}`);
-            return [];
-        }
-        const data = await resp.json();
+            body: JSON.stringify({ q: org.searchQuery, num: 10, gl }),
+        }), 10000, `Serper /jobs for ${org.name}`);
         const jobs = [];
-        // ── /jobs endpoint returns Google for Jobs structured listings ─────────────
-        const googleJobs = data.jobs || [];
-        console.log(`[MonitorDJ] ${org.name}: Serper jobs raw=${googleJobs.length}`);
-        for (const gj of googleJobs) {
-            const title = (gj.title || '').trim();
-            const company = (gj.companyName || '').trim();
-            const location = gj.location || extractLocation(gj.description || '', title, org.country);
-            const snippet = [
-                gj.description || '',
-                ...(gj.jobHighlights || []).flatMap((h) => h.items || []),
-            ].join(' ').slice(0, 300);
-            const link = gj.relatedLinks?.[0]?.link || gj.applyLink || '';
-            const postedDate = gj.extensions?.find((e) => /ago|day|week|month/i.test(e)) || 'Recent';
-            if (!title)
-                continue;
-            const relevant = isRelevantDJ(title, snippet);
-            if (!relevant) {
-                console.log(`[MonitorDJ][REJECT] ${org.name}: not relevant — title="${title}"`);
-                continue;
+        if (jobsResp.ok) {
+            const jobsData = await jobsResp.json();
+            const googleJobs = jobsData.jobs || [];
+            console.log(`[MonitorDJ] ${org.name}: Serper /jobs raw=${googleJobs.length}`);
+            for (const gj of googleJobs) {
+                const title = (gj.title || '').trim();
+                const company = (gj.companyName || '').trim();
+                const location = gj.location || extractLocation(gj.description || '', title, org.country);
+                const snippet = [
+                    gj.description || '',
+                    ...(gj.jobHighlights || []).flatMap((h) => h.items || []),
+                ].join(' ').slice(0, 300);
+                // /jobs endpoint: link in applyOptions or relatedLinks
+                const link = gj.applyOptions?.[0]?.link ||
+                    gj.relatedLinks?.[0]?.link ||
+                    gj.applyLink || '';
+                // /jobs endpoint: date in detected_extensions.posted_at or extensions array
+                const postedDate = gj.detected_extensions?.posted_at ||
+                    gj.extensions?.find((e) => /ago|day|week|month/i.test(e)) ||
+                    'Recent';
+                if (!title)
+                    continue;
+                const relevant = isRelevantDJ(title, snippet);
+                if (!relevant) {
+                    console.log(`[MonitorDJ][REJECT] ${org.name}: not relevant — title="${title}"`);
+                    continue;
+                }
+                const passes = passesHardFilter(title, org.country);
+                if (!passes) {
+                    console.log(`[MonitorDJ][REJECT] ${org.name}: hard filter — title="${title}"`);
+                    continue;
+                }
+                if (isAgencySpam(title, snippet))
+                    continue;
+                const s = djSuitabilityScore(title, snippet, company || org.name);
+                console.log(`[MonitorDJ][SCORE] ${org.name}: score=${s} title="${title}"`);
+                if (s < 2)
+                    continue;
+                jobs.push({
+                    externalId: hashContent(title, company || org.name, link || location),
+                    title,
+                    orgName: company || org.name,
+                    location,
+                    country: org.country,
+                    sector: org.sector,
+                    applyUrl: extractCanonicalUrl(link || '', org.careersUrl || ''),
+                    snippet: snippet.slice(0, 150),
+                    postedDate,
+                    contentHash: hashContent(title, company || org.name, link || location),
+                    highSuitability: s >= 4,
+                    eadFriendly: org.eadFriendly === true,
+                    managerialGrade: org.managerialGrade === true,
+                    suitabilityScore: s,
+                });
             }
-            const passes = passesHardFilter(title, org.country);
-            if (!passes) {
-                console.log(`[MonitorDJ][REJECT] ${org.name}: hard filter — title="${title}"`);
-                continue;
-            }
-            if (isAgencySpam(title, snippet))
-                continue;
-            const s = djSuitabilityScore(title, snippet, company || org.name);
-            console.log(`[MonitorDJ][SCORE] ${org.name}: score=${s} title="${title}"`);
-            if (s < 2)
-                continue;
-            jobs.push({
-                externalId: hashContent(title, company || org.name, link || location),
-                title,
-                orgName: company || org.name,
-                location,
-                country: org.country,
-                sector: org.sector,
-                applyUrl: extractCanonicalUrl(link || '', org.careersUrl || ''),
-                snippet: snippet.slice(0, 150),
-                postedDate,
-                contentHash: hashContent(title, company || org.name, link || location),
-                highSuitability: s >= 4,
-                eadFriendly: org.eadFriendly === true,
-                managerialGrade: org.managerialGrade === true,
-                suitabilityScore: s,
-            });
         }
-        // ── Tier B: Organic results — strict quality gates ────────────────────────
-        const organicResults = data.organic || [];
-        console.log(`[MonitorDJ] ${org.name}: organic=${organicResults.length}`);
-        for (const r of organicResults) {
-            const title = (r.title || '').replace(/\s*[-|·].*$/, '').trim();
-            const snippet = r.snippet || '';
-            const link = r.link || '';
-            if (!title)
-                continue;
-            // Strict gates for organic (could be news/blog/aggregator)
-            if (!isDirectJobUrl(link))
-                continue;
-            if (!hasJobLanguage(snippet))
-                continue;
-            const relevant = isRelevantDJ(title, snippet);
-            if (!relevant) {
-                console.log(`[MonitorDJ][REJECT-ORGANIC] ${org.name}: not relevant — title="${title}"`);
-                continue;
+        else {
+            console.error(`[MonitorDJ] Serper /jobs ${jobsResp.status} for ${org.name}`);
+        }
+        // ── FALLBACK: organic web search — only if /jobs returned nothing ──────────
+        if (jobs.length === 0) {
+            const searchResp = await withTimeout(fetch('https://google.serper.dev/search', {
+                method: 'POST',
+                headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ q: org.searchQuery, num: 10, gl }),
+            }), 10000, `Serper /search fallback for ${org.name}`);
+            if (searchResp.ok) {
+                const searchData = await searchResp.json();
+                const organicResults = searchData.organic || [];
+                console.log(`[MonitorDJ] ${org.name}: organic fallback=${organicResults.length}`);
+                for (const r of organicResults) {
+                    const title = (r.title || '').replace(/\s*[-|·].*$/, '').trim();
+                    const snippet = r.snippet || '';
+                    const link = r.link || '';
+                    if (!title)
+                        continue;
+                    if (!isDirectJobUrl(link))
+                        continue;
+                    if (!hasJobLanguage(snippet))
+                        continue;
+                    if (!isRelevantDJ(title, snippet))
+                        continue;
+                    if (!passesHardFilter(title, org.country))
+                        continue;
+                    if (isAgencySpam(title, snippet))
+                        continue;
+                    const s = djSuitabilityScore(title, snippet, org.name);
+                    if (s < 3)
+                        continue;
+                    const location = extractLocation(snippet, title, org.country);
+                    jobs.push({
+                        externalId: hashContent(title, org.name, link),
+                        title,
+                        orgName: org.name,
+                        location,
+                        country: org.country,
+                        sector: org.sector,
+                        applyUrl: extractCanonicalUrl(link, org.careersUrl || ''),
+                        snippet: snippet.slice(0, 150),
+                        postedDate: 'Recent',
+                        contentHash: hashContent(title, org.name, link),
+                        highSuitability: s >= 4,
+                        eadFriendly: org.eadFriendly === true,
+                        managerialGrade: org.managerialGrade === true,
+                        suitabilityScore: s,
+                    });
+                }
             }
-            if (!passesHardFilter(title, org.country))
-                continue;
-            if (isAgencySpam(title, snippet))
-                continue;
-            const s = djSuitabilityScore(title, snippet, org.name);
-            if (s < 3)
-                continue;
-            const location = extractLocation(snippet, title, org.country);
-            jobs.push({
-                externalId: hashContent(title, org.name, link),
-                title,
-                orgName: org.name,
-                location,
-                country: org.country,
-                sector: org.sector,
-                applyUrl: extractCanonicalUrl(link, org.careersUrl || ''),
-                snippet: snippet.slice(0, 150),
-                postedDate: 'Recent',
-                contentHash: hashContent(title, org.name, link),
-                highSuitability: s >= 4,
-                eadFriendly: org.eadFriendly === true,
-                managerialGrade: org.managerialGrade === true,
-                suitabilityScore: s,
-            });
         }
         console.log(`[MonitorDJ] ${org.name}: ${jobs.length} total after filter`);
         return jobs.sort((a, b) => b.suitabilityScore - a.suitabilityScore);
