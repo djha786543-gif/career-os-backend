@@ -195,15 +195,16 @@ router.post('/seed', async (req, res) => {
         }
     }
 });
-// GET /api/monitor/dj/test-search — hits Serper for EY and returns raw results
+// GET /api/monitor/dj/test-search?org=Goldman+Sachs — hits Serper /jobs and returns raw results
 router.get('/test-search', async (req, res) => {
     const apiKey = process.env.SERPER_API_KEY;
     if (!apiKey) {
         return res.status(500).json({ error: 'SERPER_API_KEY not set in Railway env vars' });
     }
     try {
-        const org = orgConfigDJ_1.DJ_MONITOR_ORGS.find(o => o.name === 'EY US Technology Risk') || orgConfigDJ_1.DJ_MONITOR_ORGS[0];
-        const resp = await fetch('https://google.serper.dev/search', {
+        const orgName = req.query.org || 'Goldman Sachs';
+        const org = orgConfigDJ_1.DJ_MONITOR_ORGS.find(o => o.name === orgName) || orgConfigDJ_1.DJ_MONITOR_ORGS[0];
+        const resp = await fetch('https://google.serper.dev/jobs', {
             method: 'POST',
             headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
             body: JSON.stringify({ q: org.searchQuery, num: 10 }),

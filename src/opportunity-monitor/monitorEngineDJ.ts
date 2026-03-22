@@ -5,7 +5,12 @@
  * Uses dedicated tables: dj_monitor_orgs, dj_monitor_jobs, dj_monitor_scans.
  * Zero crossover with Pooja's monitorEngine.ts.
  *
- * SCORING RULES (must score ≥ 4):
+ * SOURCE HIERARCHY (highest → lowest quality):
+ *   1. Indeed RSS / Remotive API  — structured, confirmed job listings (score ≥ 2)
+ *   2. Serper Google Jobs cards   — structured, Google-aggregated listings (score ≥ 2)
+ *   3. Serper organic results     — filtered via URL + snippet validation (score ≥ 4)
+ *
+ * SCORING RULES:
  *   +2  AWS Cloud Audit OR AI Governance (DJ's specialised DNA)
  *   +2  Manager OR Director title
  *   +1  TIER 1 orgs (EY, Deloitte, KPMG, PwC, Goldman Sachs, JPMorgan,
@@ -14,7 +19,7 @@
  * HARD FILTERS (global):
  *   Reject: Intern, Entry Level, Staff Auditor, Junior
  * HARD FILTERS (India only):
- *   Reject: Senior Associate, Associate
+ *   Reject: Senior Associate, Associate, Analyst
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
@@ -74,6 +79,85 @@ const DJ_TIER1_ORGS = new Set([
   'Google Cloud', 'Google India GCC',
 ])
 
+// ─── Noise / Quality Filters ──────────────────────────────────────────────────
+
+/**
+ * URL quality gate — confirm the link points to an actual job posting.
+ * Rejects: news sites, company overviews, blog posts, social media.
+ * Accepts: known career/job page URL patterns.
+ */
+function isDirectJobUrl(url: string): boolean {
+  if (!url || url === '#') return false
+  const lower = url.toLowerCase()
+
+  // Hard-reject: non-job domains and path patterns
+  const NOISE_PATTERNS = [
+    // News / media
+    'reuters.com', 'bloomberg.com', 'cnbc.com', 'wsj.com', 'forbes.com',
+    'businessinsider.com', 'techcrunch.com', 'venturebeat.com', 'zdnet.com',
+    'theladders.com/career-advice', 'monster.com/career-advice',
+    // Wikipedia / reference
+    'wikipedia.org', 'investopedia.com',
+    // Social (non-job)
+    'twitter.com', 'x.com', 'facebook.com', 'instagram.com', 'youtube.com',
+    // Company overview pages (not listings)
+    'linkedin.com/company', 'linkedin.com/in/', 'glassdoor.com/overview',
+    'glassdoor.com/reviews', 'indeed.com/cmp/',
+    // Generic page paths
+    '/about-us', '/about/', '/company/', '/team/', '/leadership/',
+    '/blog/', '/news/', '/press/', '/insights/', '/resources/', '/article/',
+    '/culture/', '/values/', '/history/', '/overview',
+  ]
+  if (NOISE_PATTERNS.some(p => lower.includes(p))) return false
+
+  // Positive signals — confirmed job posting URL patterns
+  const JOB_PATTERNS = [
+    '/jobs/', '/job/', '/careers/', '/career/', '/openings/', '/vacancies/',
+    '/position/', '/apply', '/requisition', '/job-id', '/jobid',
+    'jobs.', 'careers.', 'apply.',
+    'indeed.com/viewjob', 'linkedin.com/jobs/view',
+    'glassdoor.com/job-listing', 'lever.co/', 'greenhouse.io/',
+    'workday.com/en-us/applications', 'myworkdayjobs.com',
+    'taleo.net', 'icims.com', 'successfactors.com', 'smartrecruiters.com',
+    'bamboohr.com', 'workable.com', 'ashbyhq.com', 'rippling.com/jobs',
+  ]
+  return JOB_PATTERNS.some(p => lower.includes(p))
+}
+
+/**
+ * Snippet must contain language typical of a job description.
+ * Rules out news summaries, company bios, and generic career page blurbs.
+ */
+function hasJobLanguage(snippet: string): boolean {
+  if (!snippet) return false
+  const s = snippet.toLowerCase()
+  const JOB_WORDS = [
+    'responsibilities', 'requirements', 'qualifications', 'years of experience',
+    'required', 'preferred', 'skills', 'bachelor', 'master', 'degree',
+    'apply', 'role', 'position', 'opportunity', 'we are looking',
+    'you will', 'you\'ll', 'must have', 'nice to have', 'salary',
+    'compensation', 'benefits', 'full-time', 'full time', 'remote',
+  ]
+  return JOB_WORDS.some(w => s.includes(w))
+}
+
+/**
+ * Agency / spam blocker — removes low-quality third-party recruiter spam,
+ * mass-posting agencies, and C2C-only listings that aren't real employer jobs.
+ */
+function isAgencySpam(title: string, snippet: string): boolean {
+  const text = (title + ' ' + snippet).toLowerCase()
+  const SPAM_SIGNALS = [
+    'corp to corp', 'c2c', 'w2 only contract', 'no h1b', 'no h-1b',
+    'multiple openings available', '100+ applicants',
+    'submit resume to', 'send resume to', 'email resume',
+    'staffing company', 'staffing firm', 'recruiting agency', 'placement agency',
+    'we are a staffing', 'this is a staffing', 'on behalf of our client',
+    'contract corp-to-corp', 'c2c or w2',
+  ]
+  return SPAM_SIGNALS.some(s => text.includes(s))
+}
+
 // ─── Filter Functions ─────────────────────────────────────────────────────────
 
 function passesHardFilter(title: string, country: 'USA' | 'India'): boolean {
@@ -104,13 +188,15 @@ function isRelevantDJ(title: string, snippet: string = ''): boolean {
 }
 
 /**
- * DJ suitability score (0–5). Score must be ≥ 4 to persist.
+ * DJ suitability score (0–5).
+ * Confirmed job listings (RSS/Remotive/Google Jobs): store at score ≥ 2.
+ * Serper organic fallback: store at score ≥ 4.
  */
 function djSuitabilityScore(title: string, snippet: string, orgName: string): number {
   const text = (title + ' ' + snippet).toLowerCase()
   let score = 0
 
-  // +2 for AWS Cloud Audit or AI/ML Governance
+  // +2 for AWS Cloud Audit or AI/ML Governance (DJ's specialist edge)
   if (
     text.includes('aws cloud audit') || text.includes('cloud audit') ||
     text.includes('ai governance') || text.includes('ml governance') ||
@@ -183,12 +269,173 @@ interface DJScannedJob {
   suitabilityScore: number
 }
 
-// ─── Score Floor ──────────────────────────────────────────────────────────────
-// Lowered to 0 to surface ALL potential matches for diagnostics.
-// Raise back to 2 once we confirm jobs are flowing through the pipeline.
-const MIN_SCORE = 0
+// ─── SOURCE 1: Indeed RSS + Any RSS Feed ─────────────────────────────────────
+// Direct job listings — no noise, no Serper cost. Score threshold: ≥ 2.
 
-// ─── Web Search Scanner via Serper.dev /jobs API ─────────────────────────────
+async function scanViaRSSDJ(org: DJMonitorOrg): Promise<DJScannedJob[]> {
+  if (!org.rssUrl) return []
+  try {
+    const resp = await withTimeout(
+      fetch(org.rssUrl, {
+        headers: {
+          'User-Agent': 'career-os-portal/1.0',
+          'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+        },
+      }),
+      8000,
+      `DJ RSS for ${org.name}`
+    )
+
+    if (!resp.ok) {
+      console.warn(`[MonitorDJ-RSS] ${resp.status} for ${org.name}`)
+      return []
+    }
+
+    const text = await resp.text()
+    const itemMatches = text.match(/<item>([\s\S]*?)<\/item>/g) || []
+    console.log(`[MonitorDJ-RSS] ${org.name}: raw items=${itemMatches.length}`)
+
+    const jobs: DJScannedJob[] = []
+
+    for (const item of itemMatches.slice(0, 25)) {
+      // Extract fields — handle both CDATA and plain text
+      const title = (
+        item.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/)?.[1] ||
+        item.match(/<title>(.*?)<\/title>/)?.[1] || ''
+      ).replace(/<[^>]+>/g, '').trim()
+
+      const link = (
+        item.match(/<link>(.*?)<\/link>/)?.[1] ||
+        item.match(/<guid[^>]*>(.*?)<\/guid>/)?.[1] || ''
+      ).trim()
+
+      const desc = (
+        item.match(/<description><!\[CDATA\[(.*?)\]\]><\/description>/)?.[1] ||
+        item.match(/<description>(.*?)<\/description>/)?.[1] || ''
+      ).replace(/<[^>]+>/g, '').slice(0, 200).trim()
+
+      const pubDate = item.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] || 'Recent'
+
+      // Indeed RSS encodes company name in the title as "Job Title - Company"
+      // or in <source> tag
+      const sourceCompany = item.match(/<source[^>]*>(.*?)<\/source>/)?.[1] || ''
+      const titleCompanyMatch = title.match(/^(.+?)\s*-\s*(.+)$/)
+      const company = sourceCompany ||
+        (titleCompanyMatch ? titleCompanyMatch[2].trim() : '') ||
+        org.name
+      const cleanTitle = titleCompanyMatch ? titleCompanyMatch[1].trim() : title
+
+      if (!cleanTitle) continue
+      if (!isRelevantDJ(cleanTitle, desc)) continue
+      if (!passesHardFilter(cleanTitle, org.country)) continue
+      if (isAgencySpam(cleanTitle, desc)) continue
+
+      // Lower threshold for RSS — these are confirmed job listings
+      const s = djSuitabilityScore(cleanTitle, desc, company)
+      if (s < 2) continue
+
+      const cityMatch = desc.match(CITY_RE) || cleanTitle.match(CITY_RE)
+      const location = cityMatch ? cityMatch[0] : (org.country === 'USA' ? 'United States' : 'India')
+
+      jobs.push({
+        externalId: hashContent(cleanTitle, company, link || pubDate),
+        title: cleanTitle,
+        orgName: company,
+        location,
+        country: org.country,
+        sector: org.sector,
+        applyUrl: link || org.careersUrl || '',
+        snippet: desc.slice(0, 150),
+        postedDate: pubDate,
+        contentHash: hashContent(cleanTitle, company, link || pubDate),
+        highSuitability: s >= 4,
+        eadFriendly: org.eadFriendly === true,
+        managerialGrade: false,
+        suitabilityScore: s,
+      })
+    }
+
+    console.log(`[MonitorDJ-RSS] ${org.name}: ${jobs.length} after filter`)
+    return jobs.sort((a, b) => b.suitabilityScore - a.suitabilityScore)
+
+  } catch (err) {
+    console.error(`[MonitorDJ-RSS] Failed ${org.name}:`, (err as Error).message)
+    return []
+  }
+}
+
+// ─── SOURCE 2: Remotive.com API ───────────────────────────────────────────────
+// Free JSON API — remote job listings only. No auth required. Score threshold: ≥ 2.
+
+async function scanViaRemotive(org: DJMonitorOrg): Promise<DJScannedJob[]> {
+  try {
+    const query = encodeURIComponent(org.searchQuery)
+    const url = `https://remotive.com/api/remote-jobs?search=${query}&limit=20`
+
+    const resp = await withTimeout(
+      fetch(url, { headers: { 'User-Agent': 'career-os-portal/1.0' } }),
+      10000,
+      `Remotive for ${org.name}`
+    )
+
+    if (!resp.ok) {
+      console.warn(`[MonitorDJ-Remotive] ${resp.status} for ${org.name}`)
+      return []
+    }
+
+    const data = await resp.json()
+    const items: any[] = data.jobs || []
+    console.log(`[MonitorDJ-Remotive] ${org.name}: raw=${items.length}`)
+
+    const jobs: DJScannedJob[] = []
+
+    for (const item of items) {
+      const title = (item.title || '').trim()
+      const company = (item.company_name || '').trim()
+      const snippet = (item.description || '')
+        .replace(/<[^>]+>/g, '')
+        .replace(/\s+/g, ' ')
+        .slice(0, 200)
+        .trim()
+
+      if (!title) continue
+      if (!isRelevantDJ(title, snippet)) continue
+      if (!passesHardFilter(title, 'USA')) continue
+      if (isAgencySpam(title, snippet)) continue
+
+      const s = djSuitabilityScore(title, snippet, company)
+      if (s < 2) continue
+
+      jobs.push({
+        externalId: String(item.id) || hashContent(title, company, item.url || ''),
+        title,
+        orgName: company,
+        location: 'Remote',
+        country: 'USA',
+        sector: org.sector,
+        applyUrl: item.url || '',
+        snippet: snippet.slice(0, 150),
+        postedDate: item.publication_date || 'Recent',
+        contentHash: hashContent(title, company, item.url || ''),
+        highSuitability: s >= 4,
+        eadFriendly: true,   // Remote = EAD friendly by default
+        managerialGrade: false,
+        suitabilityScore: s,
+      })
+    }
+
+    console.log(`[MonitorDJ-Remotive] ${org.name}: ${jobs.length} after filter`)
+    return jobs.sort((a, b) => b.suitabilityScore - a.suitabilityScore)
+
+  } catch (err) {
+    console.error(`[MonitorDJ-Remotive] Failed:`, (err as Error).message)
+    return []
+  }
+}
+
+// ─── SOURCE 3: Serper /jobs API (Google Jobs priority) + organic fallback ───────
+// /jobs endpoint returns structured Google for Jobs listings (score ≥ 2).
+// Organic results → strict URL + snippet + score validation (score ≥ 4).
 
 async function scanViaWebSearchDJ(org: DJMonitorOrg): Promise<DJScannedJob[]> {
   const apiKey = process.env.SERPER_API_KEY
@@ -214,13 +461,23 @@ async function scanViaWebSearchDJ(org: DJMonitorOrg): Promise<DJScannedJob[]> {
     }
 
     const data = await resp.json()
-    const results: any[] = data.jobs || []
-    console.log(`[MonitorDJ] ${org.name}: Serper jobs raw=${results.length}`)
 
     const jobs: DJScannedJob[] = []
-    for (const r of results) {
-      const title = (r.title || '').trim()
-      const snippet = (r.description || r.snippet || '').slice(0, 300)
+
+    // ── /jobs endpoint returns Google for Jobs structured listings ─────────────
+    const googleJobs: any[] = data.jobs || []
+    console.log(`[MonitorDJ] ${org.name}: Serper jobs raw=${googleJobs.length}`)
+
+    for (const gj of googleJobs) {
+      const title = (gj.title || '').trim()
+      const company = (gj.companyName || '').trim()
+      const location = gj.location || extractLocation(gj.description || '', title, org.country)
+      const snippet = [
+        gj.description || '',
+        ...(gj.jobHighlights || []).flatMap((h: any) => h.items || []),
+      ].join(' ').slice(0, 300)
+      const link = gj.relatedLinks?.[0]?.link || gj.applyLink || ''
+      const postedDate = gj.extensions?.find((e: string) => /ago|day|week|month/i.test(e)) || 'Recent'
 
       if (!title) continue
 
@@ -236,31 +493,77 @@ async function scanViaWebSearchDJ(org: DJMonitorOrg): Promise<DJScannedJob[]> {
         continue
       }
 
-      const s = djSuitabilityScore(title, snippet, org.name)
-      console.log(`[MonitorDJ][SCORE] ${org.name}: score=${s} title="${title}"`)
-      if (s < MIN_SCORE) continue
+      if (isAgencySpam(title, snippet)) continue
 
-      const location = r.location || extractLocation(snippet, title, org.country)
+      const s = djSuitabilityScore(title, snippet, company || org.name)
+      console.log(`[MonitorDJ][SCORE] ${org.name}: score=${s} title="${title}"`)
+      if (s < 2) continue
 
       jobs.push({
-        externalId: hashContent(title, org.name, r.applyLink || r.link || ''),
+        externalId: hashContent(title, company || org.name, link || location),
         title,
-        orgName: org.name,
+        orgName: company || org.name,
         location,
         country: org.country,
         sector: org.sector,
-        applyUrl: extractCanonicalUrl(r.applyLink || r.link || '', org.careersUrl || ''),
-        snippet: snippet.slice(0, 200),
-        postedDate: r.date || 'Recent',
-        contentHash: hashContent(title, org.name, r.applyLink || r.link || ''),
-        highSuitability: s >= 3,
+        applyUrl: extractCanonicalUrl(link || '', org.careersUrl || ''),
+        snippet: snippet.slice(0, 150),
+        postedDate,
+        contentHash: hashContent(title, company || org.name, link || location),
+        highSuitability: s >= 4,
         eadFriendly: org.eadFriendly === true,
         managerialGrade: org.managerialGrade === true,
         suitabilityScore: s,
       })
     }
 
-    console.log(`[MonitorDJ] ${org.name}: ${jobs.length} after filter`)
+    // ── Tier B: Organic results — strict quality gates ────────────────────────
+    const organicResults: any[] = data.organic || []
+    console.log(`[MonitorDJ] ${org.name}: organic=${organicResults.length}`)
+
+    for (const r of organicResults) {
+      const title = (r.title || '').replace(/\s*[-|·].*$/, '').trim()
+      const snippet = r.snippet || ''
+      const link = r.link || ''
+
+      if (!title) continue
+
+      // Strict gates for organic (could be news/blog/aggregator)
+      if (!isDirectJobUrl(link)) continue
+      if (!hasJobLanguage(snippet)) continue
+
+      const relevant = isRelevantDJ(title, snippet)
+      if (!relevant) {
+        console.log(`[MonitorDJ][REJECT-ORGANIC] ${org.name}: not relevant — title="${title}"`)
+        continue
+      }
+      if (!passesHardFilter(title, org.country)) continue
+      if (isAgencySpam(title, snippet)) continue
+
+      const s = djSuitabilityScore(title, snippet, org.name)
+      if (s < 4) continue
+
+      const location = extractLocation(snippet, title, org.country)
+
+      jobs.push({
+        externalId: hashContent(title, org.name, link),
+        title,
+        orgName: org.name,
+        location,
+        country: org.country,
+        sector: org.sector,
+        applyUrl: extractCanonicalUrl(link, org.careersUrl || ''),
+        snippet: snippet.slice(0, 150),
+        postedDate: 'Recent',
+        contentHash: hashContent(title, org.name, link),
+        highSuitability: s >= 4,
+        eadFriendly: org.eadFriendly === true,
+        managerialGrade: org.managerialGrade === true,
+        suitabilityScore: s,
+      })
+    }
+
+    console.log(`[MonitorDJ] ${org.name}: ${jobs.length} total after filter`)
     return jobs.sort((a, b) => b.suitabilityScore - a.suitabilityScore)
 
   } catch (err) {
@@ -277,7 +580,11 @@ export async function scanOrgDJ(orgId: string, org: DJMonitorOrg): Promise<{
   let jobs: DJScannedJob[] = []
 
   try {
-    jobs = await scanViaWebSearchDJ(org)
+    switch (org.apiType) {
+      case 'rss':      jobs = await scanViaRSSDJ(org);     break
+      case 'remotive': jobs = await scanViaRemotive(org);  break
+      default:         jobs = await scanViaWebSearchDJ(org)
+    }
   } catch (err) {
     const msg = (err as Error).message
     try {
@@ -347,7 +654,7 @@ export async function scanOrgDJ(orgId: string, org: DJMonitorOrg): Promise<{
 
 // ─── runFullScanDJ ────────────────────────────────────────────────────────────
 // Uses advisory lock ID 987654322 (distinct from Pooja's 987654321).
-// Scans 10 orgs per run — NULL last_scanned_at prioritised (populates table fast).
+// Scans 10 orgs per run — NULL last_scanned_at prioritised.
 
 export async function runFullScanDJ(): Promise<void> {
   console.log('[MonitorDJ] runFullScanDJ() invoked')
@@ -375,7 +682,6 @@ export async function runFullScanDJ(): Promise<void> {
 
     console.log('[MonitorDJ] Advisory lock acquired, starting full DJ scan...')
 
-    // Prioritise NULL last_scanned_at to populate the table immediately
     const orgs = await pool.query(
       `SELECT id, name FROM dj_monitor_orgs
        WHERE is_active = true
@@ -421,7 +727,7 @@ export async function runFullScanDJ(): Promise<void> {
   }
 }
 
-// ─── seedOrgsDJ ──────────────────────────────────────────────────────────────
+// ─── seedOrgsDJ ───────────────────────────────────────────────────────────────
 
 export async function seedOrgsDJ(): Promise<void> {
   const count = await pool.query('SELECT COUNT(*) FROM dj_monitor_orgs')
@@ -434,12 +740,15 @@ export async function seedOrgsDJ(): Promise<void> {
   for (const org of DJ_MONITOR_ORGS) {
     await pool.query(
       `INSERT INTO dj_monitor_orgs
-         (name, sector, country, careers_url, api_type, ead_friendly, managerial_grade)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)
-       ON CONFLICT (name) DO NOTHING`,
+         (name, sector, country, careers_url, rss_url, api_type, ead_friendly, managerial_grade)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (name) DO UPDATE
+         SET api_type    = EXCLUDED.api_type,
+             rss_url     = EXCLUDED.rss_url,
+             careers_url = COALESCE(EXCLUDED.careers_url, dj_monitor_orgs.careers_url)`,
       [
         org.name, org.sector, org.country,
-        org.careersUrl || null, org.apiType,
+        org.careersUrl || null, org.rssUrl || null, org.apiType,
         org.eadFriendly === true, org.managerialGrade === true,
       ]
     )

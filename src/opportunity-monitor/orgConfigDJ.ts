@@ -21,7 +21,8 @@ export interface DJMonitorOrg {
   sector: DJSector
   country: 'USA' | 'India'
   careersUrl?: string
-  apiType: 'websearch'
+  rssUrl?: string                                    // RSS feed URL (free, direct job listings)
+  apiType: 'websearch' | 'rss' | 'remotive'         // remotive = Remotive.com API
   searchQuery: string
   eadFriendly?: boolean    // US contract/W2/consultant roles — EAD appropriate
   managerialGrade?: boolean // India Manager+ filter enforced
@@ -654,6 +655,54 @@ const INDIA_GCC_TECH: DJMonitorOrg[] = [
   },
 ]
 
+// ═══ FREE SOURCES — Indeed RSS + Remotive API (zero cost, direct listings) ════
+// These bypass Serper entirely — structured job data straight from the source.
+// Indeed RSS: confirmed job postings with title, company, location, apply URL.
+// Remotive: structured JSON API for remote roles (no auth required).
+const DJ_FREE_SOURCES: DJMonitorOrg[] = [
+  {
+    name: 'Indeed RSS - IT Audit Manager US',
+    sector: 'tech-cloud', country: 'USA', eadFriendly: true,
+    apiType: 'rss',
+    rssUrl: 'https://www.indeed.com/rss?q=it+audit+manager+sox+itgc&l=United+States&sort=date&fromage=14',
+    searchQuery: 'IT Audit Manager SOX ITGC United States',
+  },
+  {
+    name: 'Indeed RSS - Technology Risk Manager US',
+    sector: 'banking', country: 'USA', eadFriendly: true,
+    apiType: 'rss',
+    rssUrl: 'https://www.indeed.com/rss?q=technology+risk+manager+cloud+audit+sox&l=United+States&sort=date&fromage=14',
+    searchQuery: 'Technology Risk Manager Cloud Audit SOX',
+  },
+  {
+    name: 'Indeed RSS - Cloud Security Audit Manager US',
+    sector: 'tech-cloud', country: 'USA', eadFriendly: true,
+    apiType: 'rss',
+    rssUrl: 'https://www.indeed.com/rss?q=cloud+security+audit+manager+itgc&l=United+States&sort=date&fromage=14',
+    searchQuery: 'Cloud Security Audit Manager ITGC',
+  },
+  {
+    name: 'Indeed RSS - GRC Manager US',
+    sector: 'tech-cloud', country: 'USA', eadFriendly: true,
+    apiType: 'rss',
+    rssUrl: 'https://www.indeed.com/rss?q=grc+manager+it+risk+sox+cisa&l=United+States&sort=date&fromage=14',
+    searchQuery: 'GRC Manager IT Risk SOX CISA',
+  },
+  {
+    name: 'Indeed RSS - IT Audit Manager India',
+    sector: 'tech-cloud', country: 'India', managerialGrade: true,
+    apiType: 'rss',
+    rssUrl: 'https://www.indeed.co.in/rss?q=it+audit+manager+sox+itgc&l=India&sort=date&fromage=14',
+    searchQuery: 'IT Audit Manager SOX ITGC India',
+  },
+  {
+    name: 'Remotive - Remote IT Audit Manager',
+    sector: 'tech-cloud', country: 'USA', eadFriendly: true,
+    apiType: 'remotive',
+    searchQuery: 'it audit manager sox',
+  },
+]
+
 // ─── Master export ────────────────────────────────────────────────────────────
 // Big 4 excluded — focus on Banking, Tech/Cloud, Manufacturing, and India GCCs
 export const DJ_MONITOR_ORGS: DJMonitorOrg[] = [
@@ -663,7 +712,9 @@ export const DJ_MONITOR_ORGS: DJMonitorOrg[] = [
   ...INDIA_BANKING,
   ...INDIA_GCC_FINANCIAL,
   ...INDIA_GCC_TECH,
+  ...DJ_FREE_SOURCES,
 ]
 
-// 78 orgs: 20 US Banking + 10 US Tech + 5 US Mfg
-//        + 8 India Banking + 15 India GCC Financial + 19 India GCC Tech
+// 91 orgs: 4 US Big4 + 20 US Banking + 10 US Tech + 5 US Mfg
+//        + 4 India Big4 + 8 India Banking + 15 India GCC Financial + 19 India GCC Tech
+//        + 6 Free Sources (5 Indeed RSS + 1 Remotive)
