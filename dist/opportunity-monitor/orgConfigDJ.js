@@ -682,16 +682,17 @@ const DJ_FREE_SOURCES = [
     },
 ];
 // ─── Master export ────────────────────────────────────────────────────────────
-// Big 4 excluded — focus on Banking, Tech/Cloud, Manufacturing, and India GCCs
 exports.DJ_MONITOR_ORGS = [
+    ...US_BIG4,
     ...US_BANKING,
     ...US_TECH,
     ...US_MANUFACTURING,
+    ...INDIA_BIG4,
     ...INDIA_BANKING,
     ...INDIA_GCC_FINANCIAL,
     ...INDIA_GCC_TECH,
     ...DJ_FREE_SOURCES,
 ];
-// 91 orgs: 4 US Big4 + 20 US Banking + 10 US Tech + 5 US Mfg
+// 99 orgs: 4 US Big4 + 20 US Banking + 10 US Tech + 5 US Mfg
 //        + 4 India Big4 + 8 India Banking + 15 India GCC Financial + 19 India GCC Tech
 //        + 6 Free Sources (5 Indeed RSS + 1 Remotive)

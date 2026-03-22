@@ -135,6 +135,7 @@ function hasJobLanguage(snippet) {
         'apply', 'role', 'position', 'opportunity', 'we are looking',
         'you will', 'you\'ll', 'must have', 'nice to have', 'salary',
         'compensation', 'benefits', 'full-time', 'full time', 'remote',
+        'openings', 'hiring', 'join our', 'vacancies', 'now hiring',
     ];
     return JOB_WORDS.some(w => s.includes(w));
 }
@@ -200,6 +201,12 @@ function djSuitabilityScore(title, snippet, orgName) {
     // +1 for Tier 1 org
     if (DJ_TIER1_ORGS.has(orgName))
         score += 1;
+    // +1 for core IT audit domain keywords in title or snippet
+    if (text.includes('it audit') || text.includes('sox') || text.includes('itgc') ||
+        text.includes('internal audit') || text.includes('technology risk') ||
+        text.includes('it risk') || text.includes('grc') || text.includes('cisa') ||
+        text.includes('it compliance') || text.includes('itac'))
+        score += 1;
     return score;
 }
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -214,7 +221,7 @@ function extractCanonicalUrl(url, fallback) {
     if (!url)
         return fallback;
     const GENERIC = [
-        'linkedin.com/company', 'linkedin.com/in/', 'linkedin.com/jobs',
+        'linkedin.com/company', 'linkedin.com/in/', 'linkedin.com/jobs/search', 'linkedin.com/jobs/collections',
         'twitter.com', 'x.com', 'facebook.com', 'instagram.com',
         'youtube.com', 'glassdoor.com/Overview',
     ];
@@ -459,7 +466,7 @@ async function scanViaWebSearchDJ(org) {
             if (isAgencySpam(title, snippet))
                 continue;
             const s = djSuitabilityScore(title, snippet, org.name);
-            if (s < 4)
+            if (s < 3)
                 continue;
             const location = extractLocation(snippet, title, org.country);
             jobs.push({
@@ -578,7 +585,7 @@ async function runFullScanDJ() {
         const orgs = await client_1.pool.query(`SELECT id, name FROM dj_monitor_orgs
        WHERE is_active = true
        ORDER BY last_scanned_at ASC NULLS FIRST
-       LIMIT 10`);
+       LIMIT 20`);
         for (const row of orgs.rows) {
             const orgConfig = orgConfigDJ_1.DJ_MONITOR_ORGS.find(o => o.name === row.name);
             if (!orgConfig) {

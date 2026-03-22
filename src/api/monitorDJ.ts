@@ -257,7 +257,7 @@ router.get('/test-search', async (req: Request, res: Response) => {
 // GET /api/monitor/dj/debug — full diagnostic dump
 router.get('/debug', async (req: Request, res: Response) => {
   const result: Record<string, any> = {
-    codeVersion: 'Serper-V2-Final-Fix',
+    codeVersion: 'Serper-V3-AllFixes-2026-03-22',
     env: {
       serperKey:    !!process.env.SERPER_API_KEY,
       geminiKey:    !!process.env.GEMINI_API_KEY,
