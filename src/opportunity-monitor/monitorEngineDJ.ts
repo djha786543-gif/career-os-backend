@@ -356,13 +356,16 @@ export async function scanOrgDJ(orgId: string, org: DJMonitorOrg): Promise<{
 // Scans 10 orgs per run — NULL last_scanned_at prioritised (populates table fast).
 
 export async function runFullScanDJ(): Promise<void> {
+  console.log('[MonitorDJ] runFullScanDJ() invoked')
   const lockId = 987654322
 
   let lockAcquired = false
   let client
 
   try {
+    console.log('[MonitorDJ] Attempting pool.connect()...')
     client = await pool.connect()
+    console.log('[MonitorDJ] pool.connect() succeeded')
 
     const lockResult = await client.query(
       'SELECT pg_try_advisory_lock($1) as acquired',
