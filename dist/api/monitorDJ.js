@@ -204,10 +204,10 @@ router.get('/test-search', async (req, res) => {
     try {
         const orgName = req.query.org || 'Goldman Sachs';
         const org = orgConfigDJ_1.DJ_MONITOR_ORGS.find(o => o.name === orgName) || orgConfigDJ_1.DJ_MONITOR_ORGS[0];
-        const resp = await fetch('https://google.serper.dev/jobs', {
+        const resp = await fetch('https://google.serper.dev/search', {
             method: 'POST',
             headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ q: org.searchQuery, num: 10 }),
+            body: JSON.stringify({ q: org.searchQuery, num: 10, gl: 'us' }),
         });
         const data = await resp.json();
         res.json({ org: org.name, query: org.searchQuery, status: resp.status, results: data });

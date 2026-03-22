@@ -446,10 +446,10 @@ async function scanViaWebSearchDJ(org: DJMonitorOrg): Promise<DJScannedJob[]> {
 
   try {
     const resp = await withTimeout(
-      fetch('https://google.serper.dev/jobs', {
+      fetch('https://google.serper.dev/search', {
         method: 'POST',
         headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ q: org.searchQuery, num: 10 }),
+        body: JSON.stringify({ q: org.searchQuery, num: 10, gl: 'us' }),
       }),
       10000,
       `Serper for ${org.name}`

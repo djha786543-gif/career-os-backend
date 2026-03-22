@@ -374,10 +374,10 @@ async function scanViaWebSearchDJ(org) {
         return [];
     }
     try {
-        const resp = await withTimeout(fetch('https://google.serper.dev/jobs', {
+        const resp = await withTimeout(fetch('https://google.serper.dev/search', {
             method: 'POST',
             headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ q: org.searchQuery, num: 10 }),
+            body: JSON.stringify({ q: org.searchQuery, num: 10, gl: 'us' }),
         }), 10000, `Serper for ${org.name}`);
         if (!resp.ok) {
             console.error(`[MonitorDJ] Serper ${resp.status} for ${org.name}`);
