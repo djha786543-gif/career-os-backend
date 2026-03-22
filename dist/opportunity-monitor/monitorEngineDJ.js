@@ -13,9 +13,11 @@
  *
  * SCORING RULES:
  *   +2  AWS Cloud Audit OR AI Governance (DJ's specialised DNA)
- *   +2  Manager OR Director title
+ *   +2  Manager / Director / VP / AVP / Head-of title (primary target)
+ *   +1  Senior / Lead / Principal (one level below — USA applicable)
  *   +1  TIER 1 orgs (EY, Deloitte, KPMG, PwC, Goldman Sachs, JPMorgan,
  *                    Public Storage, Investar, Western Digital)
+ *   +1  Core IT audit domain keyword in title/snippet
  *
  * HARD FILTERS (global):
  *   Reject: Intern, Entry Level, Staff Auditor, Junior
@@ -35,11 +37,17 @@ const orgConfigDJ_1 = require("./orgConfigDJ");
 const crypto_1 = __importDefault(require("crypto"));
 // ─── DJ Profile Keywords ──────────────────────────────────────────────────────
 const DJ_RANK1_TITLES = [
+    // Manager / Director / VP — primary target
     'it audit manager', 'it audit director', 'head of it audit', 'director of it audit',
     'vp internal audit', 'avp it audit', 'senior manager it audit', 'technology risk manager',
     'technology risk director', 'cloud risk manager', 'cloud audit manager',
     'information security manager', 'sox audit manager', 'it compliance manager',
     'cloud security manager', 'grc manager', 'it risk manager',
+    // Senior / Lead — one level below manager (USA applicable)
+    'senior it auditor', 'senior it audit', 'senior technology risk', 'senior cloud security',
+    'senior information security', 'senior sox auditor', 'senior grc', 'senior audit',
+    'senior internal auditor', 'it audit lead', 'lead it auditor', 'senior cloud risk',
+    'senior it compliance', 'senior it risk',
 ];
 const DJ_TECHNICAL_ANCHORS = [
     'sox', 'sox 404', 'itgc', 'itac', 'cloud security', 'cloud audit',
@@ -47,10 +55,14 @@ const DJ_TECHNICAL_ANCHORS = [
     'soc1', 'soc 1', 'soc2', 'soc 2', 'soc type ii', 'grc',
     'cisa', 'cissp', 'aws cloud', 'azure security', 'cloud risk',
     'it general controls', 'application controls', 'it audit',
+    // Broadened anchors
+    'internal audit', 'technology audit', 'technology risk', 'cyber audit',
+    'information security audit', 'risk advisory', 'compliance audit',
+    'digital audit', 'it compliance', 'it risk',
 ];
 const DJ_SENIORITY_KEYWORDS = [
     'manager', 'senior manager', 'director', 'avp', 'vp', 'vice president',
-    'head of', 'principal', 'lead',
+    'head of', 'principal', 'lead', 'senior', // 'senior' enables Senior Auditor / Senior Analyst matching
 ];
 // Global hard filters — these titles must never appear for DJ
 const DJ_GLOBAL_HARD_FILTER = [
@@ -175,24 +187,46 @@ function isRelevantDJ(title, snippet = '') {
         (hasSenioritySignal(title) && hasTechnicalAnchor(title, snippet)));
 }
 /**
- * DJ suitability score (0–5).
+ * DJ suitability score (0–6+).
  * Confirmed job listings (RSS/Remotive/Google Jobs): store at score ≥ 2.
- * Serper organic fallback: store at score ≥ 4.
+ * Serper organic fallback: store at score ≥ 3.
+ *
+ * +2  Cloud Audit / AI Governance (DJ's specialist edge)
+ * +2  Manager / Director / VP / AVP / Head-of (primary target grade)
+ * +1  Senior / Lead / Principal without Manager title (one level below — USA)
+ * +1  Tier 1 org
+ * +1  Core IT audit domain keyword
  */
 function djSuitabilityScore(title, snippet, orgName) {
     const text = (title + ' ' + snippet).toLowerCase();
+    const titleLower = title.toLowerCase();
     let score = 0;
-    // +2 for AWS Cloud Audit or AI/ML Governance (DJ's specialist edge)
+    // +2 for Cloud Audit / AI/ML Governance (DJ's specialist edge)
     if (text.includes('aws cloud audit') || text.includes('cloud audit') ||
         text.includes('ai governance') || text.includes('ml governance') ||
         text.includes('ai/ml governance'))
         score += 2;
-    // +2 for Manager or Director title
-    if (text.includes('manager') || text.includes('director') ||
-        text.includes('avp') || text.includes('vp') || text.includes('head of'))
+    // +2 for Manager / Director / VP — primary grade
+    if (titleLower.includes('manager') || titleLower.includes('director') ||
+        titleLower.includes('avp') || titleLower.includes(' vp ') ||
+        titleLower.startsWith('vp ') || titleLower.includes('vice president') ||
+        titleLower.includes('head of')) {
         score += 2;
+    }
+    else if (
+    // +1 for Senior / Lead / Principal — one level below manager (USA applicable)
+    titleLower.includes('senior') || titleLower.includes(' lead') ||
+        titleLower.startsWith('lead ') || titleLower.includes('principal')) {
+        score += 1;
+    }
     // +1 for Tier 1 org
     if (DJ_TIER1_ORGS.has(orgName))
+        score += 1;
+    // +1 for core IT audit domain keywords in title or snippet
+    if (text.includes('it audit') || text.includes('sox') || text.includes('itgc') ||
+        text.includes('internal audit') || text.includes('technology risk') ||
+        text.includes('it risk') || text.includes('grc') || text.includes('cisa') ||
+        text.includes('it compliance') || text.includes('itac'))
         score += 1;
     return score;
 }
