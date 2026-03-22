@@ -133,11 +133,16 @@ function extractCanonicalUrl(url, fallback) {
         return fallback;
     return url;
 }
+const CITY_RE = /\b(new york|san francisco|chicago|dallas|houston|atlanta|boston|seattle|washington dc|los angeles|charlotte|new jersey|bangalore|bengaluru|mumbai|delhi|hyderabad|pune|chennai|kolkata|gurgaon|noida|london|paris|frankfurt|amsterdam|zurich|singapore|toronto|sydney)\b/i;
+function extractLocation(snippet, title, fallback) {
+    const m = snippet.match(CITY_RE) || title.match(CITY_RE);
+    return m ? m[0] : fallback;
+}
 async function withTimeout(promise, ms, label) {
     const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error(`Timeout after ${ms}ms: ${label}`)), ms));
     return Promise.race([promise, timeout]);
 }
-// ─── Web Search Scanner — Serper.dev (replaces Anthropic web_search) ─────────
+// ─── Web Search Scanner via Serper.dev ────────────────────────────────────────
 async function scanViaWebSearchDJ(org) {
     const apiKey = process.env.SERPER_API_KEY;
     if (!apiKey) {
@@ -147,12 +152,9 @@ async function scanViaWebSearchDJ(org) {
     try {
         const resp = await withTimeout(fetch('https://google.serper.dev/search', {
             method: 'POST',
-            headers: {
-                'X-API-KEY': apiKey,
-                'Content-Type': 'application/json',
-            },
+            headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
             body: JSON.stringify({ q: org.searchQuery, num: 10 }),
-        }), 10000, `DJ Serper for ${org.name}`);
+        }), 10000, `Serper for ${org.name}`);
         if (!resp.ok) {
             console.error(`[MonitorDJ] Serper ${resp.status} for ${org.name}`);
             return [];
@@ -164,19 +166,14 @@ async function scanViaWebSearchDJ(org) {
         for (const r of results) {
             const title = (r.title || '').replace(/\s*[-|·].*$/, '').trim();
             const snippet = r.snippet || '';
-            if (!title)
-                continue;
-            if (!isRelevantDJ(title, snippet))
+            if (!title || !isRelevantDJ(title, snippet))
                 continue;
             if (!passesHardFilter(title, org.country))
                 continue;
             const s = djSuitabilityScore(title, snippet, org.name);
-            if (s < 4)
+            if (s < 2)
                 continue;
-            // Extract city from snippet or title for richer location data
-            const CITY_RE = /\b(new york|chicago|dallas|houston|charlotte|boston|atlanta|denver|phoenix|los angeles|san francisco|seattle|toronto|bangalore|bengaluru|mumbai|delhi|hyderabad|pune|chennai|london|singapore)\b/i;
-            const cityMatch = snippet.match(CITY_RE) || title.match(CITY_RE);
-            const location = cityMatch ? cityMatch[0] : org.country;
+            const location = extractLocation(snippet, title, org.country);
             jobs.push({
                 externalId: hashContent(title, org.name, r.link || ''),
                 title,
@@ -185,7 +182,7 @@ async function scanViaWebSearchDJ(org) {
                 country: org.country,
                 sector: org.sector,
                 applyUrl: extractCanonicalUrl(r.link || '', org.careersUrl || ''),
-                snippet: snippet.slice(0, 150),
+                snippet: snippet.slice(0, 200),
                 postedDate: 'Recent',
                 contentHash: hashContent(title, org.name, r.link || ''),
                 highSuitability: s >= 4,
@@ -198,7 +195,7 @@ async function scanViaWebSearchDJ(org) {
         return jobs.sort((a, b) => b.suitabilityScore - a.suitabilityScore);
     }
     catch (err) {
-        console.error(`[MonitorDJ] Serper failed ${org.name}:`, err.message);
+        console.error(`[MonitorDJ] Serper failed for ${org.name}:`, err.message);
         return [];
     }
 }

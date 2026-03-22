@@ -146,6 +146,13 @@ function extractCanonicalUrl(url: string, fallback: string): string {
   return url
 }
 
+const CITY_RE = /\b(new york|san francisco|chicago|dallas|houston|atlanta|boston|seattle|washington dc|los angeles|charlotte|new jersey|bangalore|bengaluru|mumbai|delhi|hyderabad|pune|chennai|kolkata|gurgaon|noida|london|paris|frankfurt|amsterdam|zurich|singapore|toronto|sydney)\b/i
+
+function extractLocation(snippet: string, title: string, fallback: string): string {
+  const m = snippet.match(CITY_RE) || title.match(CITY_RE)
+  return m ? m[0] : fallback
+}
+
 async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   const timeout = new Promise<never>((_, reject) =>
     setTimeout(() => reject(new Error(`Timeout after ${ms}ms: ${label}`)), ms)
@@ -172,7 +179,7 @@ interface DJScannedJob {
   suitabilityScore: number
 }
 
-// ─── Web Search Scanner — Serper.dev (replaces Anthropic web_search) ─────────
+// ─── Web Search Scanner via Serper.dev ────────────────────────────────────────
 
 async function scanViaWebSearchDJ(org: DJMonitorOrg): Promise<DJScannedJob[]> {
   const apiKey = process.env.SERPER_API_KEY
@@ -180,41 +187,39 @@ async function scanViaWebSearchDJ(org: DJMonitorOrg): Promise<DJScannedJob[]> {
     console.warn(`[MonitorDJ] SERPER_API_KEY not set — skipping ${org.name}`)
     return []
   }
+
   try {
     const resp = await withTimeout(
       fetch('https://google.serper.dev/search', {
         method: 'POST',
-        headers: {
-          'X-API-KEY': apiKey,
-          'Content-Type': 'application/json',
-        },
+        headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
         body: JSON.stringify({ q: org.searchQuery, num: 10 }),
       }),
       10000,
-      `DJ Serper for ${org.name}`
+      `Serper for ${org.name}`
     )
+
     if (!resp.ok) {
       console.error(`[MonitorDJ] Serper ${resp.status} for ${org.name}`)
       return []
     }
+
     const data = await resp.json()
-    const results = data.organic || []
+    const results: any[] = data.organic || []
     console.log(`[MonitorDJ] ${org.name}: Serper raw=${results.length}`)
 
     const jobs: DJScannedJob[] = []
     for (const r of results) {
       const title = (r.title || '').replace(/\s*[-|·].*$/, '').trim()
       const snippet = r.snippet || ''
-      if (!title) continue
-      if (!isRelevantDJ(title, snippet)) continue
-      if (!passesHardFilter(title, org.country)) continue
-      const s = djSuitabilityScore(title, snippet, org.name)
-      if (s < 4) continue
 
-      // Extract city from snippet or title for richer location data
-      const CITY_RE = /\b(new york|chicago|dallas|houston|charlotte|boston|atlanta|denver|phoenix|los angeles|san francisco|seattle|toronto|bangalore|bengaluru|mumbai|delhi|hyderabad|pune|chennai|london|singapore)\b/i
-      const cityMatch = snippet.match(CITY_RE) || title.match(CITY_RE)
-      const location = cityMatch ? cityMatch[0] : org.country
+      if (!title || !isRelevantDJ(title, snippet)) continue
+      if (!passesHardFilter(title, org.country)) continue
+
+      const s = djSuitabilityScore(title, snippet, org.name)
+      if (s < 2) continue
+
+      const location = extractLocation(snippet, title, org.country)
 
       jobs.push({
         externalId: hashContent(title, org.name, r.link || ''),
@@ -224,7 +229,7 @@ async function scanViaWebSearchDJ(org: DJMonitorOrg): Promise<DJScannedJob[]> {
         country: org.country,
         sector: org.sector,
         applyUrl: extractCanonicalUrl(r.link || '', org.careersUrl || ''),
-        snippet: snippet.slice(0, 150),
+        snippet: snippet.slice(0, 200),
         postedDate: 'Recent',
         contentHash: hashContent(title, org.name, r.link || ''),
         highSuitability: s >= 4,
@@ -233,10 +238,12 @@ async function scanViaWebSearchDJ(org: DJMonitorOrg): Promise<DJScannedJob[]> {
         suitabilityScore: s,
       })
     }
+
     console.log(`[MonitorDJ] ${org.name}: ${jobs.length} after filter`)
     return jobs.sort((a, b) => b.suitabilityScore - a.suitabilityScore)
+
   } catch (err) {
-    console.error(`[MonitorDJ] Serper failed ${org.name}:`, (err as Error).message)
+    console.error(`[MonitorDJ] Serper failed for ${org.name}:`, (err as Error).message)
     return []
   }
 }
