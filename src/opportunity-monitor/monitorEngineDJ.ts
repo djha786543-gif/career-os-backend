@@ -162,9 +162,11 @@ function isAgencySpam(title: string, snippet: string): boolean {
 
 function passesHardFilter(title: string, country: 'USA' | 'India'): boolean {
   const t = title.toLowerCase()
-  if (DJ_GLOBAL_HARD_FILTER.some(term => t.includes(term))) return false
+  // Use word boundaries to avoid 'intern' matching 'internal', etc.
+  const matchesWord = (term: string) => new RegExp(`\\b${term.replace(/-/g, '[\\s-]')}\\b`).test(t)
+  if (DJ_GLOBAL_HARD_FILTER.some(matchesWord)) return false
   if (country === 'India') {
-    if (DJ_INDIA_HARD_FILTER.some(term => t.includes(term))) return false
+    if (DJ_INDIA_HARD_FILTER.some(matchesWord)) return false
   }
   return true
 }

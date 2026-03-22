@@ -157,10 +157,12 @@ function isAgencySpam(title, snippet) {
 // ─── Filter Functions ─────────────────────────────────────────────────────────
 function passesHardFilter(title, country) {
     const t = title.toLowerCase();
-    if (DJ_GLOBAL_HARD_FILTER.some(term => t.includes(term)))
+    // Use word boundaries to avoid 'intern' matching 'internal', etc.
+    const matchesWord = (term) => new RegExp(`\\b${term.replace(/-/g, '[\\s-]')}\\b`).test(t);
+    if (DJ_GLOBAL_HARD_FILTER.some(matchesWord))
         return false;
     if (country === 'India') {
-        if (DJ_INDIA_HARD_FILTER.some(term => t.includes(term)))
+        if (DJ_INDIA_HARD_FILTER.some(matchesWord))
             return false;
     }
     return true;
