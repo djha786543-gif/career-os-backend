@@ -42,6 +42,10 @@ const DJ_TECHNICAL_ANCHORS = [
     'soc1', 'soc 1', 'soc2', 'soc 2', 'soc type ii', 'grc',
     'cisa', 'cissp', 'aws cloud', 'azure security', 'cloud risk',
     'it general controls', 'application controls', 'it audit',
+    // Broadened anchors to catch internal audit, technology risk, and compliance roles
+    'internal audit', 'technology audit', 'technology risk', 'cyber audit',
+    'information security audit', 'risk advisory', 'compliance audit',
+    'digital audit', 'it compliance', 'it risk',
 ];
 const DJ_SENIORITY_KEYWORDS = [
     'manager', 'senior manager', 'director', 'avp', 'vp', 'vice president',
@@ -142,6 +146,10 @@ async function withTimeout(promise, ms, label) {
     const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error(`Timeout after ${ms}ms: ${label}`)), ms));
     return Promise.race([promise, timeout]);
 }
+// ─── Score Floor ──────────────────────────────────────────────────────────────
+// Lowered to 0 to surface ALL potential matches for diagnostics.
+// Raise back to 2 once we confirm jobs are flowing through the pipeline.
+const MIN_SCORE = 0;
 // ─── Web Search Scanner via Serper.dev ────────────────────────────────────────
 async function scanViaWebSearchDJ(org) {
     const apiKey = process.env.SERPER_API_KEY;
@@ -166,13 +174,26 @@ async function scanViaWebSearchDJ(org) {
         for (const r of results) {
             const title = (r.title || '').replace(/\s*[-|·].*$/, '').trim();
             const snippet = r.snippet || '';
-            if (!title || !isRelevantDJ(title, snippet))
+            if (!title) {
+                console.log(`[MonitorDJ][REJECT] ${org.name}: empty title — url=${r.link}`);
                 continue;
-            if (!passesHardFilter(title, org.country))
+            }
+            const relevant = isRelevantDJ(title, snippet);
+            if (!relevant) {
+                console.log(`[MonitorDJ][REJECT] ${org.name}: not relevant — title="${title}" snippet="${snippet.slice(0, 80)}"`);
                 continue;
+            }
+            const passes = passesHardFilter(title, org.country);
+            if (!passes) {
+                console.log(`[MonitorDJ][REJECT] ${org.name}: hard filter — title="${title}"`);
+                continue;
+            }
             const s = djSuitabilityScore(title, snippet, org.name);
-            if (s < 2)
+            console.log(`[MonitorDJ][SCORE] ${org.name}: score=${s} title="${title}"`);
+            if (s < MIN_SCORE) {
+                console.log(`[MonitorDJ][REJECT] ${org.name}: score ${s} < MIN_SCORE ${MIN_SCORE} — title="${title}"`);
                 continue;
+            }
             const location = extractLocation(snippet, title, org.country);
             jobs.push({
                 externalId: hashContent(title, org.name, r.link || ''),

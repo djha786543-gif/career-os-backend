@@ -38,6 +38,10 @@ const DJ_TECHNICAL_ANCHORS = [
   'soc1', 'soc 1', 'soc2', 'soc 2', 'soc type ii', 'grc',
   'cisa', 'cissp', 'aws cloud', 'azure security', 'cloud risk',
   'it general controls', 'application controls', 'it audit',
+  // Broadened anchors to catch internal audit, technology risk, and compliance roles
+  'internal audit', 'technology audit', 'technology risk', 'cyber audit',
+  'information security audit', 'risk advisory', 'compliance audit',
+  'digital audit', 'it compliance', 'it risk',
 ]
 
 const DJ_SENIORITY_KEYWORDS = [
@@ -179,6 +183,11 @@ interface DJScannedJob {
   suitabilityScore: number
 }
 
+// ─── Score Floor ──────────────────────────────────────────────────────────────
+// Lowered to 0 to surface ALL potential matches for diagnostics.
+// Raise back to 2 once we confirm jobs are flowing through the pipeline.
+const MIN_SCORE = 0
+
 // ─── Web Search Scanner via Serper.dev ────────────────────────────────────────
 
 async function scanViaWebSearchDJ(org: DJMonitorOrg): Promise<DJScannedJob[]> {
@@ -213,11 +222,29 @@ async function scanViaWebSearchDJ(org: DJMonitorOrg): Promise<DJScannedJob[]> {
       const title = (r.title || '').replace(/\s*[-|·].*$/, '').trim()
       const snippet = r.snippet || ''
 
-      if (!title || !isRelevantDJ(title, snippet)) continue
-      if (!passesHardFilter(title, org.country)) continue
+      if (!title) {
+        console.log(`[MonitorDJ][REJECT] ${org.name}: empty title — url=${r.link}`)
+        continue
+      }
+
+      const relevant = isRelevantDJ(title, snippet)
+      if (!relevant) {
+        console.log(`[MonitorDJ][REJECT] ${org.name}: not relevant — title="${title}" snippet="${snippet.slice(0, 80)}"`)
+        continue
+      }
+
+      const passes = passesHardFilter(title, org.country)
+      if (!passes) {
+        console.log(`[MonitorDJ][REJECT] ${org.name}: hard filter — title="${title}"`)
+        continue
+      }
 
       const s = djSuitabilityScore(title, snippet, org.name)
-      if (s < 2) continue
+      console.log(`[MonitorDJ][SCORE] ${org.name}: score=${s} title="${title}"`)
+      if (s < MIN_SCORE) {
+        console.log(`[MonitorDJ][REJECT] ${org.name}: score ${s} < MIN_SCORE ${MIN_SCORE} — title="${title}"`)
+        continue
+      }
 
       const location = extractLocation(snippet, title, org.country)
 
