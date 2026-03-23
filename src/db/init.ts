@@ -159,6 +159,8 @@ export async function dbInit(): Promise<void> {
       ALTER TABLE monitor_jobs ADD COLUMN IF NOT EXISTS job_board VARCHAR(100);
       ALTER TABLE kanban_cards ADD COLUMN IF NOT EXISTS job_board VARCHAR(100);
       ALTER TABLE monitor_jobs ADD COLUMN IF NOT EXISTS high_suitability BOOLEAN DEFAULT FALSE;
+      ALTER TABLE monitor_jobs ADD COLUMN IF NOT EXISTS match_score      SMALLINT DEFAULT 0;
+      ALTER TABLE monitor_jobs ADD COLUMN IF NOT EXISTS fail_reason      TEXT;
 
       -- ─── DJ table column migrations ───────────────────────────────────────────
       -- These run on every boot (ADD COLUMN IF NOT EXISTS is idempotent).

@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express'
 import { pool } from '../db/client'
+import { validateJobSuitability, TIER1_ORG_NAMES } from '../opportunity-monitor/validateJobSuitability'
 
 const router = Router()
 
@@ -88,6 +89,94 @@ router.get('/usage', async (req: Request, res: Response) => {
       source,
     })
   } catch (err) {
+    if (!res.headersSent) res.status(500).json({ error: (err as Error).message })
+  }
+})
+
+// POST /api/admin/revalidate-academia
+// One-shot data-cleaning endpoint. Fetches every monitor_jobs row where
+// sector = 'academia', reruns it through the Zero-Trust validateJobSuitability
+// pipeline, and writes back high_suitability, match_score, and fail_reason.
+//
+// Usage:  curl -X POST https://<host>/api/admin/revalidate-academia
+router.post('/revalidate-academia', async (req: Request, res: Response) => {
+  try {
+    // ── 1. Fetch all academia jobs ────────────────────────────────────────────
+    const { rows } = await pool.query<{
+      id:         string
+      title:      string
+      snippet:    string | null
+      apply_url:  string | null
+      org_name:   string
+    }>(
+      `SELECT id, title, snippet, apply_url, org_name
+       FROM monitor_jobs
+       WHERE sector = 'academia'
+       ORDER BY detected_at DESC`
+    )
+
+    console.log(`[Revalidate] Processing ${rows.length} academia jobs…`)
+
+    let updated    = 0
+    let nowHigh    = 0  // was false → now true
+    let nowLow     = 0  // was true  → now false (the bug we're fixing)
+    let errors     = 0
+
+    for (const job of rows) {
+      const result = validateJobSuitability(
+        job.title,
+        job.snippet,
+        job.apply_url,
+        job.org_name,
+        TIER1_ORG_NAMES,
+      )
+
+      const matchScoreInt = Math.round(result.matchScore * 10)  // store as fixed-point (×10)
+
+      try {
+        const updateResult = await pool.query(
+          `UPDATE monitor_jobs
+              SET high_suitability = $1,
+                  match_score      = $2,
+                  fail_reason      = $3
+            WHERE id = $4
+            RETURNING (SELECT high_suitability FROM monitor_jobs WHERE id = $4) AS old_high`,
+          [result.highSuitability, matchScoreInt, result.failReason ?? null, job.id]
+        )
+
+        // Track direction of changes for the summary
+        const oldHigh: boolean | null = updateResult.rows[0]?.old_high ?? null
+        if (oldHigh === true  && !result.highSuitability) nowLow++
+        if (oldHigh === false &&  result.highSuitability) nowHigh++
+
+        updated++
+
+        if (!result.passes) {
+          console.log(
+            `[Revalidate] REJECT  "${job.title}" | ${result.failReason}`
+          )
+        }
+      } catch (dbErr) {
+        errors++
+        console.error(`[Revalidate] DB error for "${job.title}":`, (dbErr as Error).message)
+      }
+    }
+
+    console.log(
+      `[Revalidate] Done. ${updated} updated, ${nowLow} demoted (was high→now low), ` +
+      `${nowHigh} promoted, ${errors} errors.`
+    )
+
+    res.json({
+      ok:        true,
+      total:     rows.length,
+      updated,
+      demoted:   nowLow,   // postdoc/fellowship jobs that were wrongly high → now correctly low
+      promoted:  nowHigh,
+      errors,
+    })
+  } catch (err) {
+    console.error('[Revalidate] Fatal error:', (err as Error).message)
     if (!res.headersSent) res.status(500).json({ error: (err as Error).message })
   }
 })
