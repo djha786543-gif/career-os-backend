@@ -12,9 +12,11 @@
  *
  * SCORING RULES:
  *   +2  AWS Cloud Audit OR AI Governance (DJ's specialised DNA)
- *   +2  Manager OR Director title
+ *   +2  Manager / Director / VP / AVP / Head-of title (primary target)
+ *   +1  Senior / Lead / Principal (one level below — USA applicable)
  *   +1  TIER 1 orgs (EY, Deloitte, KPMG, PwC, Goldman Sachs, JPMorgan,
  *                    Public Storage, Investar, Western Digital)
+ *   +1  Core IT audit domain keyword in title/snippet
  *
  * HARD FILTERS (global):
  *   Reject: Intern, Entry Level, Staff Auditor, Junior
@@ -30,11 +32,17 @@ import crypto from 'crypto'
 // ─── DJ Profile Keywords ──────────────────────────────────────────────────────
 
 const DJ_RANK1_TITLES = [
+  // Manager / Director / VP — primary target
   'it audit manager', 'it audit director', 'head of it audit', 'director of it audit',
   'vp internal audit', 'avp it audit', 'senior manager it audit', 'technology risk manager',
   'technology risk director', 'cloud risk manager', 'cloud audit manager',
   'information security manager', 'sox audit manager', 'it compliance manager',
   'cloud security manager', 'grc manager', 'it risk manager',
+  // Senior / Lead — one level below manager (USA applicable)
+  'senior it auditor', 'senior it audit', 'senior technology risk', 'senior cloud security',
+  'senior information security', 'senior sox auditor', 'senior grc', 'senior audit',
+  'senior internal auditor', 'it audit lead', 'lead it auditor', 'senior cloud risk',
+  'senior it compliance', 'senior it risk',
 ]
 
 const DJ_TECHNICAL_ANCHORS = [
@@ -43,7 +51,7 @@ const DJ_TECHNICAL_ANCHORS = [
   'soc1', 'soc 1', 'soc2', 'soc 2', 'soc type ii', 'grc',
   'cisa', 'cissp', 'aws cloud', 'azure security', 'cloud risk',
   'it general controls', 'application controls', 'it audit',
-  // Broadened anchors to catch internal audit, technology risk, and compliance roles
+  // Broadened anchors
   'internal audit', 'technology audit', 'technology risk', 'cyber audit',
   'information security audit', 'risk advisory', 'compliance audit',
   'digital audit', 'it compliance', 'it risk',
@@ -51,7 +59,7 @@ const DJ_TECHNICAL_ANCHORS = [
 
 const DJ_SENIORITY_KEYWORDS = [
   'manager', 'senior manager', 'director', 'avp', 'vp', 'vice president',
-  'head of', 'principal', 'lead',
+  'head of', 'principal', 'lead', 'senior',  // 'senior' enables Senior Auditor / Senior Analyst matching
 ]
 
 // Global hard filters — these titles must never appear for DJ
@@ -137,7 +145,6 @@ function hasJobLanguage(snippet: string): boolean {
     'apply', 'role', 'position', 'opportunity', 'we are looking',
     'you will', 'you\'ll', 'must have', 'nice to have', 'salary',
     'compensation', 'benefits', 'full-time', 'full time', 'remote',
-    'openings', 'hiring', 'join our', 'vacancies', 'now hiring',
   ]
   return JOB_WORDS.some(w => s.includes(w))
 }
@@ -163,11 +170,9 @@ function isAgencySpam(title: string, snippet: string): boolean {
 
 function passesHardFilter(title: string, country: 'USA' | 'India'): boolean {
   const t = title.toLowerCase()
-  // Use word boundaries to avoid 'intern' matching 'internal', etc.
-  const matchesWord = (term: string) => new RegExp(`\\b${term.replace(/-/g, '[\\s-]')}\\b`).test(t)
-  if (DJ_GLOBAL_HARD_FILTER.some(matchesWord)) return false
+  if (DJ_GLOBAL_HARD_FILTER.some(term => t.includes(term))) return false
   if (country === 'India') {
-    if (DJ_INDIA_HARD_FILTER.some(matchesWord)) return false
+    if (DJ_INDIA_HARD_FILTER.some(term => t.includes(term))) return false
   }
   return true
 }
@@ -191,26 +196,43 @@ function isRelevantDJ(title: string, snippet: string = ''): boolean {
 }
 
 /**
- * DJ suitability score (0–5).
+ * DJ suitability score (0–6+).
  * Confirmed job listings (RSS/Remotive/Google Jobs): store at score ≥ 2.
- * Serper organic fallback: store at score ≥ 4.
+ * Serper organic fallback: store at score ≥ 3.
+ *
+ * +2  Cloud Audit / AI Governance (DJ's specialist edge)
+ * +2  Manager / Director / VP / AVP / Head-of (primary target grade)
+ * +1  Senior / Lead / Principal without Manager title (one level below — USA)
+ * +1  Tier 1 org
+ * +1  Core IT audit domain keyword
  */
 function djSuitabilityScore(title: string, snippet: string, orgName: string): number {
   const text = (title + ' ' + snippet).toLowerCase()
+  const titleLower = title.toLowerCase()
   let score = 0
 
-  // +2 for AWS Cloud Audit or AI/ML Governance (DJ's specialist edge)
+  // +2 for Cloud Audit / AI/ML Governance (DJ's specialist edge)
   if (
     text.includes('aws cloud audit') || text.includes('cloud audit') ||
     text.includes('ai governance') || text.includes('ml governance') ||
     text.includes('ai/ml governance')
   ) score += 2
 
-  // +2 for Manager or Director title
+  // +2 for Manager / Director / VP — primary grade
   if (
-    text.includes('manager') || text.includes('director') ||
-    text.includes('avp') || text.includes('vp') || text.includes('head of')
-  ) score += 2
+    titleLower.includes('manager') || titleLower.includes('director') ||
+    titleLower.includes('avp') || titleLower.includes(' vp ') ||
+    titleLower.startsWith('vp ') || titleLower.includes('vice president') ||
+    titleLower.includes('head of')
+  ) {
+    score += 2
+  } else if (
+    // +1 for Senior / Lead / Principal — one level below manager (USA applicable)
+    titleLower.includes('senior') || titleLower.includes(' lead') ||
+    titleLower.startsWith('lead ') || titleLower.includes('principal')
+  ) {
+    score += 1
+  }
 
   // +1 for Tier 1 org
   if (DJ_TIER1_ORGS.has(orgName)) score += 1
@@ -239,19 +261,12 @@ function hashContent(title: string, org: string, location: string): string {
 function extractCanonicalUrl(url: string, fallback: string): string {
   if (!url) return fallback
   const GENERIC = [
-    'linkedin.com/company', 'linkedin.com/in/', 'linkedin.com/jobs/search', 'linkedin.com/jobs/collections',
+    'linkedin.com/company', 'linkedin.com/in/', 'linkedin.com/jobs',
     'twitter.com', 'x.com', 'facebook.com', 'instagram.com',
     'youtube.com', 'glassdoor.com/Overview',
   ]
   if (GENERIC.some(d => url.includes(d))) return fallback
   return url
-}
-
-const CITY_RE = /\b(new york|san francisco|chicago|dallas|houston|atlanta|boston|seattle|washington dc|los angeles|charlotte|new jersey|bangalore|bengaluru|mumbai|delhi|hyderabad|pune|chennai|kolkata|gurgaon|noida|london|paris|frankfurt|amsterdam|zurich|singapore|toronto|sydney)\b/i
-
-function extractLocation(snippet: string, title: string, fallback: string): string {
-  const m = snippet.match(CITY_RE) || title.match(CITY_RE)
-  return m ? m[0] : fallback
 }
 
 async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -260,6 +275,8 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): P
   )
   return Promise.race([promise, timeout])
 }
+
+const CITY_RE = /\b(new york|new york city|nyc|chicago|dallas|houston|charlotte|boston|atlanta|denver|phoenix|los angeles|san francisco|san jose|seattle|austin|remote|bangalore|bengaluru|mumbai|delhi|hyderabad|pune|chennai|gurgaon|noida)\b/i
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -444,9 +461,9 @@ async function scanViaRemotive(org: DJMonitorOrg): Promise<DJScannedJob[]> {
   }
 }
 
-// ─── SOURCE 3: Serper /jobs API (Google Jobs) + organic fallback ─────────────
-// /jobs endpoint always returns structured Google for Jobs listings (score ≥ 2).
-// Organic results (from /search fallback) → strict URL + snippet + score ≥ 3.
+// ─── SOURCE 3: Serper Web Search (Google Jobs priority + organic fallback) ────
+// Google Jobs cards → confirmed listings (score ≥ 2).
+// Organic results → strict URL + snippet + score validation (score ≥ 4).
 
 async function scanViaWebSearchDJ(org: DJMonitorOrg): Promise<DJScannedJob[]> {
   const apiKey = process.env.SERPER_API_KEY
@@ -454,154 +471,117 @@ async function scanViaWebSearchDJ(org: DJMonitorOrg): Promise<DJScannedJob[]> {
     console.warn(`[MonitorDJ] SERPER_API_KEY not set — skipping ${org.name}`)
     return []
   }
-
-  // Country-appropriate Google locale
-  const gl = org.country === 'India' ? 'in' : 'us'
-
   try {
-    // ── PRIMARY: Serper /jobs endpoint — dedicated Google Jobs index ───────────
-    // This always returns structured job listings (title, company, location,
-    // description, apply links). Unlike /search, it never returns news/blogs.
-    const jobsResp = await withTimeout(
-      fetch('https://google.serper.dev/jobs', {
+    const resp = await withTimeout(
+      fetch('https://google.serper.dev/search', {
         method: 'POST',
-        headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ q: org.searchQuery, num: 10, gl }),
+        headers: {
+          'X-API-KEY': apiKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ q: org.searchQuery, num: 10 }),
       }),
       10000,
-      `Serper /jobs for ${org.name}`
+      `DJ Serper for ${org.name}`
     )
+    if (!resp.ok) {
+      console.error(`[MonitorDJ] Serper ${resp.status} for ${org.name}`)
+      return []
+    }
+    const data = await resp.json()
 
     const jobs: DJScannedJob[] = []
 
-    if (jobsResp.ok) {
-      const jobsData = await jobsResp.json()
-      const googleJobs: any[] = jobsData.jobs || []
-      console.log(`[MonitorDJ] ${org.name}: Serper /jobs raw=${googleJobs.length}`)
+    // ── Tier A: Google for Jobs structured cards (highest quality) ────────────
+    const googleJobs: any[] = data.jobs || []
+    console.log(`[MonitorDJ] ${org.name}: Google Jobs cards=${googleJobs.length}`)
 
-      for (const gj of googleJobs) {
-        const title = (gj.title || '').trim()
-        const company = (gj.companyName || '').trim()
-        const location = gj.location || extractLocation(gj.description || '', title, org.country)
-        const snippet = [
-          gj.description || '',
-          ...(gj.jobHighlights || []).flatMap((h: any) => h.items || []),
-        ].join(' ').slice(0, 300)
+    for (const gj of googleJobs) {
+      const title = (gj.title || '').trim()
+      const company = (gj.companyName || '').trim()
+      const location = gj.location || org.country
+      const snippet = [
+        gj.description || '',
+        ...(gj.jobHighlights || []).flatMap((h: any) => h.items || []),
+      ].join(' ').slice(0, 200)
+      const link = gj.relatedLinks?.[0]?.link || gj.applyLink || ''
+      const postedDate = gj.extensions?.find((e: string) => /ago|day|week|month/i.test(e)) || 'Recent'
 
-        // /jobs endpoint: link in applyOptions or relatedLinks
-        const link =
-          gj.applyOptions?.[0]?.link ||
-          gj.relatedLinks?.[0]?.link ||
-          gj.applyLink || ''
+      if (!title) continue
+      if (!isRelevantDJ(title, snippet)) continue
+      if (!passesHardFilter(title, org.country)) continue
+      if (isAgencySpam(title, snippet)) continue
 
-        // /jobs endpoint: date in detected_extensions.posted_at or extensions array
-        const postedDate =
-          gj.detected_extensions?.posted_at ||
-          gj.extensions?.find((e: string) => /ago|day|week|month/i.test(e)) ||
-          'Recent'
+      // Lower threshold for confirmed Google Jobs listings
+      const s = djSuitabilityScore(title, snippet, company || org.name)
+      if (s < 2) continue
 
-        if (!title) continue
-
-        const relevant = isRelevantDJ(title, snippet)
-        if (!relevant) {
-          console.log(`[MonitorDJ][REJECT] ${org.name}: not relevant — title="${title}"`)
-          continue
-        }
-
-        const passes = passesHardFilter(title, org.country)
-        if (!passes) {
-          console.log(`[MonitorDJ][REJECT] ${org.name}: hard filter — title="${title}"`)
-          continue
-        }
-
-        if (isAgencySpam(title, snippet)) continue
-
-        // Use org.name for Tier1 check — Google may return "EY" instead of "EY US Technology Risk"
-        const s = djSuitabilityScore(title, snippet, org.name)
-        console.log(`[MonitorDJ][SCORE] ${org.name}: score=${s} title="${title}"`)
-        if (s < 2) continue
-
-        const displayCompany = company || org.name
-        jobs.push({
-          externalId: hashContent(title, displayCompany, link || location),
-          title,
-          orgName: displayCompany,
-          location,
-          country: org.country,
-          sector: org.sector,
-          applyUrl: extractCanonicalUrl(link || '', org.careersUrl || ''),
-          snippet: snippet.slice(0, 150),
-          postedDate,
-          contentHash: hashContent(title, displayCompany, link || location),
-          highSuitability: s >= 4,
-          eadFriendly: org.eadFriendly === true,
-          managerialGrade: org.managerialGrade === true,
-          suitabilityScore: s,
-        })
-      }
-    } else {
-      console.error(`[MonitorDJ] Serper /jobs ${jobsResp.status} for ${org.name}`)
+      jobs.push({
+        externalId: hashContent(title, company, link || location),
+        title,
+        orgName: company || org.name,
+        location,
+        country: org.country,
+        sector: org.sector,
+        applyUrl: link || org.careersUrl || '',
+        snippet: snippet.slice(0, 150),
+        postedDate,
+        contentHash: hashContent(title, company, link || location),
+        highSuitability: s >= 4,
+        eadFriendly: org.eadFriendly === true,
+        managerialGrade: org.managerialGrade === true,
+        suitabilityScore: s,
+      })
     }
 
-    // ── FALLBACK: organic web search — only if /jobs returned nothing ──────────
-    if (jobs.length === 0) {
-      const searchResp = await withTimeout(
-        fetch('https://google.serper.dev/search', {
-          method: 'POST',
-          headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ q: org.searchQuery, num: 10, gl }),
-        }),
-        10000,
-        `Serper /search fallback for ${org.name}`
-      )
+    // ── Tier B: Organic results — strict quality gates ────────────────────────
+    const organicResults: any[] = data.organic || []
+    console.log(`[MonitorDJ] ${org.name}: organic=${organicResults.length}`)
 
-      if (searchResp.ok) {
-        const searchData = await searchResp.json()
-        const organicResults: any[] = searchData.organic || []
-        console.log(`[MonitorDJ] ${org.name}: organic fallback=${organicResults.length}`)
+    for (const r of organicResults) {
+      const title = (r.title || '').replace(/\s*[-|·].*$/, '').trim()
+      const snippet = r.snippet || ''
+      const link = r.link || ''
 
-        for (const r of organicResults) {
-          const title = (r.title || '').replace(/\s*[-|·].*$/, '').trim()
-          const snippet = r.snippet || ''
-          const link = r.link || ''
+      if (!title) continue
 
-          if (!title) continue
-          if (!isDirectJobUrl(link)) continue
-          if (!hasJobLanguage(snippet)) continue
-          if (!isRelevantDJ(title, snippet)) continue
-          if (!passesHardFilter(title, org.country)) continue
-          if (isAgencySpam(title, snippet)) continue
+      // Strict gates for organic (could be news/blog/aggregator)
+      if (!isDirectJobUrl(link)) continue
+      if (!hasJobLanguage(snippet)) continue
+      if (!isRelevantDJ(title, snippet)) continue
+      if (!passesHardFilter(title, org.country)) continue
+      if (isAgencySpam(title, snippet)) continue
 
-          const s = djSuitabilityScore(title, snippet, org.name)
-          if (s < 3) continue
+      // Higher threshold for organic — must be clearly correct
+      const s = djSuitabilityScore(title, snippet, org.name)
+      if (s < 4) continue
 
-          const location = extractLocation(snippet, title, org.country)
+      const cityMatch = snippet.match(CITY_RE) || title.match(CITY_RE)
+      const location = cityMatch ? cityMatch[0] : org.country
 
-          jobs.push({
-            externalId: hashContent(title, org.name, link),
-            title,
-            orgName: org.name,
-            location,
-            country: org.country,
-            sector: org.sector,
-            applyUrl: extractCanonicalUrl(link, org.careersUrl || ''),
-            snippet: snippet.slice(0, 150),
-            postedDate: 'Recent',
-            contentHash: hashContent(title, org.name, link),
-            highSuitability: s >= 4,
-            eadFriendly: org.eadFriendly === true,
-            managerialGrade: org.managerialGrade === true,
-            suitabilityScore: s,
-          })
-        }
-      }
+      jobs.push({
+        externalId: hashContent(title, org.name, link),
+        title,
+        orgName: org.name,
+        location,
+        country: org.country,
+        sector: org.sector,
+        applyUrl: extractCanonicalUrl(link, org.careersUrl || ''),
+        snippet: snippet.slice(0, 150),
+        postedDate: 'Recent',
+        contentHash: hashContent(title, org.name, link),
+        highSuitability: s >= 4,
+        eadFriendly: org.eadFriendly === true,
+        managerialGrade: org.managerialGrade === true,
+        suitabilityScore: s,
+      })
     }
 
     console.log(`[MonitorDJ] ${org.name}: ${jobs.length} total after filter`)
     return jobs.sort((a, b) => b.suitabilityScore - a.suitabilityScore)
 
   } catch (err) {
-    console.error(`[MonitorDJ] Serper failed for ${org.name}:`, (err as Error).message)
+    console.error(`[MonitorDJ] Serper failed ${org.name}:`, (err as Error).message)
     return []
   }
 }
@@ -691,16 +671,13 @@ export async function scanOrgDJ(orgId: string, org: DJMonitorOrg): Promise<{
 // Scans 10 orgs per run — NULL last_scanned_at prioritised.
 
 export async function runFullScanDJ(): Promise<void> {
-  console.log('[MonitorDJ] runFullScanDJ() invoked')
   const lockId = 987654322
 
   let lockAcquired = false
   let client
 
   try {
-    console.log('[MonitorDJ] Attempting pool.connect()...')
     client = await pool.connect()
-    console.log('[MonitorDJ] pool.connect() succeeded')
 
     const lockResult = await client.query(
       'SELECT pg_try_advisory_lock($1) as acquired',
@@ -720,17 +697,12 @@ export async function runFullScanDJ(): Promise<void> {
       `SELECT id, name FROM dj_monitor_orgs
        WHERE is_active = true
        ORDER BY last_scanned_at ASC NULLS FIRST
-       LIMIT 20`
+       LIMIT 10`
     )
 
     for (const row of orgs.rows) {
       const orgConfig = DJ_MONITOR_ORGS.find(o => o.name === row.name)
-      if (!orgConfig) {
-        // Stale DB row with no matching config — stamp it so it stops blocking the queue
-        console.warn(`[MonitorDJ] No config for org "${row.name}" — marking scanned to clear queue`)
-        await pool.query('UPDATE dj_monitor_orgs SET last_scanned_at = NOW() WHERE id = $1', [row.id])
-        continue
-      }
+      if (!orgConfig) continue
       await scanOrgDJ(row.id, orgConfig)
       const delay = orgConfig.slowFetch ? 8000 : 3000
       await new Promise(r => setTimeout(r, delay))
@@ -769,7 +741,11 @@ export async function runFullScanDJ(): Promise<void> {
 // ─── seedOrgsDJ ───────────────────────────────────────────────────────────────
 
 export async function seedOrgsDJ(): Promise<void> {
-  // Always upsert — ON CONFLICT is idempotent, so this safely refreshes names/config
+  const count = await pool.query('SELECT COUNT(*) FROM dj_monitor_orgs')
+  if (parseInt(count.rows[0].count) >= DJ_MONITOR_ORGS.length) {
+    console.log(`[MonitorDJ] ${count.rows[0].count} DJ orgs already seeded`)
+    return
+  }
 
   console.log('[MonitorDJ] Seeding DJ organizations...')
   for (const org of DJ_MONITOR_ORGS) {
