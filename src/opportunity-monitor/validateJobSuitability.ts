@@ -214,13 +214,18 @@ export interface ValidationResult {
 
 /**
  * Run a job through the Zero-Trust four-step validation pipeline.
- * Each step performs an early return — score is never calculated on a reject.
  *
- * @param title    Job title (required)
- * @param snippet  Description snippet (null/undefined safe)
- * @param url      Source URL (null/undefined safe)
- * @param orgName  Organisation name for Tier-1 bonus lookup
- * @param tier1    Tier-1 org set (defaults to TIER1_ORG_NAMES)
+ * @param title       Job title (required)
+ * @param snippet     Description snippet (null/undefined safe)
+ * @param url         Source URL (null/undefined safe)
+ * @param orgName     Organisation name for Tier-1 bonus lookup
+ * @param tier1       Tier-1 org set (defaults to TIER1_ORG_NAMES)
+ * @param relaxedMode When true (industry / international / india sectors):
+ *                    • Step 3 (seniority gate) is skipped — any life-science title passes
+ *                    • Step 4 accepts secondary domain anchors (oncology, immunology, etc.)
+ *                      in addition to primary anchors
+ *                    Mirrors DJ's remote-job relaxation: more opportunities surface
+ *                    for sectors where title conventions differ from academia.
  */
 export function validateJobSuitability(
   title: string,
@@ -228,6 +233,7 @@ export function validateJobSuitability(
   url: string | null | undefined,
   orgName: string,
   tier1: Set<string> = TIER1_ORG_NAMES,
+  relaxedMode = false,
 ): ValidationResult {
   // ── Null-safety ─────────────────────────────────────────────────────────────
   const safeTitle   = (title   ?? '').trim()
@@ -281,25 +287,32 @@ export function validateJobSuitability(
   }
 
   // ── STEP 3: Seniority Requirement ───────────────────────────────────────────
-  const isFaculty            = FACULTY_TITLE_RE.test(safeTitle)
-  const isQualifiedScientist = QUALIFIED_SCIENTIST_RE.test(safeTitle)
-  const isStandaloneGeneric  = STANDALONE_SCIENTIST_RE.test(safeTitle)
+  // Relaxed mode (industry / international / india): skip this gate entirely.
+  // Industry biotech/pharma use titles like "Scientist I", "Research Associate",
+  // "Associate Scientist" which the strict academia gate rejects as too junior.
+  if (!relaxedMode) {
+    const isFaculty            = FACULTY_TITLE_RE.test(safeTitle)
+    const isQualifiedScientist = QUALIFIED_SCIENTIST_RE.test(safeTitle)
+    const isStandaloneGeneric  = STANDALONE_SCIENTIST_RE.test(safeTitle)
 
-  if (isStandaloneGeneric && !isQualifiedScientist && !isFaculty) {
-    return { passes: false, highSuitability: false, matchScore: 0, failReason: 'step3:unqualified_title' }
+    if (isStandaloneGeneric && !isQualifiedScientist && !isFaculty) {
+      return { passes: false, highSuitability: false, matchScore: 0, failReason: 'step3:unqualified_title' }
+    }
   }
 
   // ── STEP 4: Technical Anchor Verification ───────────────────────────────────
   const combined         = `${safeTitle} ${safeSnippet}`
   const hasPrimaryAnchor = PRIMARY_ANCHOR_RE.test(combined)
+  const hasOffDomain     = OFF_DOMAIN_RE.test(combined)
 
   if (!hasPrimaryAnchor) {
-    return { passes: false, highSuitability: false, matchScore: 0, failReason: 'step4:no_technical_anchor' }
-  }
-
-  const hasOffDomain = OFF_DOMAIN_RE.test(combined)
-  if (hasOffDomain && !hasPrimaryAnchor) {
-    return { passes: false, highSuitability: false, matchScore: 0, failReason: 'step4:off_domain_no_anchor' }
+    // Relaxed mode: accept secondary domain (oncology, immunology, neuroscience, etc.)
+    // Many pharma/biotech roles blend Pooja's molecular skills into adjacent areas.
+    if (relaxedMode && hasOffDomain) {
+      // Pass — will score lower due to zero primary anchors, shown as grey/partial
+    } else {
+      return { passes: false, highSuitability: false, matchScore: 0, failReason: 'step4:no_technical_anchor' }
+    }
   }
 
   // ── Scoring (only reached when all four steps pass) ──────────────────────────

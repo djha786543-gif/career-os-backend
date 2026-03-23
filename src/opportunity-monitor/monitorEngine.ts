@@ -361,9 +361,12 @@ export async function scanViaWebSearch(org: MonitorOrg): Promise<ScannedJob[]> {
       if (isAgencySpam(title, snippet)) continue
 
       // ── Central validation pipeline (Gates 1-2-3 + weighted score) ───────
-      const vr = validateJobSuitability(title, snippet, link, company)
+      // Relaxed mode for industry/international/india: skip seniority gate,
+      // accept secondary domain anchors — more opportunities surface.
+      const relaxed = ['industry', 'international', 'india'].includes(org.sector)
+      const vr = validateJobSuitability(title, snippet, link, company, TIER1_ORG_NAMES, relaxed)
       if (!vr.passes) continue
-      if (vr.matchScore < 2) continue   // minimum bar for verified Google Jobs cards
+      if (vr.matchScore < (relaxed ? 1 : 2)) continue
 
       if (!isRelevantLocation(location)) continue
 
@@ -404,9 +407,10 @@ export async function scanViaWebSearch(org: MonitorOrg): Promise<ScannedJob[]> {
       if (isAgencySpam(title, snippet)) continue
 
       // ── Central validation pipeline (Gates 1-2-3 + weighted score) ───────
-      const vr = validateJobSuitability(title, snippet, link, org.name)
+      const relaxedOrganic = ['industry', 'international', 'india'].includes(org.sector)
+      const vr = validateJobSuitability(title, snippet, link, org.name, TIER1_ORG_NAMES, relaxedOrganic)
       if (!vr.passes) continue
-      if (vr.matchScore < 3) continue   // stricter threshold for unverified organic
+      if (vr.matchScore < (relaxedOrganic ? 1 : 3)) continue
 
       const cityMatch = snippet.match(POOJA_CITY_RE) || title.match(POOJA_CITY_RE)
       const location = cityMatch ? cityMatch[0] : org.country
@@ -471,9 +475,10 @@ async function scanViaUSAJobs(org: MonitorOrg): Promise<ScannedJob[]> {
       if (isAgencySpam(title, snippet)) continue
 
       // Central validation pipeline — USAJobs listings are trusted, threshold ≥ 2
-      const vr = validateJobSuitability(title, snippet, applyUrl, d.OrganizationName || org.name)
+      const relaxedUSA = ['industry', 'international', 'india'].includes(org.sector)
+      const vr = validateJobSuitability(title, snippet, applyUrl, d.OrganizationName || org.name, TIER1_ORG_NAMES, relaxedUSA)
       if (!vr.passes) continue
-      if (vr.matchScore < 2) continue
+      if (vr.matchScore < (relaxedUSA ? 1 : 2)) continue
 
       validated.push({
         externalId: d.PositionID || hashContent(title, org.name, location),
@@ -536,9 +541,10 @@ async function scanViaRSS(org: MonitorOrg): Promise<ScannedJob[]> {
       if (isAgencySpam(title, desc)) continue
 
       // ── Central validation pipeline (Gates 1-2-3 + weighted score) ───────
-      const vr = validateJobSuitability(title, desc, link, org.name)
+      const relaxedRSS = ['industry', 'international', 'india'].includes(org.sector)
+      const vr = validateJobSuitability(title, desc, link, org.name, TIER1_ORG_NAMES, relaxedRSS)
       if (!vr.passes) continue
-      if (vr.matchScore < 2) continue   // RSS is a trusted source, threshold ≥ 2
+      if (vr.matchScore < (relaxedRSS ? 1 : 2)) continue
 
       // Extract city from description / title, fall back to org country
       const rssCity = desc.match(POOJA_CITY_RE) || title.match(POOJA_CITY_RE)
