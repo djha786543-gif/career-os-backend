@@ -413,17 +413,18 @@ async function scanViaWebSearchDJ(org) {
     // Determine Google locale: use explicit serperGl, else derive from country
     const gl = org.serperGl ||
         (org.country === 'India' ? 'in' : org.country === 'Europe' ? 'gb' : 'us');
-    // USA: dedicated /jobs endpoint returns structured Google for Jobs cards with direct apply links.
-    // /search gl:us returns noisy organic (LinkedIn company pages, news) that fail isDirectJobUrl.
-    // India/Europe: keep /search — local job boards (Reed, Naukri) appear in organic and pass filters.
-    const serperEndpoint = org.country === 'USA'
-        ? 'https://google.serper.dev/jobs'
-        : 'https://google.serper.dev/search';
+    // All countries use /search — returns both data.jobs (Google for Jobs panel, Tier A)
+    // and data.organic (job board URLs, Tier B). The /jobs endpoint is not on Serper's plan.
+    // For USA, append site-operator hint to bias organic toward known ATS/job boards.
+    const usaSiteHint = org.country === 'USA'
+        ? ' (site:linkedin.com/jobs OR site:greenhouse.io OR site:lever.co OR site:myworkdayjobs.com OR site:icims.com)'
+        : '';
+    const query = org.searchQuery + usaSiteHint;
     try {
-        const resp = await withTimeout(fetch(serperEndpoint, {
+        const resp = await withTimeout(fetch('https://google.serper.dev/search', {
             method: 'POST',
             headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ q: org.searchQuery, num: 10, gl }),
+            body: JSON.stringify({ q: query, num: 10, gl }),
         }), 10000, `DJ Serper for ${org.name}`);
         if (!resp.ok) {
             console.error(`[MonitorDJ] Serper ${resp.status} for ${org.name}`);

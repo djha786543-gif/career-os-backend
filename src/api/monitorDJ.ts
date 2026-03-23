@@ -242,14 +242,18 @@ router.get('/test-search', async (req: Request, res: Response) => {
   try {
     const orgName = (req.query.org as string) || 'Goldman Sachs'
     const org = DJ_MONITOR_ORGS.find(o => o.name === orgName) || DJ_MONITOR_ORGS[0]
-    const gl = org.country === 'India' ? 'in' : 'us'
-    const resp = await fetch('https://google.serper.dev/jobs', {
+    const gl = org.serperGl || (org.country === 'India' ? 'in' : org.country === 'Europe' ? 'gb' : 'us')
+    const usaSiteHint = org.country === 'USA'
+      ? ' (site:linkedin.com/jobs OR site:greenhouse.io OR site:lever.co OR site:myworkdayjobs.com OR site:icims.com)'
+      : ''
+    const query = org.searchQuery + usaSiteHint
+    const resp = await fetch('https://google.serper.dev/search', {
       method: 'POST',
       headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ q: org.searchQuery, num: 10, gl }),
+      body: JSON.stringify({ q: query, num: 10, gl }),
     })
     const data = await resp.json()
-    res.json({ org: org.name, query: org.searchQuery, gl, status: resp.status, results: data })
+    res.json({ org: org.name, query, gl, status: resp.status, googleJobsCards: (data.jobs || []).length, organicResults: (data.organic || []).length, results: data })
   } catch (err: any) {
     res.status(500).json({ error: err.message })
   }
@@ -258,7 +262,7 @@ router.get('/test-search', async (req: Request, res: Response) => {
 // GET /api/monitor/dj/debug — full diagnostic dump
 router.get('/debug', async (req: Request, res: Response) => {
   const result: Record<string, any> = {
-    codeVersion: 'Serper-V4-JobsEndpoint-2026-03-22',
+    codeVersion: 'Serper-V5-SearchSiteFilter-2026-03-23',
     env: {
       serperKey:    !!process.env.SERPER_API_KEY,
       geminiKey:    !!process.env.GEMINI_API_KEY,
