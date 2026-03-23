@@ -96,36 +96,44 @@ function isDirectJobUrl(url) {
     if (!url || url === '#')
         return false;
     const lower = url.toLowerCase();
-    // Hard-reject: non-job domains and path patterns
+    // Hard-reject: news / social / non-job pages
     const NOISE_PATTERNS = [
-        // News / media
         'reuters.com', 'bloomberg.com', 'cnbc.com', 'wsj.com', 'forbes.com',
         'businessinsider.com', 'techcrunch.com', 'venturebeat.com', 'zdnet.com',
-        'theladders.com/career-advice', 'monster.com/career-advice',
-        // Wikipedia / reference
         'wikipedia.org', 'investopedia.com',
-        // Social (non-job)
         'twitter.com', 'x.com', 'facebook.com', 'instagram.com', 'youtube.com',
-        // Company overview pages (not listings)
-        'linkedin.com/company', 'linkedin.com/in/', 'glassdoor.com/overview',
-        'glassdoor.com/reviews', 'indeed.com/cmp/',
-        // Generic page paths
-        '/about-us', '/about/', '/company/', '/team/', '/leadership/',
-        '/blog/', '/news/', '/press/', '/insights/', '/resources/', '/article/',
-        '/culture/', '/values/', '/history/', '/overview',
+        'linkedin.com/company', 'linkedin.com/in/',
+        'glassdoor.com/overview', 'glassdoor.com/reviews',
+        'indeed.com/cmp/',
+        '/about-us', '/about/', '/blog/', '/news/', '/press/', '/insights/',
+        '/resources/', '/article/', '/culture/', '/values/', '/history/', '/overview',
     ];
     if (NOISE_PATTERNS.some(p => lower.includes(p)))
         return false;
-    // Positive signals — confirmed job posting URL patterns
+    // Accept all LinkedIn jobs pages (search or listing — both contain job postings)
+    if (lower.includes('linkedin.com/jobs'))
+        return true;
+    // Accept all Glassdoor job pages
+    if (lower.includes('glassdoor.com/job') || lower.includes('glassdoor.co.in/job'))
+        return true;
+    // Accept Indeed job pages
+    if (lower.includes('indeed.com') && (lower.includes('/job') || lower.includes('viewjob')))
+        return true;
+    // Accept any Reed, Totaljobs, CityJobs, Jobsite (UK job boards)
+    if (lower.includes('reed.co.uk') || lower.includes('totaljobs.com') ||
+        lower.includes('jobsite.co.uk') || lower.includes('cwjobs.co.uk') ||
+        lower.includes('michaelpage.co.uk') || lower.includes('robertwalters.co.uk'))
+        return true;
+    // Standard positive patterns
     const JOB_PATTERNS = [
         '/jobs/', '/job/', '/careers/', '/career/', '/openings/', '/vacancies/',
         '/position/', '/apply', '/requisition', '/job-id', '/jobid',
         'jobs.', 'careers.', 'apply.',
-        'indeed.com/viewjob', 'linkedin.com/jobs/view',
-        'glassdoor.com/job-listing', 'lever.co/', 'greenhouse.io/',
-        'workday.com/en-us/applications', 'myworkdayjobs.com',
+        'lever.co/', 'greenhouse.io/', 'workday.com', 'myworkdayjobs.com',
         'taleo.net', 'icims.com', 'successfactors.com', 'smartrecruiters.com',
         'bamboohr.com', 'workable.com', 'ashbyhq.com', 'rippling.com/jobs',
+        'ziprecruiter.com', 'monster.com/job', 'simplyhired.com',
+        'totaljobs.com', 'jobserve.com', 'cwjobs.co.uk',
     ];
     return JOB_PATTERNS.some(p => lower.includes(p));
 }
@@ -241,8 +249,10 @@ function hashContent(title, org, location) {
 function extractCanonicalUrl(url, fallback) {
     if (!url)
         return fallback;
+    // Only reject generic non-job LinkedIn pages (NOT /jobs/view/ which is a real listing)
     const GENERIC = [
-        'linkedin.com/company', 'linkedin.com/in/', 'linkedin.com/jobs',
+        'linkedin.com/company', 'linkedin.com/in/',
+        'linkedin.com/jobs/search', 'linkedin.com/jobs/collections',
         'twitter.com', 'x.com', 'facebook.com', 'instagram.com',
         'youtube.com', 'glassdoor.com/Overview',
     ];
@@ -254,7 +264,7 @@ async function withTimeout(promise, ms, label) {
     const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error(`Timeout after ${ms}ms: ${label}`)), ms));
     return Promise.race([promise, timeout]);
 }
-const CITY_RE = /\b(new york|new york city|nyc|chicago|dallas|houston|charlotte|boston|atlanta|denver|phoenix|los angeles|san francisco|san jose|seattle|austin|remote|bangalore|bengaluru|mumbai|delhi|hyderabad|pune|chennai|gurgaon|noida)\b/i;
+const CITY_RE = /\b(new york|new york city|nyc|chicago|dallas|houston|charlotte|boston|atlanta|denver|phoenix|los angeles|san francisco|san jose|seattle|austin|remote|bangalore|bengaluru|mumbai|delhi|hyderabad|pune|chennai|gurgaon|noida|london|manchester|edinburgh|birmingham|frankfurt|zurich|amsterdam|paris|dublin|singapore|sydney)\b/i;
 // ─── SOURCE 1: Indeed RSS + Any RSS Feed ─────────────────────────────────────
 // Direct job listings — no noise, no Serper cost. Score threshold: ≥ 2.
 async function scanViaRSSDJ(org) {
@@ -390,23 +400,30 @@ async function scanViaRemotive(org) {
         return [];
     }
 }
-// ─── SOURCE 3: Serper Web Search (Google Jobs priority + organic fallback) ────
-// Google Jobs cards → confirmed listings (score ≥ 2).
-// Organic results → strict URL + snippet + score validation (score ≥ 4).
+// ─── SOURCE 3: Serper Web Search ──────────────────────────────────────────────
+// Google for Jobs cards (data.jobs) → structured listings, score ≥ 2.
+// Organic results (data.organic) → job board URLs + relevance, score ≥ 2.
+// Uses serperGl for country-appropriate Google locale (default: us/in/gb).
 async function scanViaWebSearchDJ(org) {
     const apiKey = process.env.SERPER_API_KEY;
     if (!apiKey) {
         console.warn(`[MonitorDJ] SERPER_API_KEY not set — skipping ${org.name}`);
         return [];
     }
+    // Determine Google locale: use explicit serperGl, else derive from country
+    const gl = org.serperGl ||
+        (org.country === 'India' ? 'in' : org.country === 'Europe' ? 'gb' : 'us');
+    // USA: use dedicated /jobs endpoint — Google for Jobs cards only, no noisy organic.
+    // /search with gl:us returns LinkedIn/news pages that fail isDirectJobUrl.
+    // India/Europe: keep /search — organic results from local job boards work well.
+    const serperEndpoint = org.country === 'USA'
+        ? 'https://google.serper.dev/jobs'
+        : 'https://google.serper.dev/search';
     try {
-        const resp = await withTimeout(fetch('https://google.serper.dev/search', {
+        const resp = await withTimeout(fetch(serperEndpoint, {
             method: 'POST',
-            headers: {
-                'X-API-KEY': apiKey,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ q: org.searchQuery, num: 10 }),
+            headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ q: org.searchQuery, num: 10, gl }),
         }), 10000, `DJ Serper for ${org.name}`);
         if (!resp.ok) {
             console.error(`[MonitorDJ] Serper ${resp.status} for ${org.name}`);
@@ -414,7 +431,7 @@ async function scanViaWebSearchDJ(org) {
         }
         const data = await resp.json();
         const jobs = [];
-        // ── Tier A: Google for Jobs structured cards (highest quality) ────────────
+        // ── Tier A: Google for Jobs cards (highest quality, structured data) ──────
         const googleJobs = data.jobs || [];
         console.log(`[MonitorDJ] ${org.name}: Google Jobs cards=${googleJobs.length}`);
         for (const gj of googleJobs) {
@@ -424,7 +441,7 @@ async function scanViaWebSearchDJ(org) {
             const snippet = [
                 gj.description || '',
                 ...(gj.jobHighlights || []).flatMap((h) => h.items || []),
-            ].join(' ').slice(0, 200);
+            ].join(' ').slice(0, 300);
             const link = gj.relatedLinks?.[0]?.link || gj.applyLink || '';
             const postedDate = gj.extensions?.find((e) => /ago|day|week|month/i.test(e)) || 'Recent';
             if (!title)
@@ -435,12 +452,11 @@ async function scanViaWebSearchDJ(org) {
                 continue;
             if (isAgencySpam(title, snippet))
                 continue;
-            // Lower threshold for confirmed Google Jobs listings
             const s = djSuitabilityScore(title, snippet, company || org.name);
             if (s < 2)
                 continue;
             jobs.push({
-                externalId: hashContent(title, company, link || location),
+                externalId: hashContent(title, company || org.name, link || location),
                 title,
                 orgName: company || org.name,
                 location,
@@ -449,26 +465,27 @@ async function scanViaWebSearchDJ(org) {
                 applyUrl: link || org.careersUrl || '',
                 snippet: snippet.slice(0, 150),
                 postedDate,
-                contentHash: hashContent(title, company, link || location),
+                contentHash: hashContent(title, company || org.name, link || location),
                 highSuitability: s >= 4,
                 eadFriendly: org.eadFriendly === true,
                 managerialGrade: org.managerialGrade === true,
                 suitabilityScore: s,
             });
         }
-        // ── Tier B: Organic results — strict quality gates ────────────────────────
+        // ── Tier B: Organic results — job board URLs + relevance check ────────────
+        // Threshold lowered to s≥2 (same as Google Jobs cards).
+        // hasJobLanguage removed — Serper snippets are often truncated career page text.
         const organicResults = data.organic || [];
         console.log(`[MonitorDJ] ${org.name}: organic=${organicResults.length}`);
         for (const r of organicResults) {
-            const title = (r.title || '').replace(/\s*[-|·].*$/, '').trim();
+            const rawTitle = (r.title || '').trim();
+            // Strip site suffix (e.g. "IT Audit Manager | Goldman Sachs Careers" → "IT Audit Manager")
+            const title = rawTitle.replace(/\s*[|\-–—·]\s*(careers|jobs|indeed|linkedin|glassdoor|goldman|jpmorgan).*/i, '').trim() || rawTitle;
             const snippet = r.snippet || '';
             const link = r.link || '';
             if (!title)
                 continue;
-            // Strict gates for organic (could be news/blog/aggregator)
             if (!isDirectJobUrl(link))
-                continue;
-            if (!hasJobLanguage(snippet))
                 continue;
             if (!isRelevantDJ(title, snippet))
                 continue;
@@ -476,11 +493,10 @@ async function scanViaWebSearchDJ(org) {
                 continue;
             if (isAgencySpam(title, snippet))
                 continue;
-            // Higher threshold for organic — must be clearly correct
             const s = djSuitabilityScore(title, snippet, org.name);
-            if (s < 4)
+            if (s < 2)
                 continue;
-            const cityMatch = snippet.match(CITY_RE) || title.match(CITY_RE);
+            const cityMatch = (snippet + ' ' + rawTitle).match(CITY_RE);
             const location = cityMatch ? cityMatch[0] : org.country;
             jobs.push({
                 externalId: hashContent(title, org.name, link),
@@ -507,6 +523,77 @@ async function scanViaWebSearchDJ(org) {
         return [];
     }
 }
+// ─── SOURCE 4: Adzuna Free Job API ───────────────────────────────────────────
+// Register free at https://developer.adzuna.com
+// Set ADZUNA_APP_ID + ADZUNA_APP_KEY in Railway env vars.
+// Covers USA (us), UK (gb), Germany (de), France (fr), Netherlands (nl), etc.
+async function scanViaAdzuna(org) {
+    const appId = process.env.ADZUNA_APP_ID;
+    const appKey = process.env.ADZUNA_APP_KEY;
+    if (!appId || !appKey) {
+        console.warn(`[MonitorDJ-Adzuna] ADZUNA_APP_ID/ADZUNA_APP_KEY not set — skipping ${org.name}`);
+        return [];
+    }
+    const countryCode = org.adzunaCountry || 'us';
+    const encodedQuery = encodeURIComponent(org.searchQuery);
+    const url = `https://api.adzuna.com/v1/api/jobs/${countryCode}/search/1` +
+        `?app_id=${appId}&app_key=${appKey}&results_per_page=20&what=${encodedQuery}&sort_by=date`;
+    try {
+        const resp = await withTimeout(fetch(url, { headers: { 'User-Agent': 'career-os-portal/1.0' } }), 12000, `Adzuna for ${org.name}`);
+        if (!resp.ok) {
+            console.warn(`[MonitorDJ-Adzuna] ${resp.status} for ${org.name}`);
+            return [];
+        }
+        const data = await resp.json();
+        const results = data.results || [];
+        console.log(`[MonitorDJ-Adzuna] ${org.name}: raw=${results.length}`);
+        const jobs = [];
+        for (const r of results) {
+            const title = (r.title || '').trim();
+            const company = (r.company?.display_name || '').trim();
+            const location = r.location?.display_name || (org.country === 'India' ? 'India' : org.country);
+            const snippet = (r.description || '')
+                .replace(/<[^>]+>/g, '')
+                .replace(/\s+/g, ' ')
+                .slice(0, 300);
+            const applyUrl = r.redirect_url || '';
+            const postedDate = r.created ? r.created.slice(0, 10) : 'Recent';
+            if (!title)
+                continue;
+            if (!isRelevantDJ(title, snippet))
+                continue;
+            if (!passesHardFilter(title, org.country))
+                continue;
+            if (isAgencySpam(title, snippet))
+                continue;
+            const s = djSuitabilityScore(title, snippet, company || org.name);
+            if (s < 2)
+                continue;
+            jobs.push({
+                externalId: String(r.id) || hashContent(title, company, applyUrl),
+                title,
+                orgName: company || org.name,
+                location,
+                country: org.country,
+                sector: org.sector,
+                applyUrl,
+                snippet: snippet.slice(0, 150),
+                postedDate,
+                contentHash: hashContent(title, company || org.name, applyUrl || location),
+                highSuitability: s >= 4,
+                eadFriendly: org.eadFriendly === true,
+                managerialGrade: false,
+                suitabilityScore: s,
+            });
+        }
+        console.log(`[MonitorDJ-Adzuna] ${org.name}: ${jobs.length} after filter`);
+        return jobs.sort((a, b) => b.suitabilityScore - a.suitabilityScore);
+    }
+    catch (err) {
+        console.error(`[MonitorDJ-Adzuna] Failed ${org.name}:`, err.message);
+        return [];
+    }
+}
 // ─── scanOrgDJ ────────────────────────────────────────────────────────────────
 async function scanOrgDJ(orgId, org) {
     let jobs = [];
@@ -517,6 +604,9 @@ async function scanOrgDJ(orgId, org) {
                 break;
             case 'remotive':
                 jobs = await scanViaRemotive(org);
+                break;
+            case 'adzuna':
+                jobs = await scanViaAdzuna(org);
                 break;
             default: jobs = await scanViaWebSearchDJ(org);
         }

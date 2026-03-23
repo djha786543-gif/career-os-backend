@@ -159,7 +159,22 @@ export async function dbInit(): Promise<void> {
       ALTER TABLE monitor_jobs ADD COLUMN IF NOT EXISTS job_board VARCHAR(100);
       ALTER TABLE kanban_cards ADD COLUMN IF NOT EXISTS job_board VARCHAR(100);
       ALTER TABLE monitor_jobs ADD COLUMN IF NOT EXISTS high_suitability BOOLEAN DEFAULT FALSE;
-      ALTER TABLE dj_monitor_orgs ADD COLUMN IF NOT EXISTS rss_url TEXT;
+
+      -- ─── DJ table column migrations ───────────────────────────────────────────
+      -- These run on every boot (ADD COLUMN IF NOT EXISTS is idempotent).
+      -- Required because CREATE TABLE IF NOT EXISTS does nothing on existing tables,
+      -- so any column added after the initial table creation must be migrated here.
+      ALTER TABLE dj_monitor_orgs ADD COLUMN IF NOT EXISTS rss_url          TEXT;
+      ALTER TABLE dj_monitor_orgs ADD COLUMN IF NOT EXISTS careers_url      TEXT;
+      ALTER TABLE dj_monitor_orgs ADD COLUMN IF NOT EXISTS ead_friendly     BOOLEAN DEFAULT FALSE;
+      ALTER TABLE dj_monitor_orgs ADD COLUMN IF NOT EXISTS managerial_grade BOOLEAN DEFAULT FALSE;
+
+      ALTER TABLE dj_monitor_jobs ADD COLUMN IF NOT EXISTS content_hash     VARCHAR(64);
+      ALTER TABLE dj_monitor_jobs ADD COLUMN IF NOT EXISTS high_suitability BOOLEAN  DEFAULT FALSE;
+      ALTER TABLE dj_monitor_jobs ADD COLUMN IF NOT EXISTS ead_friendly     BOOLEAN  DEFAULT FALSE;
+      ALTER TABLE dj_monitor_jobs ADD COLUMN IF NOT EXISTS managerial_grade BOOLEAN  DEFAULT FALSE;
+      ALTER TABLE dj_monitor_jobs ADD COLUMN IF NOT EXISTS suitability_score SMALLINT DEFAULT 0;
+      ALTER TABLE dj_monitor_jobs ADD COLUMN IF NOT EXISTS last_seen_at     TIMESTAMPTZ DEFAULT NOW();
 
       -- ─── DJ Opportunity Monitor — isolated tables (no crossover with Pooja) ──
 

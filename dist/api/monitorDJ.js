@@ -36,7 +36,7 @@ router.get('/jobs', async (req, res) => {
             params.push(sector);
             where += ` AND j.sector = $${params.length}`;
         }
-        if (country && ['USA', 'India'].includes(country)) {
+        if (country && ['USA', 'India', 'Europe'].includes(country)) {
             params.push(country);
             where += ` AND j.country = $${params.length}`;
         }
@@ -84,7 +84,7 @@ router.get('/orgs', async (req, res) => {
             params.push(sector);
             where += ` AND o.sector = $${params.length}`;
         }
-        if (country && ['USA', 'India'].includes(country)) {
+        if (country && ['USA', 'India', 'Europe'].includes(country)) {
             params.push(country);
             where += ` AND o.country = $${params.length}`;
         }
@@ -195,39 +195,78 @@ router.post('/seed', async (req, res) => {
         }
     }
 });
-// GET /api/monitor/dj/debug — deployment verification
-router.get('/debug', async (req, res) => {
+// GET /api/monitor/dj/test-search?org=Goldman+Sachs — hits Serper /jobs and returns raw results
+router.get('/test-search', async (req, res) => {
+    const apiKey = process.env.SERPER_API_KEY;
+    if (!apiKey) {
+        return res.status(500).json({ error: 'SERPER_API_KEY not set in Railway env vars' });
+    }
     try {
-        const tables = await client_1.pool.query(`SELECT tablename FROM pg_tables
-       WHERE schemaname = 'public' AND tablename LIKE 'dj_%'
-       ORDER BY tablename`);
-        const orgs = await client_1.pool.query(`SELECT sector, country, COUNT(*) as n
-       FROM dj_monitor_orgs WHERE is_active = true
-       GROUP BY sector, country ORDER BY sector, country`);
-        const jobs = await client_1.pool.query(`SELECT sector, country, COUNT(*) as n
-       FROM dj_monitor_jobs WHERE is_active = true
-       GROUP BY sector, country ORDER BY sector, country`);
-        const recentScans = await client_1.pool.query(`SELECT s.status, s.error_message, s.jobs_found, s.new_jobs,
-              s.scanned_at, o.name as org_name
-       FROM dj_monitor_scans s
-       JOIN dj_monitor_orgs o ON s.org_id = o.id
-       ORDER BY s.scanned_at DESC LIMIT 20`);
-        res.json({
-            codeVersion: 'Serper-V1-Success',
-            env: {
-                serperKey: !!process.env.SERPER_API_KEY,
-                databaseUrl: !!process.env.DATABASE_URL,
-            },
-            tables: tables.rows.map((r) => r.tablename),
-            orgs: { total: orgs.rows.reduce((s, r) => s + parseInt(r.n), 0), bySector: orgs.rows },
-            jobs: { total: jobs.rows.reduce((s, r) => s + parseInt(r.n), 0), bySector: jobs.rows },
-            recentScans: recentScans.rows,
+        const orgName = req.query.org || 'Goldman Sachs';
+        const org = orgConfigDJ_1.DJ_MONITOR_ORGS.find(o => o.name === orgName) || orgConfigDJ_1.DJ_MONITOR_ORGS[0];
+        const gl = org.country === 'India' ? 'in' : 'us';
+        const resp = await fetch('https://google.serper.dev/jobs', {
+            method: 'POST',
+            headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ q: org.searchQuery, num: 10, gl }),
         });
+        const data = await resp.json();
+        res.json({ org: org.name, query: org.searchQuery, gl, status: resp.status, results: data });
     }
     catch (err) {
-        if (!res.headersSent) {
-            res.status(500).json({ error: err.message });
-        }
+        res.status(500).json({ error: err.message });
     }
+});
+// GET /api/monitor/dj/debug — full diagnostic dump
+router.get('/debug', async (req, res) => {
+    const result = {
+        codeVersion: 'Serper-V4-JobsEndpoint-2026-03-22',
+        env: {
+            serperKey: !!process.env.SERPER_API_KEY,
+            geminiKey: !!process.env.GEMINI_API_KEY,
+            anthropicKey: !!process.env.ANTHROPIC_API_KEY,
+            databaseUrl: !!(process.env.DATABASE_PUBLIC_URL || process.env.DATABASE_PRIVATE_URL || process.env.DATABASE_URL),
+        },
+    };
+    try {
+        const tableCheck = await client_1.pool.query(`
+      SELECT table_name FROM information_schema.tables
+      WHERE table_schema = 'public'
+      AND table_name IN ('dj_monitor_orgs','dj_monitor_jobs','dj_monitor_scans')
+    `);
+        result.tables = tableCheck.rows.map((r) => r.table_name);
+    }
+    catch (e) {
+        result.tablesError = e.message;
+    }
+    try {
+        const orgCount = await client_1.pool.query('SELECT COUNT(*) as total FROM dj_monitor_orgs');
+        const orgSectors = await client_1.pool.query('SELECT sector, country, COUNT(*) as n FROM dj_monitor_orgs GROUP BY sector, country ORDER BY sector');
+        result.orgs = { total: parseInt(orgCount.rows[0].total), bySector: orgSectors.rows };
+    }
+    catch (e) {
+        result.orgsError = e.message;
+    }
+    try {
+        const jobCount = await client_1.pool.query('SELECT COUNT(*) as total FROM dj_monitor_jobs WHERE is_active=true');
+        const jobSectors = await client_1.pool.query('SELECT sector, country, COUNT(*) as n FROM dj_monitor_jobs WHERE is_active=true GROUP BY sector, country');
+        result.jobs = { total: parseInt(jobCount.rows[0].total), bySector: jobSectors.rows };
+    }
+    catch (e) {
+        result.jobsError = e.message;
+    }
+    try {
+        const scans = await client_1.pool.query(`
+      SELECT s.status, s.error_message, s.jobs_found, s.new_jobs, s.scanned_at, o.name as org_name
+      FROM dj_monitor_scans s
+      LEFT JOIN dj_monitor_orgs o ON s.org_id = o.id
+      ORDER BY s.scanned_at DESC LIMIT 20
+    `);
+        result.recentScans = scans.rows;
+    }
+    catch (e) {
+        result.scansError = e.message;
+    }
+    res.json(result);
 });
 exports.default = router;
