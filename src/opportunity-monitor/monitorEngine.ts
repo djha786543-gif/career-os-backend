@@ -1,6 +1,7 @@
 import { pool } from '../db/client'
 import { MONITOR_ORGS, MonitorOrg } from './orgConfig'
 import crypto from 'crypto'
+import { validateJobSuitability, TIER1_ORG_NAMES, HIGH_SUITABILITY_THRESHOLD } from './validateJobSuitability'
 
 // ─── Pooja-Core Profile ────────────────────────────────────────────────────
 // Rank 1 job title keywords — positions Pooja is actually targeting.
@@ -47,25 +48,7 @@ const HARD_FILTER_TERMS = [
   'junior', 'admin', 'administrative', 'coordinator', 'assistant'
 ]
 
-// Tier 1 orgs for +1 suitability bonus
-const TIER1_ORG_NAMES = new Set([
-  'Harvard Medical School', 'Stanford Medicine', 'MIT Biology', 'UCSF',
-  'Broad Institute', 'Johns Hopkins Medicine', 'Mayo Clinic Research',
-  'Salk Institute', 'Columbia University Medical Center', 'Yale School of Medicine',
-  'Gladstone Institutes', 'Scripps Research', 'UT Southwestern Medical Center',
-  'Baylor College of Medicine', 'Washington University St Louis', 'Weill Cornell Medicine',
-  'NIH NHLBI', 'NIH NIGMS', 'NIH NCI',
-  'Karolinska Institute', 'ETH Zurich', 'EMBL Jobs', 'Francis Crick Institute',
-  'Wellcome Sanger Institute', 'Max Planck Heart and Lung', 'Roche',
-  'Genentech', 'Regeneron', 'Amgen', 'Pfizer Research', 'Merck Research',
-  'NCBS Bangalore', 'IISc Bangalore', 'TIFR Mumbai',
-  // Europe industry tier-1
-  'AstraZeneca UK', 'GSK UK', 'Novartis Basel', 'Roche Research Basel',
-  'Bayer Life Sciences', 'Boehringer Ingelheim', 'Novo Nordisk',
-  'BioNTech Germany', 'Sanofi Paris', 'UCB Pharma Belgium',
-  // Asia industry tier-1
-  'Daiichi Sankyo Japan', 'Takeda Japan', 'AstraZeneca China', 'Roche China',
-])
+// TIER1_ORG_NAMES is imported from validateJobSuitability (single source of truth)
 
 // Pooja-relevant job title and domain keywords (used for legacy relevance scoring)
 const RELEVANT_KEYWORDS = [
@@ -175,14 +158,10 @@ function passesHardFilter(title: string): boolean {
   return !HARD_FILTER_TERMS.some(term => t.includes(term))
 }
 
-// Pooja suitability scorer (0–5 scale). Jobs must score ≥ 3 to be stored.
+// Legacy shim — thin wrapper around validateJobSuitability for any remaining call sites.
+// New code should call validateJobSuitability directly.
 function poojaSuitabilityScore(title: string, snippet: string, orgName: string): number {
-  const text = (title + ' ' + snippet).toLowerCase()
-  let score = 0
-  if (POOJA_RANK1_KEYWORDS.some(kw => text.includes(kw))) score += 2
-  if (TECHNICAL_ANCHORS.some(anchor => text.includes(anchor))) score += 2
-  if (TIER1_ORG_NAMES.has(orgName)) score += 1
-  return score
+  return validateJobSuitability(title, snippet, null, orgName).matchScore
 }
 
 // Filter out generic social/landing-page URLs that don't point to actual job postings.
@@ -378,13 +357,12 @@ export async function scanViaWebSearch(org: MonitorOrg): Promise<ScannedJob[]> {
       const postedDate = gj.extensions?.find((e: string) => /ago|day|week|month/i.test(e)) || 'Recent'
 
       if (!title) continue
-      if (!passesHardFilter(title)) continue
-      if (!isRelevant(title, snippet)) continue
-      if (!hasTechnicalAnchor(title, snippet)) continue  // must be in Pooja's domain
       if (isAgencySpam(title, snippet)) continue
 
-      const suitability = poojaSuitabilityScore(title, snippet, company)
-      if (suitability < 2) continue
+      // ── Central validation pipeline (Gates 1-2-3 + weighted score) ───────
+      const vr = validateJobSuitability(title, snippet, link, company)
+      if (!vr.passes) continue
+      if (vr.matchScore < 2) continue   // minimum bar for verified Google Jobs cards
 
       if (!isRelevantLocation(location)) continue
 
@@ -399,7 +377,7 @@ export async function scanViaWebSearch(org: MonitorOrg): Promise<ScannedJob[]> {
         postedDate,
         contentHash: hashContent(title, company, link || location),
         relevanceScore: relevanceScore(title, snippet),
-        highSuitability: suitability >= 3,
+        highSuitability: vr.highSuitability,
       })
     }
 
@@ -418,17 +396,16 @@ export async function scanViaWebSearch(org: MonitorOrg): Promise<ScannedJob[]> {
 
       if (!title) continue
 
-      // Strict gates for organic (could be news/blog/aggregator/paper)
-      if (isBioResearchArticle(title, link)) continue  // reject papers first
+      // ── URL quality gates (organic-specific: filter papers, aggregators, noise) ──
+      if (isBioResearchArticle(title, link)) continue
       if (!isDirectJobUrl(link)) continue
       if (!hasJobLanguage(snippet)) continue
-      if (!passesHardFilter(title)) continue
-      if (!isRelevant(title, snippet)) continue
-      if (!hasTechnicalAnchor(title, snippet)) continue  // domain gate
       if (isAgencySpam(title, snippet)) continue
 
-      const suitability = poojaSuitabilityScore(title, snippet, org.name)
-      if (suitability < 3) continue  // Stricter threshold for unverified organic
+      // ── Central validation pipeline (Gates 1-2-3 + weighted score) ───────
+      const vr = validateJobSuitability(title, snippet, link, org.name)
+      if (!vr.passes) continue
+      if (vr.matchScore < 3) continue   // stricter threshold for unverified organic
 
       const cityMatch = snippet.match(POOJA_CITY_RE) || title.match(POOJA_CITY_RE)
       const location = cityMatch ? cityMatch[0] : org.country
@@ -445,7 +422,7 @@ export async function scanViaWebSearch(org: MonitorOrg): Promise<ScannedJob[]> {
         postedDate: 'Recent',
         contentHash: hashContent(title, org.name, link),
         relevanceScore: relevanceScore(title, snippet),
-        highSuitability: suitability >= 3,
+        highSuitability: vr.highSuitability,
       })
     }
 
@@ -481,36 +458,37 @@ async function scanViaUSAJobs(org: MonitorOrg): Promise<ScannedJob[]> {
     const data = await resp.json()
     const items = data?.SearchResult?.SearchResultItems || []
 
-    return items
-      .filter((item: any) => {
-        const title = item.MatchedObjectDescriptor?.PositionTitle || ''
-        return isRelevant(title) && passesHardFilter(title)
+    const validated: ScannedJob[] = []
+    for (const item of items) {
+      const d = item.MatchedObjectDescriptor
+      const title   = (d.PositionTitle || '').trim()
+      const snippet = (d.UserArea?.Details?.JobSummary || '').slice(0, 150)
+      const location = d.PositionLocation?.[0]?.LocationName || 'Washington DC, USA'
+      const applyUrl = d.ApplyURI?.[0] || ''
+
+      if (!title) continue
+      if (isAgencySpam(title, snippet)) continue
+
+      // Central validation pipeline — USAJobs listings are trusted, threshold ≥ 2
+      const vr = validateJobSuitability(title, snippet, applyUrl, d.OrganizationName || org.name)
+      if (!vr.passes) continue
+      if (vr.matchScore < 2) continue
+
+      validated.push({
+        externalId: d.PositionID || hashContent(title, org.name, location),
+        title,
+        orgName: d.OrganizationName || org.name,
+        location,
+        country: 'USA',
+        applyUrl,
+        snippet,
+        postedDate: d.PublicationStartDate?.split('T')[0] || 'Recent',
+        contentHash: hashContent(title, org.name, location),
+        relevanceScore: relevanceScore(title, snippet),
+        highSuitability: vr.highSuitability,
       })
-      .filter((item: any) => {
-        const d = item.MatchedObjectDescriptor
-        const title = d.PositionTitle || ''
-        const snippet = (d.UserArea?.Details?.JobSummary || '').slice(0, 150)
-        return poojaSuitabilityScore(title, snippet, org.name) >= 3
-      })
-      .map((item: any) => {
-        const d = item.MatchedObjectDescriptor
-        const title = d.PositionTitle || ''
-        const location = d.PositionLocation?.[0]?.LocationName || 'Washington DC, USA'
-        const snippet = (d.UserArea?.Details?.JobSummary || '').slice(0, 150)
-        return {
-          externalId: d.PositionID || hashContent(title, org.name, location),
-          title,
-          orgName: d.OrganizationName || org.name,
-          location,
-          country: 'USA',
-          applyUrl: d.ApplyURI?.[0] || '',
-          snippet,
-          postedDate: d.PublicationStartDate?.split('T')[0] || 'Recent',
-          contentHash: hashContent(title, org.name, location),
-          relevanceScore: relevanceScore(title),
-          highSuitability: true
-        }
-      })
+    }
+    return validated
   } catch (err) {
     console.error(`[Monitor] USAJobs failed for ${org.name}:`, (err as Error).message)
     return scanViaWebSearch(org)
@@ -554,20 +532,17 @@ async function scanViaRSS(org: MonitorOrg): Promise<ScannedJob[]> {
       const pubDate = item.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] || 'Recent'
 
       if (isBioResearchArticle(title, link)) continue  // reject papers / preprints
-      if (!passesHardFilter(title)) continue
-      if (!isRelevant(title, desc)) continue
-      if (!hasTechnicalAnchor(title, desc)) continue  // must be in Pooja's domain
       if (isAgencySpam(title, desc)) continue
 
-      // For RSS — extract city from description if available, fall back to org country
+      // ── Central validation pipeline (Gates 1-2-3 + weighted score) ───────
+      const vr = validateJobSuitability(title, desc, link, org.name)
+      if (!vr.passes) continue
+      if (vr.matchScore < 2) continue   // RSS is a trusted source, threshold ≥ 2
+
+      // Extract city from description / title, fall back to org country
       const rssCity = desc.match(POOJA_CITY_RE) || title.match(POOJA_CITY_RE)
       const location = rssCity ? rssCity[0] : org.country
-
       if (!isRelevantLocation(location)) continue
-
-      // Lower threshold for RSS (confirmed listings) vs websearch
-      const suitability = poojaSuitabilityScore(title, desc, org.name)
-      if (suitability < 2) continue
 
       items.push({
         externalId: hashContent(title, org.name, location),
@@ -580,7 +555,7 @@ async function scanViaRSS(org: MonitorOrg): Promise<ScannedJob[]> {
         postedDate: pubDate,
         contentHash: hashContent(title, org.name, location),
         relevanceScore: relevanceScore(title, desc),
-        highSuitability: suitability >= 3
+        highSuitability: vr.highSuitability,
       })
     }
 
