@@ -8,7 +8,7 @@
  */
 
 import db from '../db';
-import { validateJobSuitability, TIER1_ORG_NAMES } from '../opportunity-monitor/validateJobSuitability';
+import { validateJobSuitability, TIER1_ORG_NAMES, PIPELINE_VERSION } from '../opportunity-monitor/validateJobSuitability';
 
 export async function dbInit(): Promise<void> {
   let client;
@@ -155,13 +155,35 @@ export async function dbInit(): Promise<void> {
         ON monitor_scans(org_id, scanned_at DESC);
 
       -- ─── Idempotent column migrations (safe to run every boot) ───────────────
-      -- Adds job_board to tables created before this column existed in the schema
       ALTER TABLE jobs         ADD COLUMN IF NOT EXISTS job_board TEXT         DEFAULT 'Adzuna';
       ALTER TABLE monitor_jobs ADD COLUMN IF NOT EXISTS job_board VARCHAR(100);
       ALTER TABLE kanban_cards ADD COLUMN IF NOT EXISTS job_board VARCHAR(100);
-      ALTER TABLE monitor_jobs ADD COLUMN IF NOT EXISTS high_suitability BOOLEAN DEFAULT FALSE;
-      ALTER TABLE monitor_jobs ADD COLUMN IF NOT EXISTS match_score      SMALLINT DEFAULT 0;
+      ALTER TABLE monitor_jobs ADD COLUMN IF NOT EXISTS high_suitability BOOLEAN     DEFAULT FALSE;
+      ALTER TABLE monitor_jobs ADD COLUMN IF NOT EXISTS match_score      NUMERIC(3,1) DEFAULT 0;
       ALTER TABLE monitor_jobs ADD COLUMN IF NOT EXISTS fail_reason      TEXT;
+
+      -- Pipeline version gate: tracks which validation version last ran.
+      -- revalidateAllJobs() checks this and skips if already up to date.
+      CREATE TABLE IF NOT EXISTS db_meta (
+        key        TEXT        PRIMARY KEY,
+        value      TEXT        NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      -- Convert match_score from legacy SMALLINT×10 format to real NUMERIC(3,1).
+      -- Safe to run every boot: only fires when the column is still SMALLINT.
+      DO $$ BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'monitor_jobs'
+            AND column_name = 'match_score'
+            AND data_type   = 'smallint'
+        ) THEN
+          ALTER TABLE monitor_jobs
+            ALTER COLUMN match_score TYPE NUMERIC(3,1)
+            USING (match_score::NUMERIC / 10);
+        END IF;
+      END $$;
 
       -- ─── DJ table column migrations ───────────────────────────────────────────
       -- These run on every boot (ADD COLUMN IF NOT EXISTS is idempotent).
@@ -260,13 +282,20 @@ export async function dbInit(): Promise<void> {
     client.release();
   }
 
-  // ── One-time data cleanup: revalidate all academia jobs through the ──────────
-  // Zero-Trust pipeline so stale high_suitability=true postdoc/fellowship rows
-  // are corrected. Runs on every startup but is fast (in-process, no HTTP).
-  await revalidateAcademiaJobs();
+  // ── Versioned data cleanup — only runs when PIPELINE_VERSION changes ─────────
+  await revalidateAllJobs();
 }
 
-async function revalidateAcademiaJobs(): Promise<void> {
+/**
+ * Re-runs every monitor_jobs row through the Zero-Trust pipeline and writes
+ * back high_suitability, match_score (real float), and fail_reason.
+ *
+ * Gated by PIPELINE_VERSION stored in db_meta — skips entirely if the current
+ * version has already been applied, so subsequent restarts are O(1) not O(n).
+ * Version is bumped in validateJobSuitability.ts whenever scoring/blacklist
+ * logic changes, triggering a fresh re-clean on next deploy.
+ */
+async function revalidateAllJobs(): Promise<void> {
   let client;
   try {
     client = await db.connect();
@@ -274,23 +303,32 @@ async function revalidateAcademiaJobs(): Promise<void> {
     return; // DB unreachable — skip silently
   }
   try {
+    // ── Version check: skip if already applied ────────────────────────────────
+    const { rows: [meta] } = await client.query<{ value: string }>(
+      `SELECT value FROM db_meta WHERE key = 'pipeline_version'`
+    );
+    if (meta?.value === PIPELINE_VERSION) {
+      console.log(`[CLEANUP] Pipeline ${PIPELINE_VERSION} already applied — skipping.`);
+      return;
+    }
+
+    // ── Fetch all jobs across all sectors ────────────────────────────────────
     const { rows } = await client.query<{
       id:               string;
       title:            string;
       snippet:          string | null;
       apply_url:        string | null;
       org_name:         string;
+      sector:           string;
       high_suitability: boolean;
     }>(
-      `SELECT id, title, snippet, apply_url, org_name, high_suitability
-       FROM monitor_jobs
-       WHERE sector = 'academia'`
+      `SELECT id, title, snippet, apply_url, org_name, sector, high_suitability
+       FROM monitor_jobs`
     );
 
-    if (rows.length === 0) return;
-
-    console.log(`[CLEANUP] Revalidating ${rows.length} academia jobs…`);
+    console.log(`[CLEANUP] Pipeline ${PIPELINE_VERSION}: revalidating ${rows.length} jobs…`);
     let demoted = 0;
+    let promoted = 0;
 
     for (const job of rows) {
       const result = validateJobSuitability(
@@ -302,15 +340,28 @@ async function revalidateAcademiaJobs(): Promise<void> {
                 match_score      = $2,
                 fail_reason      = $3
           WHERE id = $4`,
-        [result.highSuitability, Math.round(result.matchScore * 10), result.failReason ?? null, job.id]
+        [result.highSuitability, result.matchScore, result.failReason ?? null, job.id]
       );
       if (job.high_suitability && !result.highSuitability) {
-        console.log(`[CLEANUP] Demoting "${job.title}" - ${result.failReason}`);
+        console.log(`[CLEANUP] Demoting "${job.title}" [${job.sector}] - ${result.failReason}`);
         demoted++;
+      } else if (!job.high_suitability && result.highSuitability) {
+        promoted++;
       }
     }
 
-    console.log(`[CLEANUP] Done. ${demoted} false-positive(s) demoted.`);
+    // ── Mark this version as applied ─────────────────────────────────────────
+    await client.query(
+      `INSERT INTO db_meta (key, value, updated_at)
+       VALUES ('pipeline_version', $1, NOW())
+       ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()`,
+      [PIPELINE_VERSION]
+    );
+
+    console.log(
+      `[CLEANUP] Done. ${demoted} demoted, ${promoted} promoted. ` +
+      `Version ${PIPELINE_VERSION} recorded.`
+    );
   } catch (err) {
     console.error('[CLEANUP] Revalidation error (non-fatal):', (err as Error).message);
   } finally {

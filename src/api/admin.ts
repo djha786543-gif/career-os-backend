@@ -93,69 +93,60 @@ router.get('/usage', async (req: Request, res: Response) => {
   }
 })
 
-// POST /api/admin/revalidate-academia
-// One-shot data-cleaning endpoint. Fetches every monitor_jobs row where
-// sector = 'academia', reruns it through the Zero-Trust validateJobSuitability
-// pipeline, and writes back high_suitability, match_score, and fail_reason.
+// POST /api/admin/revalidate-all
+// Re-runs every monitor_jobs row (all sectors) through the Zero-Trust pipeline
+// and writes back high_suitability, match_score (real float), and fail_reason.
+// Correctly tracks demotions/promotions by reading old value BEFORE the UPDATE.
 //
-// Usage:  curl -X POST https://<host>/api/admin/revalidate-academia
-router.post('/revalidate-academia', async (req: Request, res: Response) => {
+// Usage:  curl -X POST https://<host>/api/admin/revalidate-all
+router.post('/revalidate-all', async (req: Request, res: Response) => {
   try {
-    // ── 1. Fetch all academia jobs ────────────────────────────────────────────
+    // ── Fetch all jobs across every sector, including old high_suitability ─────
     const { rows } = await pool.query<{
-      id:         string
-      title:      string
-      snippet:    string | null
-      apply_url:  string | null
-      org_name:   string
+      id:               string
+      title:            string
+      snippet:          string | null
+      apply_url:        string | null
+      org_name:         string
+      sector:           string
+      high_suitability: boolean   // read BEFORE update to track direction
     }>(
-      `SELECT id, title, snippet, apply_url, org_name
+      `SELECT id, title, snippet, apply_url, org_name, sector, high_suitability
        FROM monitor_jobs
-       WHERE sector = 'academia'
        ORDER BY detected_at DESC`
     )
 
-    console.log(`[Revalidate] Processing ${rows.length} academia jobs…`)
+    console.log(`[Revalidate] Processing ${rows.length} jobs across all sectors…`)
 
-    let updated    = 0
-    let nowHigh    = 0  // was false → now true
-    let nowLow     = 0  // was true  → now false (the bug we're fixing)
-    let errors     = 0
+    let updated = 0
+    let demoted = 0  // was true  → now false (the false-positives we're fixing)
+    let promoted = 0 // was false → now true
+    let errors  = 0
 
     for (const job of rows) {
       const result = validateJobSuitability(
-        job.title,
-        job.snippet,
-        job.apply_url,
-        job.org_name,
-        TIER1_ORG_NAMES,
+        job.title, job.snippet, job.apply_url, job.org_name, TIER1_ORG_NAMES,
       )
 
-      const matchScoreInt = Math.round(result.matchScore * 10)  // store as fixed-point (×10)
-
       try {
-        const updateResult = await pool.query(
+        await pool.query(
           `UPDATE monitor_jobs
               SET high_suitability = $1,
                   match_score      = $2,
                   fail_reason      = $3
-            WHERE id = $4
-            RETURNING (SELECT high_suitability FROM monitor_jobs WHERE id = $4) AS old_high`,
-          [result.highSuitability, matchScoreInt, result.failReason ?? null, job.id]
+            WHERE id = $4`,
+          [result.highSuitability, result.matchScore, result.failReason ?? null, job.id]
         )
 
-        // Track direction of changes for the summary
-        const oldHigh: boolean | null = updateResult.rows[0]?.old_high ?? null
-        if (oldHigh === true  && !result.highSuitability) nowLow++
-        if (oldHigh === false &&  result.highSuitability) nowHigh++
+        // Compare against the value we fetched BEFORE the UPDATE (correct tracking)
+        if (job.high_suitability && !result.highSuitability) {
+          demoted++
+          console.log(`[Revalidate] DEMOTED  "${job.title}" [${job.sector}] | ${result.failReason}`)
+        } else if (!job.high_suitability && result.highSuitability) {
+          promoted++
+        }
 
         updated++
-
-        if (!result.passes) {
-          console.log(
-            `[Revalidate] REJECT  "${job.title}" | ${result.failReason}`
-          )
-        }
       } catch (dbErr) {
         errors++
         console.error(`[Revalidate] DB error for "${job.title}":`, (dbErr as Error).message)
@@ -163,22 +154,19 @@ router.post('/revalidate-academia', async (req: Request, res: Response) => {
     }
 
     console.log(
-      `[Revalidate] Done. ${updated} updated, ${nowLow} demoted (was high→now low), ` +
-      `${nowHigh} promoted, ${errors} errors.`
+      `[Revalidate] Done. ${updated} updated, ${demoted} demoted, ${promoted} promoted, ${errors} errors.`
     )
 
-    res.json({
-      ok:        true,
-      total:     rows.length,
-      updated,
-      demoted:   nowLow,   // postdoc/fellowship jobs that were wrongly high → now correctly low
-      promoted:  nowHigh,
-      errors,
-    })
+    res.json({ ok: true, total: rows.length, updated, demoted, promoted, errors })
   } catch (err) {
     console.error('[Revalidate] Fatal error:', (err as Error).message)
     if (!res.headersSent) res.status(500).json({ error: (err as Error).message })
   }
+})
+
+// Keep old route as alias so existing bookmarks still work
+router.post('/revalidate-academia', (req: Request, res: Response) => {
+  res.redirect(307, '/api/admin/revalidate-all')
 })
 
 export default router

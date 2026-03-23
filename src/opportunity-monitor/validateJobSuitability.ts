@@ -6,10 +6,13 @@
  *
  * Execution order (early-return at every step — NO scoring if any step fails):
  *
- *   STEP 1 — Blacklist Kill Switch   : postdoc / fellowship / fellow / intern /
- *                                      trainee / resident etc. checked on title
- *                                      AND snippet BEFORE any scoring.
- *                                      Match → score=0, passes=false, RETURN.
+ *   STEP 1 — Blacklist Kill Switch   : Two-tier pattern matching.
+ *     • BLACKLIST_REGEX   → checked on title AND snippet
+ *     • TITLE_BLACKLIST_REGEX → checked on title ONLY
+ *       (prevents false-rejects when snippets mention "Wellcome Fellows"
+ *        or "EMBL Fellows" as third-party references)
+ *     Match → score=0, passes=false, RETURN immediately.
+ *
  *   STEP 2 — Content & Aggregator    : noise URLs, aggregator title patterns,
  *                                      aggregator snippet patterns.
  *   STEP 3 — Seniority Requirement   : bare "Scientist"/"Researcher" without a
@@ -24,6 +27,9 @@
  * High-suitability threshold : matchScore ≥ 3.5
  * ─────────────────────────────────────────────────────────────────────────────
  */
+
+/** Bumped when blacklist/scoring logic changes — triggers a DB re-clean on next startup. */
+export const PIPELINE_VERSION = 'zero-trust-v2'
 
 // ── Tier-1 organisations exported so monitorEngine.ts can import directly ────
 export const TIER1_ORG_NAMES = new Set([
@@ -50,17 +56,36 @@ export const TIER1_ORG_NAMES = new Set([
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * Single combined regex — any match on title OR snippet triggers immediate
- * rejection with score=0.  Domain keywords (e.g. "Cardiovascular") cannot
- * override this.
+ * Applied to BOTH title AND snippet.
+ *
+ * Covers unambiguous training / visiting / junior role patterns.
+ * "fellow" itself is intentionally NOT here — it is in TITLE_BLACKLIST_REGEX
+ * (title-only) to avoid false-rejects when Tier-1 snippets mention e.g.
+ * "Wellcome Fellows", "EMBL Fellows", "Salk Fellows" as context or accolades.
  *
  * Word-boundary rules:
- *   \bintern\b  — fires on "intern"/"internship" but NOT "internal"
- *   \bfellow\b  — fires on bare "Fellow" but NOT inside longer words
- *   "phd candidate" / "graduate student" — phrase boundaries respected
+ *   \bintern\b       — "intern"/"internship" but NOT "internal"
+ *   \bresident\b     — "resident"/"residency" but NOT "residential"
+ *   visiting\s+...   — only fires on compound "Visiting Scientist" etc.
+ *   fellow[\s-]...   — catches "fellow position", "fellow-level", "fellow role"
+ *                      in snippets without catching free-standing "Fellow" accolades
  */
 export const BLACKLIST_REGEX =
-  /\b(postdoc|postdoctoral|post-doc|phd\s+candidate|fellowship|fellow|jrf|srf|intern(?:ship)?|trainee|resident(?:cy)?|graduate\s+student)\b/i
+  /\b(postdoc|postdoctoral|post-doc|phd\s+candidate|fellowship|jrf|srf|intern(?:ship)?|trainee|resident(?:cy)?|graduate\s+student|visiting\s+(?:scientist|professor|researcher|scholar|faculty)|fellow[\s-](?:level|position|role|program|opportunity))\b/i
+
+/**
+ * Applied to the JOB TITLE ONLY.
+ *
+ * "Fellow" anywhere in a title = a training/junior role for Pooja's seniority
+ * level.  Examples: "Research Fellow", "Clinical Fellow", "Cardiovascular
+ * Research Fellow", "Postdoctoral Fellow", "Senior Research Fellow".
+ * All are positions Pooja should NOT see.
+ *
+ * This is NOT applied to snippets — Tier-1 orgs routinely mention their
+ * alumni or current award holders (e.g. "our lab is led by a Wellcome Fellow")
+ * in job descriptions for legitimate staff scientist roles.
+ */
+export const TITLE_BLACKLIST_REGEX = /\bfellow\b/i
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // STEP 2 — Content & Aggregator filters
@@ -152,7 +177,7 @@ function countPrimaryAnchors(text: string): number {
 
 /**
  * Seniority keywords for the 40 % scoring axis.
- * NOTE: "fellow" is intentionally absent — it is a BLACKLIST term.
+ * NOTE: "fellow" is intentionally absent — it is a blacklist term, not a signal.
  */
 const SENIORITY_SCORE_RE =
   /\b(senior|staff|principal|lead|director|head\s+of|associate\s+director|group\s+leader|lab\s+head|assistant\s+professor|associate\s+professor|faculty|tenure|investigator|scientist\s+[iv123])\b/i
@@ -199,8 +224,12 @@ export function validateJobSuitability(
   }
 
   // ── STEP 1: Blacklist Kill Switch ────────────────────────────────────────────
-  // NO scoring. Domain keywords cannot override this. Check title + snippet.
-  const blacklistMatch = safeTitle.match(BLACKLIST_REGEX) ?? safeSnippet.match(BLACKLIST_REGEX)
+  // Two-tier: BLACKLIST_REGEX on title+snippet; TITLE_BLACKLIST_REGEX on title only.
+  // Domain keywords CANNOT override this.
+  const titleMatch   = safeTitle.match(BLACKLIST_REGEX) ?? safeTitle.match(TITLE_BLACKLIST_REGEX)
+  const snippetMatch = safeSnippet.match(BLACKLIST_REGEX)
+  const blacklistMatch = titleMatch ?? snippetMatch
+
   if (blacklistMatch) {
     const matchedTerm = blacklistMatch[0]
     console.log(`[FILTER] Rejecting "${safeTitle}" due to Blacklist: "${matchedTerm}"`)
@@ -230,7 +259,7 @@ export function validateJobSuitability(
   }
 
   // ── STEP 4: Technical Anchor Verification ───────────────────────────────────
-  const combined        = `${safeTitle} ${safeSnippet}`
+  const combined         = `${safeTitle} ${safeSnippet}`
   const hasPrimaryAnchor = PRIMARY_ANCHOR_RE.test(combined)
 
   if (!hasPrimaryAnchor) {
@@ -239,7 +268,6 @@ export function validateJobSuitability(
 
   const hasOffDomain = OFF_DOMAIN_RE.test(combined)
   if (hasOffDomain && !hasPrimaryAnchor) {
-    // Redundant guard — kept for safety; off-domain with no primary anchor
     return { passes: false, highSuitability: false, matchScore: 0, failReason: 'step4:off_domain_no_anchor' }
   }
 
