@@ -15,15 +15,18 @@
  */
 
 export type DJSector = 'big4' | 'banking' | 'tech-cloud' | 'manufacturing'
+export type DJCountry = 'USA' | 'India' | 'Europe'
 
 export interface DJMonitorOrg {
   name: string
   sector: DJSector
-  country: 'USA' | 'India'
+  country: DJCountry
   careersUrl?: string
-  rssUrl?: string                                    // RSS feed URL (free, direct job listings)
-  apiType: 'websearch' | 'rss' | 'remotive'         // remotive = Remotive.com API
+  rssUrl?: string                                              // RSS feed URL (free, direct job listings)
+  apiType: 'websearch' | 'rss' | 'remotive' | 'adzuna'       // adzuna = Adzuna free job API
   searchQuery: string
+  adzunaCountry?: string   // Adzuna country code: 'us', 'gb', 'de', 'fr', 'nl'
+  serperGl?: string        // Serper Google locale override: 'us', 'gb', 'de', 'in'
   eadFriendly?: boolean    // US contract/W2/consultant roles — EAD appropriate
   managerialGrade?: boolean // India Manager+ filter enforced
   slowFetch?: boolean
@@ -712,11 +715,183 @@ const DJ_FREE_SOURCES: DJMonitorOrg[] = [
     rssUrl: 'https://www.indeed.co.in/rss?q=it+audit+manager+sox+itgc&l=India&sort=date&fromage=14',
     searchQuery: 'IT Audit Manager SOX ITGC India',
   },
+  // Europe Indeed RSS
+  {
+    name: 'Indeed RSS - IT Audit Manager UK',
+    sector: 'tech-cloud', country: 'Europe',
+    apiType: 'rss',
+    rssUrl: 'https://uk.indeed.com/rss?q=it+audit+manager+sox+itgc&l=United+Kingdom&sort=date&fromage=14',
+    searchQuery: 'IT Audit Manager SOX ITGC UK',
+  },
+  {
+    name: 'Indeed RSS - Senior IT Auditor UK',
+    sector: 'banking', country: 'Europe',
+    apiType: 'rss',
+    rssUrl: 'https://uk.indeed.com/rss?q=senior+it+auditor+technology+risk+sox&l=United+Kingdom&sort=date&fromage=14',
+    searchQuery: 'Senior IT Auditor Technology Risk SOX UK',
+  },
   {
     name: 'Remotive - Remote IT Audit Manager',
     sector: 'tech-cloud', country: 'USA', eadFriendly: true,
     apiType: 'remotive',
     searchQuery: 'it audit manager senior sox',
+  },
+]
+
+// ═══ Europe — Big 4 (UK + Germany) ═══════════════════════════════════════════
+const EU_BIG4: DJMonitorOrg[] = [
+  {
+    name: 'EY UK', sector: 'big4', country: 'Europe', serperGl: 'gb',
+    apiType: 'websearch',
+    searchQuery: 'EY UK IT Audit Manager Senior Auditor Technology Risk SOX ITGC London',
+    careersUrl: 'https://careers.ey.com',
+  },
+  {
+    name: 'Deloitte UK', sector: 'big4', country: 'Europe', serperGl: 'gb',
+    apiType: 'websearch',
+    searchQuery: 'Deloitte UK IT Audit Manager Senior Auditor SOX Technology Risk London',
+    careersUrl: 'https://careers2.deloitte.com/gb',
+  },
+  {
+    name: 'KPMG UK', sector: 'big4', country: 'Europe', serperGl: 'gb',
+    apiType: 'websearch',
+    searchQuery: 'KPMG UK IT Audit Manager Senior Auditor SOX Technology Risk London',
+    careersUrl: 'https://www.kpmgcareers.co.uk',
+  },
+  {
+    name: 'PwC UK', sector: 'big4', country: 'Europe', serperGl: 'gb',
+    apiType: 'websearch',
+    searchQuery: 'PwC UK IT Audit Manager Senior Auditor SOX Cloud Risk GRC London',
+    careersUrl: 'https://www.pwc.co.uk/careers',
+  },
+  {
+    name: 'EY Germany', sector: 'big4', country: 'Europe', serperGl: 'de',
+    apiType: 'websearch',
+    searchQuery: 'EY Germany IT Audit Manager Technology Risk SOX ITGC Frankfurt',
+    careersUrl: 'https://careers.ey.com',
+  },
+  {
+    name: 'Deloitte Germany', sector: 'big4', country: 'Europe', serperGl: 'de',
+    apiType: 'websearch',
+    searchQuery: 'Deloitte Germany IT Audit Manager Technology Risk SOX Frankfurt',
+    careersUrl: 'https://jobs.deloitte.de',
+  },
+  {
+    name: 'KPMG Germany', sector: 'big4', country: 'Europe', serperGl: 'de',
+    apiType: 'websearch',
+    searchQuery: 'KPMG Germany IT Audit Manager Technology Risk SOX Cloud',
+    careersUrl: 'https://jobs.kpmg.de',
+  },
+  {
+    name: 'PwC Germany', sector: 'big4', country: 'Europe', serperGl: 'de',
+    apiType: 'websearch',
+    searchQuery: 'PwC Germany IT Audit Manager Technology Risk SOX GRC',
+    careersUrl: 'https://www.pwc.de/de/karriere',
+  },
+]
+
+// ═══ Europe — Banking (UK + EMEA) ═════════════════════════════════════════════
+const EU_BANKING: DJMonitorOrg[] = [
+  {
+    name: 'HSBC UK', sector: 'banking', country: 'Europe', serperGl: 'gb',
+    apiType: 'websearch',
+    searchQuery: 'HSBC UK IT Audit Manager Senior Auditor SOX Technology Risk London',
+    careersUrl: 'https://www.hsbc.com/careers',
+  },
+  {
+    name: 'Barclays UK', sector: 'banking', country: 'Europe', serperGl: 'gb',
+    apiType: 'websearch',
+    searchQuery: 'Barclays IT Audit Manager Senior Auditor SOX Technology Risk London',
+    careersUrl: 'https://home.barclays/careers',
+  },
+  {
+    name: 'Standard Chartered UK', sector: 'banking', country: 'Europe', serperGl: 'gb',
+    apiType: 'websearch',
+    searchQuery: 'Standard Chartered IT Audit Manager Technology Risk SOX GRC London',
+    careersUrl: 'https://www.sc.com/en/careers',
+  },
+  {
+    name: 'Lloyds Banking Group', sector: 'banking', country: 'Europe', serperGl: 'gb',
+    apiType: 'websearch',
+    searchQuery: 'Lloyds Banking Group IT Audit Manager Senior Auditor SOX Technology Risk',
+    careersUrl: 'https://www.lloydsbankinggroup.com/careers',
+  },
+  {
+    name: 'Deutsche Bank', sector: 'banking', country: 'Europe', serperGl: 'de',
+    apiType: 'websearch',
+    searchQuery: 'Deutsche Bank IT Audit Manager Technology Risk SOX Cloud Frankfurt London',
+    careersUrl: 'https://careers.db.com',
+  },
+  {
+    name: 'UBS', sector: 'banking', country: 'Europe', serperGl: 'gb',
+    apiType: 'websearch',
+    searchQuery: 'UBS IT Audit Manager Technology Risk SOX Cloud Security London Zurich',
+    careersUrl: 'https://www.ubs.com/global/en/careers.html',
+  },
+  {
+    name: 'BNP Paribas', sector: 'banking', country: 'Europe', serperGl: 'gb',
+    apiType: 'websearch',
+    searchQuery: 'BNP Paribas IT Audit Manager Technology Risk SOX London Paris',
+    careersUrl: 'https://group.bnpparibas/en/careers',
+  },
+  {
+    name: 'ING Group', sector: 'banking', country: 'Europe', serperGl: 'gb',
+    apiType: 'websearch',
+    searchQuery: 'ING IT Audit Manager Technology Risk SOX Cloud Security Amsterdam London',
+    careersUrl: 'https://www.ing.jobs',
+  },
+]
+
+// ═══ Adzuna — Free Job API (USA + UK / Europe) ════════════════════════════════
+// Register free at https://developer.adzuna.com — set ADZUNA_APP_ID + ADZUNA_APP_KEY in Railway.
+// Free tier: 20 results per call, excellent coverage for USA and UK/EU.
+const ADZUNA_SOURCES: DJMonitorOrg[] = [
+  // USA
+  {
+    name: 'Adzuna - IT Audit Manager USA', sector: 'tech-cloud', country: 'USA', eadFriendly: true,
+    apiType: 'adzuna', adzunaCountry: 'us',
+    searchQuery: 'it audit manager sox itgc cloud security',
+  },
+  {
+    name: 'Adzuna - Senior IT Auditor USA', sector: 'tech-cloud', country: 'USA', eadFriendly: true,
+    apiType: 'adzuna', adzunaCountry: 'us',
+    searchQuery: 'senior it auditor sox technology risk itgc',
+  },
+  {
+    name: 'Adzuna - GRC Manager USA', sector: 'banking', country: 'USA', eadFriendly: true,
+    apiType: 'adzuna', adzunaCountry: 'us',
+    searchQuery: 'grc manager it risk sox cisa compliance',
+  },
+  {
+    name: 'Adzuna - Technology Risk Manager USA', sector: 'banking', country: 'USA', eadFriendly: true,
+    apiType: 'adzuna', adzunaCountry: 'us',
+    searchQuery: 'technology risk manager cloud audit sox internal audit',
+  },
+  // UK / Europe
+  {
+    name: 'Adzuna - IT Audit Manager UK', sector: 'tech-cloud', country: 'Europe',
+    apiType: 'adzuna', adzunaCountry: 'gb',
+    searchQuery: 'it audit manager sox itgc technology risk',
+  },
+  {
+    name: 'Adzuna - Senior IT Auditor UK', sector: 'tech-cloud', country: 'Europe',
+    apiType: 'adzuna', adzunaCountry: 'gb',
+    searchQuery: 'senior it auditor sox cloud security technology risk',
+  },
+  {
+    name: 'Adzuna - Technology Risk Manager UK', sector: 'banking', country: 'Europe',
+    apiType: 'adzuna', adzunaCountry: 'gb',
+    searchQuery: 'technology risk manager cloud audit sox financial services',
+  },
+  {
+    name: 'Adzuna - GRC Manager UK', sector: 'banking', country: 'Europe',
+    apiType: 'adzuna', adzunaCountry: 'gb',
+    searchQuery: 'grc manager it risk sox cisa compliance audit',
+  },
+  {
+    name: 'Adzuna - IT Audit Manager Germany', sector: 'tech-cloud', country: 'Europe',
+    apiType: 'adzuna', adzunaCountry: 'de',
+    searchQuery: 'it audit manager sox cloud security technology risk',
   },
 ]
 
@@ -730,9 +905,14 @@ export const DJ_MONITOR_ORGS: DJMonitorOrg[] = [
   ...INDIA_BANKING,
   ...INDIA_GCC_FINANCIAL,
   ...INDIA_GCC_TECH,
+  ...EU_BIG4,
+  ...EU_BANKING,
+  ...ADZUNA_SOURCES,
   ...DJ_FREE_SOURCES,
 ]
 
-// 91 orgs: 4 US Big4 + 20 US Banking + 10 US Tech + 5 US Mfg
-//        + 4 India Big4 + 8 India Banking + 15 India GCC Financial + 19 India GCC Tech
-//        + 6 Free Sources (5 Indeed RSS + 1 Remotive)
+// 143 orgs: 4 US Big4 + 20 US Banking + 10 US Tech + 5 US Mfg
+//         + 4 India Big4 + 8 India Banking + 15 India GCC Financial + 19 India GCC Tech
+//         + 8 EU Big4 + 8 EU Banking
+//         + 9 Adzuna sources (4 USA + 5 Europe)
+//         + 8 Free Sources (6 Indeed RSS + 1 Remotive + 2 EU RSS)

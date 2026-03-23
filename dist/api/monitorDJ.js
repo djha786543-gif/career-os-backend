@@ -36,7 +36,7 @@ router.get('/jobs', async (req, res) => {
             params.push(sector);
             where += ` AND j.sector = $${params.length}`;
         }
-        if (country && ['USA', 'India'].includes(country)) {
+        if (country && ['USA', 'India', 'Europe'].includes(country)) {
             params.push(country);
             where += ` AND j.country = $${params.length}`;
         }
@@ -84,7 +84,7 @@ router.get('/orgs', async (req, res) => {
             params.push(sector);
             where += ` AND o.sector = $${params.length}`;
         }
-        if (country && ['USA', 'India'].includes(country)) {
+        if (country && ['USA', 'India', 'Europe'].includes(country)) {
             params.push(country);
             where += ` AND o.country = $${params.length}`;
         }
