@@ -9,13 +9,14 @@ const router = Router()
 const MAX_LIMIT = 100
 const DEFAULT_LIMIT = 50
 
-// GET /api/monitor/jobs?sector=academia&region=asia&subsector=industry&isNew=true&limit=50&offset=0
+// GET /api/monitor/jobs?sector=academia&region=asia&subsector=industry&isNew=true&highSuitability=true&limit=50&offset=0
 router.get('/jobs', async (req: Request, res: Response) => {
   try {
-    const sector    = req.query.sector    as string | undefined  // academia|industry|international|india
-    const region    = req.query.region    as string | undefined  // asia|europe|north_america
-    const subsector = req.query.subsector as string | undefined  // industry  (india sector only)
-    const isNew     = req.query.isNew === 'true'
+    const sector          = req.query.sector    as string | undefined
+    const region          = req.query.region    as string | undefined
+    const subsector       = req.query.subsector as string | undefined
+    const isNew           = req.query.isNew           === 'true'
+    const highSuitability = req.query.highSuitability === 'true'
     const limit  = Math.min(parseInt(req.query.limit  as string || String(DEFAULT_LIMIT)), MAX_LIMIT)
     const offset = Math.max(parseInt(req.query.offset as string || '0'), 0)
 
@@ -42,6 +43,9 @@ router.get('/jobs', async (req: Request, res: Response) => {
     }
     if (isNew) {
       where += ` AND j.is_new = true`
+    }
+    if (highSuitability) {
+      where += ` AND j.high_suitability = true`
     }
 
     const INDIA_INDUSTRY_ORG_NAMES = [
