@@ -74,6 +74,21 @@ export const BLACKLIST_REGEX =
   /\b(postdoc|postdoctoral|post-doc|phd\s+candidate|fellowship|jrf|srf|intern(?:ship)?|trainee|resident(?:cy)?|graduate\s+student|visiting\s+(?:scientist|professor|researcher|scholar|faculty)|fellow[\s-](?:level|position|role|program|opportunity))\b/i
 
 /**
+ * Title-only check: is this a postdoc position?
+ * Used to identify Tier-1 postdoc exceptions before the full blacklist runs.
+ */
+const POSTDOC_TERMS_RE = /\b(postdoc|postdoctoral|post-doc)\b/i
+
+/**
+ * Secondary blacklist applied to Tier-1 postdocs.
+ * Rejects truly unacceptable terms even at Tier-1 orgs
+ * (e.g. "Postdoctoral Internship", "Postdoctoral Trainee").
+ * Does NOT include postdoc/postdoctoral themselves — those are the exception.
+ */
+const TIER1_POSTDOC_SECONDARY_BLACKLIST =
+  /\b(phd\s+candidate|fellowship|jrf|srf|intern(?:ship)?|trainee|resident(?:cy)?|graduate\s+student|visiting\s+(?:scientist|professor|researcher|scholar|faculty)|fellow[\s-](?:level|position|role|program|opportunity))\b/i
+
+/**
  * Applied to the JOB TITLE ONLY.
  *
  * "Fellow" anywhere in a title = a training/junior role for Pooja's seniority
@@ -225,15 +240,31 @@ export function validateJobSuitability(
 
   // ── STEP 1: Blacklist Kill Switch ────────────────────────────────────────────
   // Two-tier: BLACKLIST_REGEX on title+snippet; TITLE_BLACKLIST_REGEX on title only.
-  // Domain keywords CANNOT override this.
-  const titleMatch   = safeTitle.match(BLACKLIST_REGEX) ?? safeTitle.match(TITLE_BLACKLIST_REGEX)
-  const snippetMatch = safeSnippet.match(BLACKLIST_REGEX)
-  const blacklistMatch = titleMatch ?? snippetMatch
+  //
+  // TIER-1 POSTDOC EXCEPTION:
+  //   A postdoc at a Tier-1 org (Harvard, Broad, Genentech, etc.) can be a genuine
+  //   career accelerator — higher salary, better portfolio, world-class network.
+  //   These bypass the postdoc blacklist but still go through domain scoring
+  //   (Steps 2–4). They reach high_suitability=true only if domain score ≥ 3.5.
+  const isTier1PostdocException = POSTDOC_TERMS_RE.test(safeTitle) && tier1.has(orgName)
 
-  if (blacklistMatch) {
-    const matchedTerm = blacklistMatch[0]
-    console.log(`[FILTER] Rejecting "${safeTitle}" due to Blacklist: "${matchedTerm}"`)
-    return { passes: false, highSuitability: false, matchScore: 0, failReason: 'step1:blacklist' }
+  if (isTier1PostdocException) {
+    // Still reject Tier-1 postdocs that are also internships, traineeships, etc.
+    if (TIER1_POSTDOC_SECONDARY_BLACKLIST.test(safeTitle) ||
+        TIER1_POSTDOC_SECONDARY_BLACKLIST.test(safeSnippet)) {
+      return { passes: false, highSuitability: false, matchScore: 0, failReason: 'step1:blacklist' }
+    }
+    console.log(`[Filter] Tier-1 postdoc exception: "${safeTitle}" at ${orgName}`)
+    // Fall through to Steps 2–4 and scoring
+  } else {
+    // Normal path: full blacklist on title + snippet
+    const titleMatch   = safeTitle.match(BLACKLIST_REGEX) ?? safeTitle.match(TITLE_BLACKLIST_REGEX)
+    const snippetMatch = safeSnippet.match(BLACKLIST_REGEX)
+    const blacklistMatch = titleMatch ?? snippetMatch
+    if (blacklistMatch) {
+      console.log(`[FILTER] Rejecting "${safeTitle}" due to Blacklist: "${blacklistMatch[0]}"`)
+      return { passes: false, highSuitability: false, matchScore: 0, failReason: 'step1:blacklist' }
+    }
   }
 
   // ── STEP 2: Content & Aggregator Filter ─────────────────────────────────────
