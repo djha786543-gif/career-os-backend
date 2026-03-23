@@ -670,13 +670,13 @@ export async function runFullScan(): Promise<void> {
 
     console.log('[Monitor] Advisory lock acquired, starting full scan...')
 
-    // Cost optimisation: scan only 10 orgs per run (oldest-first).
-    // All 82 orgs rotate over 8-9 days.
+    // Scan 20 orgs per run (oldest-first). 134 active orgs rotate fully every ~7 days.
+    // Scan runs fire-and-forget so Railway timeout is not a concern.
     const orgs = await pool.query(
       `SELECT id, name FROM monitor_orgs
        WHERE is_active = true
        ORDER BY last_scanned_at ASC NULLS FIRST
-       LIMIT 10`
+       LIMIT 20`
     )
 
     for (const row of orgs.rows) {

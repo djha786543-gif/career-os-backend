@@ -791,11 +791,12 @@ export async function runFullScanDJ(): Promise<void> {
 
     console.log('[MonitorDJ] Advisory lock acquired, starting full DJ scan...')
 
+    // Scan 20 orgs per run (oldest-first). 121 active orgs rotate fully every ~6 days.
     const orgs = await pool.query(
       `SELECT id, name FROM dj_monitor_orgs
        WHERE is_active = true
        ORDER BY last_scanned_at ASC NULLS FIRST
-       LIMIT 10`
+       LIMIT 20`
     )
 
     for (const row of orgs.rows) {

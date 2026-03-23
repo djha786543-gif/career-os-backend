@@ -18,7 +18,7 @@ export async function initMonitorSchedulerDJ(): Promise<void> {
   }
 
   // Daily at 10:00 UTC — offset from Pooja's 08:00 to spread API call load.
-  // 10 orgs per run × 8-9 runs = full 85-org rotation every ~9 days.
+  // 20 orgs per run × ~6 runs = full 121-org rotation every ~6 days.
   cron.schedule('0 10 * * *', async () => {
     console.log('[MonitorDJ] Cron triggered at', new Date().toISOString())
     try {
@@ -28,5 +28,5 @@ export async function initMonitorSchedulerDJ(): Promise<void> {
     }
   })
 
-  console.log('[MonitorDJ] DJ Scheduler ready — daily scan at 10:00 UTC (10 orgs per run)')
+  console.log('[MonitorDJ] DJ Scheduler ready — daily scan at 10:00 UTC (20 orgs per run)')
 }
