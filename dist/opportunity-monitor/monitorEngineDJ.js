@@ -413,8 +413,14 @@ async function scanViaWebSearchDJ(org) {
     // Determine Google locale: use explicit serperGl, else derive from country
     const gl = org.serperGl ||
         (org.country === 'India' ? 'in' : org.country === 'Europe' ? 'gb' : 'us');
+    // USA: dedicated /jobs endpoint returns structured Google for Jobs cards with direct apply links.
+    // /search gl:us returns noisy organic (LinkedIn company pages, news) that fail isDirectJobUrl.
+    // India/Europe: keep /search — local job boards (Reed, Naukri) appear in organic and pass filters.
+    const serperEndpoint = org.country === 'USA'
+        ? 'https://google.serper.dev/jobs'
+        : 'https://google.serper.dev/search';
     try {
-        const resp = await withTimeout(fetch('https://google.serper.dev/search', {
+        const resp = await withTimeout(fetch(serperEndpoint, {
             method: 'POST',
             headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
             body: JSON.stringify({ q: org.searchQuery, num: 10, gl }),
