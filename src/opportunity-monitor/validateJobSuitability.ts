@@ -4,13 +4,15 @@
  * Pooja-profile — central three-gate validation pipeline.
  * Called by all three scanners in monitorEngine.ts (webSearch, RSS, USAJobs).
  *
- * GATE 1 — Identity & Career Stage  : hard-rejects training roles, noise URLs,
- *                                     aggregator landing pages.
- * GATE 2 — Technical Anchor         : job text must contain a primary domain
- *                                     keyword; off-domain-only titles rejected.
- * GATE 3 — Staff-Level Enforcement  : bare "Scientist"/"Researcher" requires a
- *                                     qualifying prefix/suffix; faculty titles
- *                                     require a domain anchor.
+ * GATE 0 — Kill Switch           : hard-rejects training/fellowship/postdoc
+ *                                  roles and aggregator title pages before any
+ *                                  scoring. Match → score=0, passes=false.
+ * GATE 1 — Identity & Career Stage: noise URLs and aggregator snippet pages.
+ * GATE 2 — Technical Anchor      : job text must contain a primary domain
+ *                                  keyword; off-domain-only titles rejected.
+ * GATE 3 — Staff-Level Enforcement: bare "Scientist"/"Researcher" requires a
+ *                                  qualifying prefix/suffix; faculty titles
+ *                                  require a domain anchor.
  *
  * Scoring (0–5 scale):
  *   60 % — Technical Anchor depth  (up to 3.0 pts)
@@ -41,15 +43,47 @@ export const TIER1_ORG_NAMES = new Set([
 ])
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// GATE 0 — Kill Switch: Strict rejection patterns (pre-validation)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Any match in title OR snippet → immediate rejection (score=0, passes=false).
+ * Applied BEFORE keyword scoring so domain anchors cannot override these.
+ *
+ * Word-boundaries prevent false matches:
+ *   • \bintern\b won't fire on "internal"
+ *   • \btrainee\b won't fire on "trainer"
+ *   • \bfellow\b won't fire on "fellowship" (handled separately below)
+ */
+export const STRICT_REJECT_PATTERNS: RegExp[] = [
+  /\bpostdoc\b/i,
+  /\bpostdoctoral\b/i,
+  /\bpost-doc\b/i,
+  /\bphd\s+candidate\b/i,
+  /\bfellowship\b/i,
+  /\bfellow\b/i,
+  /\bjrf\b/i,
+  /\bsrf\b/i,
+  /\bintern(?:ship)?\b/i,
+  /\btrainee\b/i,
+]
+
+/**
+ * Returns true if any STRICT_REJECT_PATTERN matches the given text.
+ */
+function isStrictReject(text: string): boolean {
+  return STRICT_REJECT_PATTERNS.some(re => re.test(text))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // GATE 1 — Identity & Career Stage patterns
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * Training / junior roles Pooja must never see.
- * Word-boundary so "postdoc" won't accidentally fire on a word like "postdoctorate"
- * and "intern" won't fire inside "internal".
+ * Aggregator title: starts with a count followed by domain/job keywords.
+ * e.g. "172 Cardiovascular jobs in Boston" — SEO spam, not a job posting.
  */
-const TRAINING_ROLE_RE = /\b(postdoctoral|postdoc|post-doc|phd\s+candidate|jrf|srf|junior\s+research\s+fellow|intern(?:ship)?|resident(?:cy)?|trainee|graduate\s+student|fellowship\s+program)\b/i
+const AGGREGATOR_TITLE_RE = /^\d+\s+[\w\s]{2,40}\bjobs?\b/i
 
 /**
  * URL path segments that indicate non-job content.
@@ -141,8 +175,9 @@ function countPrimaryAnchors(text: string): number {
 /**
  * Seniority keywords used for the 40 % scoring axis.
  * Match any of these in title or snippet for full seniority credit.
+ * NOTE: "fellow" deliberately excluded — it is a STRICT_REJECT_PATTERN.
  */
-const SENIORITY_SCORE_RE = /\b(senior|staff|principal|lead|director|head\s+of|associate\s+director|group\s+leader|lab\s+head|assistant\s+professor|associate\s+professor|faculty|tenure|investigator|fellow|scientist\s+[iv123])\b/i
+const SENIORITY_SCORE_RE = /\b(senior|staff|principal|lead|director|head\s+of|associate\s+director|group\s+leader|lab\s+head|assistant\s+professor|associate\s+professor|faculty|tenure|investigator|scientist\s+[iv123])\b/i
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Public API
@@ -160,7 +195,7 @@ export interface ValidationResult {
 }
 
 /**
- * Run a job through the full three-gate validation pipeline.
+ * Run a job through the full validation pipeline.
  *
  * @param title    Job title (required — empty string returns fails=false)
  * @param snippet  Job description snippet (null/undefined handled safely)
@@ -184,11 +219,15 @@ export function validateJobSuitability(
     return { passes: false, highSuitability: false, matchScore: 0, failReason: 'gate1:empty_title' }
   }
 
-  const combined = `${safeTitle} ${safeSnippet}`
+  // ── GATE 0: Kill Switch — strict role rejection (pre-scoring) ────────────────
+  // Domain keywords CANNOT override these patterns.
+  if (isStrictReject(safeTitle) || isStrictReject(safeSnippet)) {
+    return { passes: false, highSuitability: false, matchScore: 0, failReason: 'gate0:strict_reject' }
+  }
 
   // ── GATE 1: Identity & Career Stage ─────────────────────────────────────────
-  if (TRAINING_ROLE_RE.test(safeTitle) || TRAINING_ROLE_RE.test(safeSnippet)) {
-    return { passes: false, highSuitability: false, matchScore: 0, failReason: 'gate1:training_role' }
+  if (AGGREGATOR_TITLE_RE.test(safeTitle)) {
+    return { passes: false, highSuitability: false, matchScore: 0, failReason: 'gate1:aggregator_title' }
   }
 
   if (safeUrl && NOISE_URL_PATH_RE.test(safeUrl)) {
@@ -198,6 +237,8 @@ export function validateJobSuitability(
   if (safeSnippet && AGGREGATOR_SNIPPET_RE.test(safeSnippet)) {
     return { passes: false, highSuitability: false, matchScore: 0, failReason: 'gate1:aggregator_page' }
   }
+
+  const combined = `${safeTitle} ${safeSnippet}`
 
   // ── GATE 2: Technical Anchor ─────────────────────────────────────────────────
   const hasPrimaryAnchor = PRIMARY_ANCHOR_RE.test(combined)

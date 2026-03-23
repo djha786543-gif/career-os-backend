@@ -1,7 +1,7 @@
 /**
  * validateJobSuitability.test.ts
  * ─────────────────────────────────────────────────────────────────────────────
- * Unit tests for the Pooja-profile three-gate validation pipeline.
+ * Unit tests for the Pooja-profile validation pipeline.
  * Run:  npm test
  * ─────────────────────────────────────────────────────────────────────────────
  */
@@ -18,11 +18,25 @@ const highSuit = (r: ReturnType<typeof validateJobSuitability>) => r.highSuitabi
 const reason   = (r: ReturnType<typeof validateJobSuitability>) => r.failReason
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GATE 1 — Identity & Career Stage
+// GATE 0 — Kill Switch (strict reject patterns)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-describe('Gate 1: training role rejection', () => {
-  test('Harvard Postdoc — "Postdoctoral" in title → rejected', () => {
+describe('Gate 0: kill-switch — postdoc / fellowship / fellow patterns', () => {
+  test('VERIFICATION: "Postdoctoral Fellow Cardiovascular Research" → rejected, highSuitability=false', () => {
+    // The cardiovascular anchor MUST NOT override the postdoctoral kill switch.
+    const r = validateJobSuitability(
+      'Postdoctoral Fellow Cardiovascular Research',
+      'Join our lab studying cardiac regeneration using genomics. PhD required.',
+      'https://harvard.edu/careers/postdoc/cardiovascular',
+      'Harvard Medical School', T1,
+    )
+    expect(passes(r)).toBe(false)
+    expect(highSuit(r)).toBe(false)
+    expect(r.matchScore).toBe(0)
+    expect(reason(r)).toBe('gate0:strict_reject')
+  })
+
+  test('"Postdoctoral Fellow" in title with strong domain match → still rejected', () => {
     const r = validateJobSuitability(
       'Postdoctoral Fellow in Cardiovascular Research',
       'Join our lab studying cardiac regeneration. PhD required.',
@@ -31,7 +45,7 @@ describe('Gate 1: training role rejection', () => {
     )
     expect(passes(r)).toBe(false)
     expect(highSuit(r)).toBe(false)
-    expect(reason(r)).toBe('gate1:training_role')
+    expect(reason(r)).toBe('gate0:strict_reject')
   })
 
   test('"Postdoc" variant in title → rejected', () => {
@@ -42,22 +56,58 @@ describe('Gate 1: training role rejection', () => {
       'Stanford Medicine', T1,
     )
     expect(passes(r)).toBe(false)
-    expect(reason(r)).toBe('gate1:training_role')
+    expect(reason(r)).toBe('gate0:strict_reject')
   })
 
-  test('"Intern" in title → rejected (word-boundary: not "Internal")', () => {
-    const internResult = validateJobSuitability(
+  test('"Research Fellowship" in title → rejected (fellowship kill-switch)', () => {
+    const r = validateJobSuitability(
+      'Research Fellowship – Cardiovascular Genomics',
+      'Fellowship position in cardiovascular molecular biology. Join our lab.',
+      'https://broadinstitute.org/careers/fellowship/cardiovascular',
+      'Broad Institute', T1,
+    )
+    expect(passes(r)).toBe(false)
+    expect(highSuit(r)).toBe(false)
+    expect(r.matchScore).toBe(0)
+    expect(reason(r)).toBe('gate0:strict_reject')
+  })
+
+  test('"Cardiovascular Research Fellow" → rejected (fellow kill-switch)', () => {
+    const r = validateJobSuitability(
+      'Cardiovascular Research Fellow',
+      'Research fellow position studying cardiac genomics at our institute.',
+      'https://mayo.edu/careers/research-fellow-cardiovascular',
+      'Mayo Clinic Research', T1,
+    )
+    expect(passes(r)).toBe(false)
+    expect(highSuit(r)).toBe(false)
+    expect(r.matchScore).toBe(0)
+    expect(reason(r)).toBe('gate0:strict_reject')
+  })
+
+  test('"Fellow" in snippet → rejected even if title looks senior', () => {
+    const r = validateJobSuitability(
+      'Senior Scientist – Cardiovascular Biology',
+      'This is a fellow position embedded in our cardiovascular genomics team.',
+      'https://genentech.com/careers/senior-scientist/cv',
+      'Genentech', T1,
+    )
+    expect(passes(r)).toBe(false)
+    expect(reason(r)).toBe('gate0:strict_reject')
+  })
+
+  test('"Intern" in title → rejected', () => {
+    const r = validateJobSuitability(
       'Research Intern – Cardiovascular Biology',
       'Cardiovascular molecular biology intern role.',
       'https://genentech.com/careers/intern/12345',
       'Genentech', T1,
     )
-    expect(passes(internResult)).toBe(false)
-    expect(reason(internResult)).toBe('gate1:training_role')
+    expect(passes(r)).toBe(false)
+    expect(reason(r)).toBe('gate0:strict_reject')
   })
 
-  test('"Internal" does NOT trigger training-role gate (word-boundary)', () => {
-    // "internal" contains "intern" — word-boundary regex must NOT fire
+  test('"Internal" does NOT trigger kill switch (word-boundary)', () => {
     const r = validateJobSuitability(
       'Senior Research Scientist – Internal Medicine Cardiovascular',
       'Lead cardiovascular molecular biology program for internal portfolio.',
@@ -75,7 +125,7 @@ describe('Gate 1: training role rejection', () => {
       'NIH NHLBI', T1,
     )
     expect(passes(r)).toBe(false)
-    expect(reason(r)).toBe('gate1:training_role')
+    expect(reason(r)).toBe('gate0:strict_reject')
   })
 
   test('"JRF" in title → rejected', () => {
@@ -86,7 +136,46 @@ describe('Gate 1: training role rejection', () => {
       'IISc Bangalore', T1,
     )
     expect(passes(r)).toBe(false)
-    expect(reason(r)).toBe('gate1:training_role')
+    expect(reason(r)).toBe('gate0:strict_reject')
+  })
+
+  test('"PhD Candidate" in title → rejected', () => {
+    const r = validateJobSuitability(
+      'PhD Candidate – Cardiovascular Genomics',
+      'PhD candidate position in cardiovascular molecular biology. Requirements: MSc.',
+      'https://eth.edu/doctoral/cardiovascular',
+      'ETH Zurich', T1,
+    )
+    expect(passes(r)).toBe(false)
+    expect(reason(r)).toBe('gate0:strict_reject')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GATE 1 — Identity & Career Stage
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('Gate 1: aggregator title rejection', () => {
+  test('"172 Cardiovascular jobs in Boston" title → rejected', () => {
+    const r = validateJobSuitability(
+      '172 Cardiovascular jobs in Boston',
+      'Browse cardiovascular job listings matching your search criteria.',
+      'https://indeed.com/jobs?q=cardiovascular',
+      'Indeed', EMPTY_TIER1,
+    )
+    expect(passes(r)).toBe(false)
+    expect(reason(r)).toBe('gate1:aggregator_title')
+  })
+
+  test('"45 Research Scientist jobs" title → rejected', () => {
+    const r = validateJobSuitability(
+      '45 Research Scientist jobs – Cardiovascular',
+      'Cardiovascular research scientist positions available.',
+      'https://glassdoor.com/jobs/cardiovascular',
+      'Glassdoor', EMPTY_TIER1,
+    )
+    expect(passes(r)).toBe(false)
+    expect(reason(r)).toBe('gate1:aggregator_title')
   })
 })
 
@@ -136,6 +225,17 @@ describe('Gate 1: noise URL rejection', () => {
     expect(reason(r)).toBe('gate1:noise_url')
   })
 
+  test('/education/ URL → rejected', () => {
+    const r = validateJobSuitability(
+      'Cardiovascular Biology Course',
+      'Learn cardiovascular molecular biology in our graduate education program.',
+      'https://hospital.org/education/cardiovascular-biology',
+      'Mayo Clinic Research', T1,
+    )
+    expect(passes(r)).toBe(false)
+    expect(reason(r)).toBe('gate1:noise_url')
+  })
+
   test('Valid /careers/ URL is not affected by noise URL gate', () => {
     const r = validateJobSuitability(
       'Senior Research Scientist – Cardiovascular Biology',
@@ -147,7 +247,7 @@ describe('Gate 1: noise URL rejection', () => {
   })
 })
 
-describe('Gate 1: aggregator page rejection', () => {
+describe('Gate 1: aggregator snippet rejection', () => {
   test('"Browse 245 jobs" snippet → rejected', () => {
     const r = validateJobSuitability(
       'Research Scientist Jobs – Cardiovascular',
@@ -215,7 +315,6 @@ describe('Gate 2: technical anchor enforcement', () => {
       'https://someorg.com/careers/senior-scientist-earth',
       'SomeOrg', EMPTY_TIER1,
     )
-    // "earth" contains "heart" substring — word-boundary must prevent false match
     expect(passes(r)).toBe(false)
     expect(reason(r)).toBe('gate2:no_technical_anchor')
   })
@@ -358,6 +457,19 @@ describe('Scoring: weighted 60/40 + Tier-1 bonus', () => {
     expect(r.matchScore).toBeGreaterThanOrEqual(0)
     expect(r.matchScore).toBeLessThanOrEqual(5)
   })
+
+  test('"fellow" is NOT treated as a seniority signal (removed from scoring)', () => {
+    // A job with "fellow" in the snippet must be rejected at gate0, not score high
+    const r = validateJobSuitability(
+      'Senior Scientist – Cardiovascular Biology',
+      'This fellow-level cardiovascular role requires a PhD and genomics experience.',
+      'https://genentech.com/careers/senior-scientist/cv',
+      'Genentech', T1,
+    )
+    // "fellow" in snippet → gate0 kill switch fires
+    expect(passes(r)).toBe(false)
+    expect(r.matchScore).toBe(0)
+  })
 })
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -426,25 +538,15 @@ describe('Resilience: null / malformed inputs', () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe('Regression: real-world false-positive examples', () => {
-  test('Generic "Clinical Fellowship" → rejected (fellowship-programs URL)', () => {
+  test('Generic "Clinical Fellowship" → rejected (fellowship kill-switch)', () => {
     const r = validateJobSuitability(
       'Clinical Research Fellowship – Cardiovascular',
       'Fellowship program in cardiovascular clinical research.',
-      'https://hospital.org/education/fellowship-programs/cardiovascular',
+      'https://hospital.org/careers/fellowship/cardiovascular',
       'Mayo Clinic Research', T1,
     )
     expect(passes(r)).toBe(false)
-  })
-
-  test('PhD Candidate role → rejected', () => {
-    const r = validateJobSuitability(
-      'PhD Candidate – Cardiovascular Genomics',
-      'PhD candidate position in cardiovascular molecular biology. Requirements: MSc.',
-      'https://eth.edu/doctoral/cardiovascular',
-      'ETH Zurich', T1,
-    )
-    expect(passes(r)).toBe(false)
-    expect(reason(r)).toBe('gate1:training_role')
+    expect(reason(r)).toBe('gate0:strict_reject')
   })
 
   test('Legitimate Staff Scientist at Tier-1 → high suitability', () => {
