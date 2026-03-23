@@ -28,6 +28,8 @@
 import { pool } from '../db/client'
 import { DJ_MONITOR_ORGS, DJCountry, DJMonitorOrg } from './orgConfigDJ'
 import crypto from 'crypto'
+import { sendDJDigest } from '../notifications/mailer'
+import { sendDJTelegram } from '../notifications/telegram'
 
 // ─── DJ Profile Keywords ──────────────────────────────────────────────────────
 
@@ -765,6 +767,7 @@ export async function runFullScanDJ(): Promise<void> {
 
   let lockAcquired = false
   let client
+  const runStart = new Date()
 
   try {
     client = await pool.connect()
@@ -811,6 +814,9 @@ export async function runFullScanDJ(): Promise<void> {
     }
 
     console.log('[MonitorDJ] Full DJ scan complete')
+
+    await sendDJDigest(runStart)
+    await sendDJTelegram(runStart)
 
   } catch (err) {
     console.error('[MonitorDJ] Scan error:', (err as Error).message)

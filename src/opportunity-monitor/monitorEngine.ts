@@ -1,6 +1,8 @@
 import { pool } from '../db/client'
 import { MONITOR_ORGS, MonitorOrg } from './orgConfig'
 import crypto from 'crypto'
+import { sendPoojaDigest } from '../notifications/mailer'
+import { sendPoojaTelegram } from '../notifications/telegram'
 
 // ─── Pooja-Core Profile ────────────────────────────────────────────────────
 // Rank 1 job title keywords — positions Pooja is actually targeting
@@ -581,6 +583,7 @@ export async function runFullScan(): Promise<void> {
 
   let lockAcquired = false
   let client
+  const runStart = new Date()
 
   try {
     client = await pool.connect()
@@ -630,6 +633,9 @@ export async function runFullScan(): Promise<void> {
     }
 
     console.log('[Monitor] Full scan complete')
+
+    await sendPoojaDigest(runStart)
+    await sendPoojaTelegram(runStart)
 
   } catch (err) {
     console.error('[Monitor] Scan error:', (err as Error).message)
