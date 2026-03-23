@@ -28,6 +28,7 @@
 import { pool } from '../db/client'
 import { DJ_MONITOR_ORGS, DJCountry, DJMonitorOrg } from './orgConfigDJ'
 import crypto from 'crypto'
+import { sendDJDigest } from '../notifications/mailer'
 
 // ─── DJ Profile Keywords ──────────────────────────────────────────────────────
 
@@ -790,6 +791,7 @@ export async function runFullScanDJ(): Promise<void> {
     }
 
     console.log('[MonitorDJ] Advisory lock acquired, starting full DJ scan...')
+    const runStart = new Date()
 
     // Scan 20 orgs per run (oldest-first). 121 active orgs rotate fully every ~6 days.
     const orgs = await pool.query(
@@ -818,6 +820,9 @@ export async function runFullScanDJ(): Promise<void> {
     if (cleaned.rows.length > 0) {
       console.log(`[MonitorDJ] Expired ${cleaned.rows.length} old DJ job listings`)
     }
+
+    // Send email digest for any new high-suitability jobs found this run
+    await sendDJDigest(runStart)
 
     console.log('[MonitorDJ] Full DJ scan complete')
 

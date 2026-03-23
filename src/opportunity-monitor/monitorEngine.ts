@@ -2,6 +2,7 @@ import { pool } from '../db/client'
 import { MONITOR_ORGS, MonitorOrg } from './orgConfig'
 import crypto from 'crypto'
 import { validateJobSuitability, TIER1_ORG_NAMES, HIGH_SUITABILITY_THRESHOLD } from './validateJobSuitability'
+import { sendPoojaDigest } from '../notifications/mailer'
 
 // ─── Pooja-Core Profile ────────────────────────────────────────────────────
 // Rank 1 job title keywords — positions Pooja is actually targeting.
@@ -669,6 +670,7 @@ export async function runFullScan(): Promise<void> {
     }
 
     console.log('[Monitor] Advisory lock acquired, starting full scan...')
+    const runStart = new Date()
 
     // Scan 20 orgs per run (oldest-first). 134 active orgs rotate fully every ~7 days.
     // Scan runs fire-and-forget so Railway timeout is not a concern.
@@ -699,6 +701,9 @@ export async function runFullScan(): Promise<void> {
     if (cleaned.rows.length > 0) {
       console.log(`[Monitor] Expired ${cleaned.rows.length} old job listings`)
     }
+
+    // Send email digest for any new high-suitability jobs found this run
+    await sendPoojaDigest(runStart)
 
     console.log('[Monitor] Full scan complete')
 
