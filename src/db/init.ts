@@ -8,6 +8,7 @@
  */
 
 import db from '../db';
+import { validateJobSuitability, TIER1_ORG_NAMES } from '../opportunity-monitor/validateJobSuitability';
 
 export async function dbInit(): Promise<void> {
   let client;
@@ -255,6 +256,63 @@ export async function dbInit(): Promise<void> {
   } catch (err) {
     // Non-fatal: log and continue — app can still serve Adzuna jobs without DB
     console.error('⚠️  dbInit failed (non-fatal):', (err as Error).message);
+  } finally {
+    client.release();
+  }
+
+  // ── One-time data cleanup: revalidate all academia jobs through the ──────────
+  // Zero-Trust pipeline so stale high_suitability=true postdoc/fellowship rows
+  // are corrected. Runs on every startup but is fast (in-process, no HTTP).
+  await revalidateAcademiaJobs();
+}
+
+async function revalidateAcademiaJobs(): Promise<void> {
+  let client;
+  try {
+    client = await db.connect();
+  } catch {
+    return; // DB unreachable — skip silently
+  }
+  try {
+    const { rows } = await client.query<{
+      id:               string;
+      title:            string;
+      snippet:          string | null;
+      apply_url:        string | null;
+      org_name:         string;
+      high_suitability: boolean;
+    }>(
+      `SELECT id, title, snippet, apply_url, org_name, high_suitability
+       FROM monitor_jobs
+       WHERE sector = 'academia'`
+    );
+
+    if (rows.length === 0) return;
+
+    console.log(`[CLEANUP] Revalidating ${rows.length} academia jobs…`);
+    let demoted = 0;
+
+    for (const job of rows) {
+      const result = validateJobSuitability(
+        job.title, job.snippet, job.apply_url, job.org_name, TIER1_ORG_NAMES
+      );
+      await client.query(
+        `UPDATE monitor_jobs
+            SET high_suitability = $1,
+                match_score      = $2,
+                fail_reason      = $3
+          WHERE id = $4`,
+        [result.highSuitability, Math.round(result.matchScore * 10), result.failReason ?? null, job.id]
+      );
+      if (job.high_suitability && !result.highSuitability) {
+        console.log(`[CLEANUP] Demoting "${job.title}" - ${result.failReason}`);
+        demoted++;
+      }
+    }
+
+    console.log(`[CLEANUP] Done. ${demoted} false-positive(s) demoted.`);
+  } catch (err) {
+    console.error('[CLEANUP] Revalidation error (non-fatal):', (err as Error).message);
   } finally {
     client.release();
   }

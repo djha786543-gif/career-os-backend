@@ -2,18 +2,23 @@
 /**
  * validateJobSuitability.ts
  * ─────────────────────────────────────────────────────────────────────────────
- * Pooja-profile — central three-gate validation pipeline.
+ * Pooja-profile — Zero-Trust validation pipeline.
  * Called by all three scanners in monitorEngine.ts (webSearch, RSS, USAJobs).
  *
- * GATE 1 — Identity & Career Stage  : hard-rejects training roles, noise URLs,
- *                                     aggregator landing pages.
- * GATE 2 — Technical Anchor         : job text must contain a primary domain
- *                                     keyword; off-domain-only titles rejected.
- * GATE 3 — Staff-Level Enforcement  : bare "Scientist"/"Researcher" requires a
- *                                     qualifying prefix/suffix; faculty titles
- *                                     require a domain anchor.
+ * Execution order (early-return at every step — NO scoring if any step fails):
  *
- * Scoring (0–5 scale):
+ *   STEP 1 — Blacklist Kill Switch   : postdoc / fellowship / fellow / intern /
+ *                                      trainee / resident etc. checked on title
+ *                                      AND snippet BEFORE any scoring.
+ *                                      Match → score=0, passes=false, RETURN.
+ *   STEP 2 — Content & Aggregator    : noise URLs, aggregator title patterns,
+ *                                      aggregator snippet patterns.
+ *   STEP 3 — Seniority Requirement   : bare "Scientist"/"Researcher" without a
+ *                                      qualifying modifier → reject.
+ *   STEP 4 — Technical Anchor        : job text must contain a primary domain
+ *                                      keyword; off-domain-only titles rejected.
+ *
+ * Scoring (0–5 scale, only reached after all four steps pass):
  *   60 % — Technical Anchor depth  (up to 3.0 pts)
  *   40 % — Seniority keyword match (up to 2.0 pts)
  *    +0.5 — Tier 1 org bonus
@@ -21,7 +26,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.HIGH_SUITABILITY_THRESHOLD = exports.TIER1_ORG_NAMES = void 0;
+exports.HIGH_SUITABILITY_THRESHOLD = exports.BLACKLIST_REGEX = exports.TIER1_ORG_NAMES = void 0;
 exports.validateJobSuitability = validateJobSuitability;
 // ── Tier-1 organisations exported so monitorEngine.ts can import directly ────
 exports.TIER1_ORG_NAMES = new Set([
@@ -43,97 +48,97 @@ exports.TIER1_ORG_NAMES = new Set([
     'Daiichi Sankyo Japan', 'Takeda Japan', 'AstraZeneca China', 'Roche China',
 ]);
 // ═══════════════════════════════════════════════════════════════════════════════
-// GATE 1 — Identity & Career Stage patterns
+// STEP 1 — Blacklist Kill Switch
 // ═══════════════════════════════════════════════════════════════════════════════
 /**
- * Training / junior roles Pooja must never see.
- * Word-boundary so "postdoc" won't accidentally fire on a word like "postdoctorate"
- * and "intern" won't fire inside "internal".
+ * Single combined regex — any match on title OR snippet triggers immediate
+ * rejection with score=0.  Domain keywords (e.g. "Cardiovascular") cannot
+ * override this.
+ *
+ * Word-boundary rules:
+ *   \bintern\b  — fires on "intern"/"internship" but NOT "internal"
+ *   \bfellow\b  — fires on bare "Fellow" but NOT inside longer words
+ *   "phd candidate" / "graduate student" — phrase boundaries respected
  */
-const TRAINING_ROLE_RE = /\b(postdoctoral|postdoc|post-doc|phd\s+candidate|jrf|srf|junior\s+research\s+fellow|intern(?:ship)?|resident(?:cy)?|trainee|graduate\s+student|fellowship\s+program)\b/i;
+exports.BLACKLIST_REGEX = /\b(postdoc|postdoctoral|post-doc|phd\s+candidate|fellowship|fellow|jrf|srf|intern(?:ship)?|trainee|resident(?:cy)?|graduate\s+student)\b/i;
+// ═══════════════════════════════════════════════════════════════════════════════
+// STEP 2 — Content & Aggregator filters
+// ═══════════════════════════════════════════════════════════════════════════════
 /**
- * URL path segments that indicate non-job content.
- * Applied to the URL string, not title/snippet.
+ * Aggregator title: starts with a digit count followed by job keywords.
+ * e.g. "172 Cardiovascular jobs in Boston" — SEO landing page, not a posting.
+ */
+const AGGREGATOR_TITLE_RE = /^\d+\s+[\w\s]{2,40}\bjobs?\b/i;
+/**
+ * URL path segments indicating articles, courses, or non-job content.
  */
 const NOISE_URL_PATH_RE = /\/(news|press-releases?|blog|education|fellowship-programs?|doi|pmc|archive|events?|seminars?|publications?)\b/i;
 /**
- * Snippet patterns that reveal the page is an aggregator search landing page,
- * not a specific job posting.
+ * Snippet patterns that reveal an aggregator search landing page.
  */
 const AGGREGATOR_SNIPPET_RE = /\bbrowse\s+\d+\s+jobs?\b|\bjobs?\s+in\s+[a-z\s]{3,30}(?:\s|$)|\b\d+\s+(open\s+)?positions?\s+(at|in)\b|\bapply\s+to\s+\d+\s+jobs?\b/i;
 // ═══════════════════════════════════════════════════════════════════════════════
-// GATE 2 — Technical Anchor patterns
+// STEP 3 — Seniority Requirement
 // ═══════════════════════════════════════════════════════════════════════════════
 /**
- * Primary domain keywords — Pooja's specific expertise areas.
- * These must be specific enough to EXCLUDE pure oncology / neurology / immunology roles.
- * Generic industry terms like "drug discovery", "preclinical", "in vivo" are intentionally
- * excluded here because they appear equally in unrelated therapeutic areas.
- */
-const PRIMARY_ANCHORS = [
-    // Cardiovascular / cardiac — Pooja's primary domain
-    'cardiovascular', 'cardiac', 'cardiology',
-    'heart', // word-boundary in regex prevents matching 'earth'
-    'vascular', 'cardiomyopathy', 'heart failure', 'arrhythmia',
-    // Molecular / omics — core methodological toolkit
-    'molecular biology', 'molecular',
-    'genomics', 'proteomics', 'epigenomics', 'transcriptomics',
-    'bioinformatics',
-    // Specific technologies Pooja works with
-    'crispr', 'gene therapy', 'gene editing', 'base editing',
-    'single.cell', 'spatial transcriptomics', 'spatial genomics',
-    'ipsc', 'stem cell', 'organoid',
-    // Biotechnology (broad but domain-anchored)
-    'biotechnology',
-];
-// Build one case-insensitive regex — "heart" uses \bheart\b to avoid matching "earth"
-const PRIMARY_ANCHOR_RE = new RegExp(`\\b(${PRIMARY_ANCHORS.map(a => a.replace(/\./g, '[- ]?')).join('|')})\\b`, 'i');
-/**
- * Off-domain fields: if ONLY these appear (no primary anchor) → off-domain reject.
- * If they co-exist with a primary anchor the job is still valid (e.g. cardio-oncology).
- */
-const OFF_DOMAIN_RE = /\b(oncology|immunology|neurology|neuroscience|dermatology|ophthalmology|hematology|autoimmun(?:e|ity)|pulmonology)\b/i;
-// ═══════════════════════════════════════════════════════════════════════════════
-// GATE 3 — Staff-Level Enforcement patterns
-// ═══════════════════════════════════════════════════════════════════════════════
-/**
- * Qualified scientist / researcher: must be prefixed or suffixed by a seniority
- * or functional modifier (Senior, Staff, Principal, Research, etc.).
+ * Qualified scientist/researcher: title must include a seniority or functional
+ * modifier (Senior, Staff, Principal, Lead, Research, Associate Director…).
  */
 const QUALIFIED_SCIENTIST_RE = /\b(senior|staff|principal|lead|research|associate\s+director|sr\.?)\s+(scientist|researcher|biologist)\b|\b(scientist|researcher|biologist)\s+(i{1,3}|iv|v|[1-5]|lead|senior|principal|staff)\b/i;
 /**
- * Matches a title that IS (exactly) a bare generic role with no qualifier —
- * these are too junior / too vague for Pooja.
+ * Bare generic title with no qualifier — too junior/vague for Pooja.
  */
 const STANDALONE_SCIENTIST_RE = /^(scientist|researcher|biologist|research\s+associate\s*i?)$/i;
-/** Faculty / investigator titles — always valid IF domain anchor present (Gate 2). */
+/** Faculty/investigator titles — pass seniority gate; still need domain anchor in Step 4. */
 const FACULTY_TITLE_RE = /\b(assistant\s+professor|associate\s+professor|full\s+professor|tenure.track|group\s+leader|lab\s+head|team\s+leader|principal\s+investigator|faculty\s+member|faculty)\b/i;
+// ═══════════════════════════════════════════════════════════════════════════════
+// STEP 4 — Technical Anchor
+// ═══════════════════════════════════════════════════════════════════════════════
+/**
+ * Primary domain keywords — Pooja's specific expertise areas.
+ * Specific enough to exclude pure oncology/neurology/immunology roles.
+ */
+const PRIMARY_ANCHORS = [
+    // Cardiovascular / cardiac
+    'cardiovascular', 'cardiac', 'cardiology',
+    'heart', 'vascular', 'cardiomyopathy', 'heart failure', 'arrhythmia',
+    // Molecular / omics
+    'molecular biology', 'molecular',
+    'genomics', 'proteomics', 'epigenomics', 'transcriptomics', 'bioinformatics',
+    // Technologies
+    'crispr', 'gene therapy', 'gene editing', 'base editing',
+    'single.cell', 'spatial transcriptomics', 'spatial genomics',
+    'ipsc', 'stem cell', 'organoid',
+    // Broad domain
+    'biotechnology',
+];
+// "heart" uses \b to avoid matching "earth"
+const PRIMARY_ANCHOR_RE = new RegExp(`\\b(${PRIMARY_ANCHORS.map(a => a.replace(/\./g, '[- ]?')).join('|')})\\b`, 'i');
+const OFF_DOMAIN_RE = /\b(oncology|immunology|neurology|neuroscience|dermatology|ophthalmology|hematology|autoimmun(?:e|ity)|pulmonology)\b/i;
 // ═══════════════════════════════════════════════════════════════════════════════
 // Scoring helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 const MAX_TECH_SCORE = 3.0; // 60 % of 5
 const MAX_SENIOR_SCORE = 2.0; // 40 % of 5
 const TIER1_BONUS = 0.5;
-exports.HIGH_SUITABILITY_THRESHOLD = 3.5; // exported for use in engine
-/**
- * Count distinct primary anchors present in `text` for weighted tech scoring.
- */
+exports.HIGH_SUITABILITY_THRESHOLD = 3.5;
 function countPrimaryAnchors(text) {
     return PRIMARY_ANCHORS.filter(a => new RegExp(`\\b${a.replace(/\./g, '[- ]?')}\\b`, 'i').test(text)).length;
 }
 /**
- * Seniority keywords used for the 40 % scoring axis.
- * Match any of these in title or snippet for full seniority credit.
+ * Seniority keywords for the 40 % scoring axis.
+ * NOTE: "fellow" is intentionally absent — it is a BLACKLIST term.
  */
-const SENIORITY_SCORE_RE = /\b(senior|staff|principal|lead|director|head\s+of|associate\s+director|group\s+leader|lab\s+head|assistant\s+professor|associate\s+professor|faculty|tenure|investigator|fellow|scientist\s+[iv123])\b/i;
+const SENIORITY_SCORE_RE = /\b(senior|staff|principal|lead|director|head\s+of|associate\s+director|group\s+leader|lab\s+head|assistant\s+professor|associate\s+professor|faculty|tenure|investigator|scientist\s+[iv123])\b/i;
 /**
- * Run a job through the full three-gate validation pipeline.
+ * Run a job through the Zero-Trust four-step validation pipeline.
+ * Each step performs an early return — score is never calculated on a reject.
  *
- * @param title    Job title (required — empty string returns fails=false)
- * @param snippet  Job description snippet (null/undefined handled safely)
- * @param url      Apply / source URL (null/undefined handled safely)
+ * @param title    Job title (required)
+ * @param snippet  Description snippet (null/undefined safe)
+ * @param url      Source URL (null/undefined safe)
  * @param orgName  Organisation name for Tier-1 bonus lookup
- * @param tier1    Set of Tier-1 org names (defaults to TIER1_ORG_NAMES export)
+ * @param tier1    Tier-1 org set (defaults to TIER1_ORG_NAMES)
  */
 function validateJobSuitability(title, snippet, url, orgName, tier1 = exports.TIER1_ORG_NAMES) {
     // ── Null-safety ─────────────────────────────────────────────────────────────
@@ -141,39 +146,45 @@ function validateJobSuitability(title, snippet, url, orgName, tier1 = exports.TI
     const safeSnippet = (snippet ?? '').trim();
     const safeUrl = (url ?? '').trim();
     if (!safeTitle) {
-        return { passes: false, highSuitability: false, matchScore: 0, failReason: 'gate1:empty_title' };
+        return { passes: false, highSuitability: false, matchScore: 0, failReason: 'gate0:empty_title' };
     }
-    const combined = `${safeTitle} ${safeSnippet}`;
-    // ── GATE 1: Identity & Career Stage ─────────────────────────────────────────
-    if (TRAINING_ROLE_RE.test(safeTitle) || TRAINING_ROLE_RE.test(safeSnippet)) {
-        return { passes: false, highSuitability: false, matchScore: 0, failReason: 'gate1:training_role' };
+    // ── STEP 1: Blacklist Kill Switch ────────────────────────────────────────────
+    // NO scoring. Domain keywords cannot override this. Check title + snippet.
+    const blacklistMatch = safeTitle.match(exports.BLACKLIST_REGEX) ?? safeSnippet.match(exports.BLACKLIST_REGEX);
+    if (blacklistMatch) {
+        const matchedTerm = blacklistMatch[0];
+        console.log(`[FILTER] Rejecting "${safeTitle}" due to Blacklist: "${matchedTerm}"`);
+        return { passes: false, highSuitability: false, matchScore: 0, failReason: 'step1:blacklist' };
+    }
+    // ── STEP 2: Content & Aggregator Filter ─────────────────────────────────────
+    if (AGGREGATOR_TITLE_RE.test(safeTitle)) {
+        return { passes: false, highSuitability: false, matchScore: 0, failReason: 'step2:aggregator_title' };
     }
     if (safeUrl && NOISE_URL_PATH_RE.test(safeUrl)) {
-        return { passes: false, highSuitability: false, matchScore: 0, failReason: 'gate1:noise_url' };
+        return { passes: false, highSuitability: false, matchScore: 0, failReason: 'step2:noise_url' };
     }
     if (safeSnippet && AGGREGATOR_SNIPPET_RE.test(safeSnippet)) {
-        return { passes: false, highSuitability: false, matchScore: 0, failReason: 'gate1:aggregator_page' };
+        return { passes: false, highSuitability: false, matchScore: 0, failReason: 'step2:aggregator_snippet' };
     }
-    // ── GATE 2: Technical Anchor ─────────────────────────────────────────────────
-    const hasPrimaryAnchor = PRIMARY_ANCHOR_RE.test(combined);
-    const hasOffDomain = OFF_DOMAIN_RE.test(combined);
-    if (!hasPrimaryAnchor) {
-        // Off-domain only, or entirely unrelated — reject either way
-        return { passes: false, highSuitability: false, matchScore: 0, failReason: 'gate2:no_technical_anchor' };
-    }
-    if (hasOffDomain && !hasPrimaryAnchor) {
-        // Redundant guard — kept for clarity
-        return { passes: false, highSuitability: false, matchScore: 0, failReason: 'gate2:off_domain_no_anchor' };
-    }
-    // ── GATE 3: Staff-Level Enforcement ─────────────────────────────────────────
+    // ── STEP 3: Seniority Requirement ───────────────────────────────────────────
     const isFaculty = FACULTY_TITLE_RE.test(safeTitle);
     const isQualifiedScientist = QUALIFIED_SCIENTIST_RE.test(safeTitle);
     const isStandaloneGeneric = STANDALONE_SCIENTIST_RE.test(safeTitle);
     if (isStandaloneGeneric && !isQualifiedScientist && !isFaculty) {
-        return { passes: false, highSuitability: false, matchScore: 0, failReason: 'gate3:unqualified_title' };
+        return { passes: false, highSuitability: false, matchScore: 0, failReason: 'step3:unqualified_title' };
     }
-    // Faculty titles already require a primary anchor (Gate 2 passed above) ✓
-    // ── Scoring: 60 % Technical + 40 % Seniority ────────────────────────────────
+    // ── STEP 4: Technical Anchor Verification ───────────────────────────────────
+    const combined = `${safeTitle} ${safeSnippet}`;
+    const hasPrimaryAnchor = PRIMARY_ANCHOR_RE.test(combined);
+    if (!hasPrimaryAnchor) {
+        return { passes: false, highSuitability: false, matchScore: 0, failReason: 'step4:no_technical_anchor' };
+    }
+    const hasOffDomain = OFF_DOMAIN_RE.test(combined);
+    if (hasOffDomain && !hasPrimaryAnchor) {
+        // Redundant guard — kept for safety; off-domain with no primary anchor
+        return { passes: false, highSuitability: false, matchScore: 0, failReason: 'step4:off_domain_no_anchor' };
+    }
+    // ── Scoring (only reached when all four steps pass) ──────────────────────────
     const techMatches = countPrimaryAnchors(combined);
     const techScore = Math.min(MAX_TECH_SCORE, techMatches * 0.75);
     const seniorityScore = SENIORITY_SCORE_RE.test(combined) ? MAX_SENIOR_SCORE : 0.5;

@@ -13,6 +13,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.dbInit = dbInit;
 const db_1 = __importDefault(require("../db"));
+const validateJobSuitability_1 = require("../opportunity-monitor/validateJobSuitability");
 async function dbInit() {
     let client;
     try {
@@ -164,6 +165,8 @@ async function dbInit() {
       ALTER TABLE monitor_jobs ADD COLUMN IF NOT EXISTS job_board VARCHAR(100);
       ALTER TABLE kanban_cards ADD COLUMN IF NOT EXISTS job_board VARCHAR(100);
       ALTER TABLE monitor_jobs ADD COLUMN IF NOT EXISTS high_suitability BOOLEAN DEFAULT FALSE;
+      ALTER TABLE monitor_jobs ADD COLUMN IF NOT EXISTS match_score      SMALLINT DEFAULT 0;
+      ALTER TABLE monitor_jobs ADD COLUMN IF NOT EXISTS fail_reason      TEXT;
 
       -- ─── DJ table column migrations ───────────────────────────────────────────
       -- These run on every boot (ADD COLUMN IF NOT EXISTS is idempotent).
@@ -259,6 +262,47 @@ async function dbInit() {
     catch (err) {
         // Non-fatal: log and continue — app can still serve Adzuna jobs without DB
         console.error('⚠️  dbInit failed (non-fatal):', err.message);
+    }
+    finally {
+        client.release();
+    }
+    // ── One-time data cleanup: revalidate all academia jobs through the ──────────
+    // Zero-Trust pipeline so stale high_suitability=true postdoc/fellowship rows
+    // are corrected. Runs on every startup but is fast (in-process, no HTTP).
+    await revalidateAcademiaJobs();
+}
+async function revalidateAcademiaJobs() {
+    let client;
+    try {
+        client = await db_1.default.connect();
+    }
+    catch {
+        return; // DB unreachable — skip silently
+    }
+    try {
+        const { rows } = await client.query(`SELECT id, title, snippet, apply_url, org_name, high_suitability
+       FROM monitor_jobs
+       WHERE sector = 'academia'`);
+        if (rows.length === 0)
+            return;
+        console.log(`[CLEANUP] Revalidating ${rows.length} academia jobs…`);
+        let demoted = 0;
+        for (const job of rows) {
+            const result = (0, validateJobSuitability_1.validateJobSuitability)(job.title, job.snippet, job.apply_url, job.org_name, validateJobSuitability_1.TIER1_ORG_NAMES);
+            await client.query(`UPDATE monitor_jobs
+            SET high_suitability = $1,
+                match_score      = $2,
+                fail_reason      = $3
+          WHERE id = $4`, [result.highSuitability, Math.round(result.matchScore * 10), result.failReason ?? null, job.id]);
+            if (job.high_suitability && !result.highSuitability) {
+                console.log(`[CLEANUP] Demoting "${job.title}" - ${result.failReason}`);
+                demoted++;
+            }
+        }
+        console.log(`[CLEANUP] Done. ${demoted} false-positive(s) demoted.`);
+    }
+    catch (err) {
+        console.error('[CLEANUP] Revalidation error (non-fatal):', err.message);
     }
     finally {
         client.release();
