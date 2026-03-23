@@ -11,18 +11,41 @@ const client_1 = require("../db/client");
 const orgConfig_1 = require("./orgConfig");
 const crypto_1 = __importDefault(require("crypto"));
 // ─── Pooja-Core Profile ────────────────────────────────────────────────────
-// Rank 1 job title keywords — positions Pooja is actually targeting
+// Rank 1 job title keywords — positions Pooja is actually targeting.
+// Deliberately NO standalone 'scientist' or 'investigator' — too generic.
 const POOJA_RANK1_KEYWORDS = [
-    'assistant professor', 'scientist', 'investigator', 'research scientist',
-    'group leader', 'tenure track', 'tenure-track', 'faculty', 'staff scientist',
-    'senior scientist', 'principal scientist', 'research fellow',
-    'research associate', 'project scientist', 'project fellow',
+    // Faculty / academic track
+    'assistant professor', 'associate professor', 'tenure track', 'tenure-track', 'faculty',
+    // Scientist track (compound phrases only)
+    'research scientist', 'senior scientist', 'staff scientist', 'principal scientist',
+    'scientist i', 'scientist ii', 'scientist iii', 'scientist 1', 'scientist 2', 'scientist 3',
+    // Investigator track (compound phrases only)
+    'senior investigator', 'principal investigator', 'associate investigator',
+    'investigator i', 'investigator ii',
+    // Group / lab leadership
+    'group leader', 'lab head', 'team leader',
+    // Fellowship / Associate
+    'research fellow', 'research associate', 'project scientist', 'project fellow',
 ];
-// Technical domain anchors — Pooja's core expertise areas
+// Technical domain anchors — Pooja's core expertise.
+// Any job that passes RANK1 but contains NONE of these is off-domain and rejected.
 const TECHNICAL_ANCHORS = [
-    'molecular', 'genetics', 'cardiovascular', 'genomics', 'bioinformatics',
-    'cell biology', 'molecular biology', 'cardiac', 'transcriptomics',
-    'proteomics', 'crispr', 'rna', 'heart'
+    // Cardiovascular biology
+    'cardiovascular', 'cardiac', 'cardiology', 'heart', 'cardiomyopathy',
+    'heart failure', 'atrial fibrillation', 'arrhythmia', 'vascular',
+    // Molecular / cell biology core
+    'molecular biology', 'molecular', 'cell biology', 'cellular biology',
+    'genetics', 'genomics', 'epigenomics', 'chromatin',
+    'transcriptomics', 'proteomics', 'metabolomics',
+    // Technologies Pooja uses
+    'crispr', 'gene editing', 'base editing', 'gene therapy',
+    'rna', 'mrna', 'lncrna',
+    'single cell', 'single-cell', 'spatial transcriptomics', 'spatial genomics',
+    'bioinformatics', 'sequencing', 'ngs', 'next-generation sequencing',
+    // Models & biology
+    'in vivo', 'preclinical', 'mouse model', 'stem cell', 'ipsc', 'organoid',
+    // Industry context
+    'drug discovery', 'translational', 'target identification', 'biomarker',
 ];
 // Hard filter: discard these title terms UNLESS the title is 'Assistant Professor'
 const HARD_FILTER_TERMS = [
@@ -111,6 +134,36 @@ function relevanceScore(title, description = '') {
 function isRelevant(title, description = '') {
     return relevanceScore(title, description) >= 1;
 }
+/**
+ * Hard domain gate: at least one TECHNICAL_ANCHOR must appear in title or snippet.
+ * Prevents off-domain jobs (oncology, neuroscience, immunology-only, data-science-only)
+ * from passing just because they match RANK1 keyword + Tier 1 org.
+ */
+function hasTechnicalAnchor(title, snippet) {
+    const text = (title + ' ' + snippet).toLowerCase();
+    return TECHNICAL_ANCHORS.some(a => text.includes(a));
+}
+/**
+ * Detect research article / preprint URLs and titles.
+ * These appear in organic results for academic institution queries.
+ */
+function isBioResearchArticle(title, url) {
+    const u = url.toLowerCase();
+    // DOI / preprint / PubMed-style URLs
+    if (u.includes('/doi/') || u.includes('doi.org/') || u.includes('/pmc/'))
+        return true;
+    if (u.includes('/abstract/') || u.includes('/fulltext/') || u.includes('/article/'))
+        return true;
+    const t = title.toLowerCase();
+    // Paper-style title patterns
+    if (/\bin (mice|rats|patients|humans|adults|subjects)\b/.test(t))
+        return true;
+    if (/\b(et al|doi:|volume \d|issue \d|\d{4};\s*\d)/.test(t))
+        return true;
+    if (/^(a |the )?(role|effect|impact|association|prevalence|mechanism|characterization) of\b/i.test(title))
+        return true;
+    return false;
+}
 // RECOMMENDATION 1: Fixed location filter — require explicit location match
 function isRelevantLocation(location = '') {
     if (!location || location.trim() === '')
@@ -138,55 +191,78 @@ function poojaSuitabilityScore(title, snippet, orgName) {
         score += 1;
     return score;
 }
-// Filter out generic social/landing-page URLs that don't point to actual job postings
+// Filter out generic social/landing-page URLs that don't point to actual job postings.
+// Note: linkedin.com/jobs/view/... (specific listings) are kept — only company/profile pages rejected.
 function extractCanonicalUrl(url, fallback) {
     if (!url)
         return fallback;
     const GENERIC_DOMAINS = [
-        'linkedin.com/company', 'linkedin.com/in/', 'linkedin.com/jobs',
+        'linkedin.com/company', 'linkedin.com/in/',
+        // linkedin.com/jobs/view/... are specific job listings → allowed through
         'twitter.com', 'x.com', 'facebook.com', 'instagram.com',
-        'youtube.com', 'glassdoor.com/Overview'
+        'youtube.com', 'glassdoor.com/Overview', 'glassdoor.com/overview',
     ];
-    if (GENERIC_DOMAINS.some(d => url.includes(d)))
+    if (GENERIC_DOMAINS.some(d => url.toLowerCase().includes(d.toLowerCase())))
         return fallback;
     return url;
 }
 /**
  * URL quality gate — confirms the link points to an actual job posting.
- * Rejects news sites, company bios, blog posts, social media.
+ * Rejects: news, company bios, blog posts, social media, AND bio research articles / preprints.
  */
 function isDirectJobUrl(url) {
     if (!url || url === '#')
         return false;
     const lower = url.toLowerCase();
     const NOISE_PATTERNS = [
+        // General news & media
         'reuters.com', 'bloomberg.com', 'cnbc.com', 'wsj.com', 'forbes.com',
-        'businessinsider.com', 'techcrunch.com', 'nature.com/articles',
-        'sciencedirect.com', 'pubmed.ncbi', 'ncbi.nlm.nih.gov/pubmed',
+        'businessinsider.com', 'techcrunch.com', 'venturebeat.com',
+        // Academic publishing & preprints — these are papers, not jobs
+        'nature.com/articles', 'nature.com/news', 'nature.com/nbt',
+        'sciencedirect.com', 'pubmed.ncbi', 'ncbi.nlm.nih.gov',
+        'biorxiv.org', 'medrxiv.org', 'arxiv.org',
+        'researchgate.net', 'academia.edu',
+        'semanticscholar.org', 'jstor.org', 'scopus.com',
+        'ahajournals.org/doi', 'jci.org/articles', 'nejm.org/doi',
+        'thelancet.com/article', 'cell.com/cell/fulltext', 'cell.com/cell/pdf',
+        'sciencemag.org', 'elifesciences.org/articles',
+        'frontiersin.org/articles', 'mdpi.com/journal',
+        '/doi/', '/pmc/', '/abstract/', '/fulltext/',
+        // Social & general noise
         'wikipedia.org', 'twitter.com', 'x.com', 'facebook.com',
         'instagram.com', 'youtube.com',
-        'linkedin.com/company', 'linkedin.com/in/', 'glassdoor.com/overview',
-        'glassdoor.com/reviews', 'indeed.com/cmp/',
+        'linkedin.com/company', 'linkedin.com/in/',
+        'glassdoor.com/overview', 'glassdoor.com/reviews', 'indeed.com/cmp/',
+        // Generic company pages
         '/about-us', '/about/', '/team/', '/leadership/', '/history/',
-        '/blog/', '/news/', '/press/', '/insights/', '/article/', '/resources/',
+        '/blog/', '/news/', '/press/', '/insights/', '/resources/',
         '/culture/', '/overview', '/company/',
     ];
     if (NOISE_PATTERNS.some(p => lower.includes(p)))
         return false;
     const JOB_PATTERNS = [
         '/jobs/', '/job/', '/careers/', '/career/', '/openings/', '/vacancies/',
-        '/position/', '/apply', '/requisition', '/job-id', '/jobid',
+        '/position/', '/positions/', '/apply', '/requisition', '/job-id', '/jobid',
+        '/posting/', '/postings/', '/opportunity/', '/opportunities/',
         'jobs.', 'careers.', 'apply.',
-        'indeed.com/viewjob', 'linkedin.com/jobs/view',
+        'indeed.com/viewjob', 'indeed.com/rc/clk',
+        'linkedin.com/jobs/view', 'linkedin.com/jobs/search',
         'lever.co/', 'greenhouse.io/', 'workday.com', 'myworkdayjobs.com',
         'taleo.net', 'icims.com', 'successfactors.com', 'smartrecruiters.com',
-        'bamboohr.com', 'workable.com', 'ashbyhq.com',
+        'bamboohr.com', 'workable.com', 'ashbyhq.com', 'rippling.com/jobs',
+        // Academic job boards
+        'higheredjobs.com', 'academicpositions.', 'jobs.ac.uk',
+        'eurosciencejobs.com', 'naturejobs.com', 'sciencecareers.org',
+        'vitae.ac.uk', 'timeshighereducation.com/unijobs',
+        // Indian job boards
+        'naukri.com/job', 'indiabioscience.org', 'iimjobs.com/job',
     ];
     return JOB_PATTERNS.some(p => lower.includes(p));
 }
 /**
  * Snippet must contain language typical of a job description.
- * Filters out news summaries, press releases, and research abstracts.
+ * Requires at least 2 matches to filter out research abstracts with single incidental matches.
  */
 function hasJobLanguage(snippet) {
     if (!snippet)
@@ -194,11 +270,16 @@ function hasJobLanguage(snippet) {
     const s = snippet.toLowerCase();
     const JOB_WORDS = [
         'responsibilities', 'requirements', 'qualifications', 'years of experience',
-        'required', 'preferred', 'skills', 'bachelor', 'phd', 'postdoc',
+        'required', 'preferred', 'skills', 'bachelor', 'phd',
         'apply', 'role', 'position', 'opportunity', 'we are looking',
-        'you will', 'must have', 'salary', 'benefits', 'full-time',
+        'you will', 'must have', 'salary', 'benefits', 'full-time', 'full time',
+        'join our', 'join the team', 'we are seeking', 'we seek', 'ideal candidate',
+        'what you will do', 'what you bring', 'about the role', 'about this role',
+        'minimum qualification', 'basic qualification', 'experience in',
+        'reporting to', 'work with', 'collaborate with',
     ];
-    return JOB_WORDS.some(w => s.includes(w));
+    const matchCount = JOB_WORDS.filter(w => s.includes(w)).length;
+    return matchCount >= 2;
 }
 /**
  * Agency / spam blocker — removes low-quality recruiter spam and mass postings.
@@ -226,6 +307,14 @@ async function withTimeout(promise, ms, label) {
     return Promise.race([promise, timeout]);
 }
 const POOJA_CITY_RE = /\b(bangalore|bengaluru|mumbai|delhi|hyderabad|pune|chennai|tokyo|osaka|yokohama|singapore|seoul|busan|shanghai|beijing|guangzhou|boston|cambridge|san francisco|san diego|la jolla|los angeles|new york|seattle|bethesda|london|heidelberg|zurich|basel|stockholm|oslo|copenhagen|paris|amsterdam|dublin|toronto|montreal|sydney|melbourne)\b/i;
+// Google locale map — improves result relevance for non-US orgs
+const GL_MAP = {
+    'USA': 'us', 'Canada': 'ca', 'UK': 'gb', 'Germany': 'de',
+    'Switzerland': 'ch', 'France': 'fr', 'Denmark': 'dk', 'Netherlands': 'nl',
+    'Belgium': 'be', 'Ireland': 'ie', 'Sweden': 'se', 'Austria': 'at',
+    'Japan': 'jp', 'Singapore': 'sg', 'South Korea': 'kr', 'China': 'cn',
+    'Australia': 'au', 'India': 'in', 'Norway': 'no', 'Global': 'us',
+};
 // Serper web search — Google Jobs cards prioritised, organic fallback with quality gates.
 async function scanViaWebSearch(org) {
     const apiKey = process.env.SERPER_API_KEY;
@@ -233,6 +322,7 @@ async function scanViaWebSearch(org) {
         console.warn(`[Monitor] SERPER_API_KEY not set — skipping ${org.name}`);
         return [];
     }
+    const gl = GL_MAP[org.country] || 'us';
     try {
         const resp = await withTimeout(fetch('https://google.serper.dev/search', {
             method: 'POST',
@@ -240,7 +330,7 @@ async function scanViaWebSearch(org) {
                 'X-API-KEY': apiKey,
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ q: org.searchQuery, num: 10 })
+            body: JSON.stringify({ q: org.searchQuery, num: 10, gl })
         }), 10000, `Serper for ${org.name}`);
         if (!resp.ok) {
             console.error(`[Monitor] Serper ${resp.status} for ${org.name}`);
@@ -258,18 +348,19 @@ async function scanViaWebSearch(org) {
             const snippet = [
                 gj.description || '',
                 ...(gj.jobHighlights || []).flatMap((h) => h.items || []),
-            ].join(' ').slice(0, 200);
+            ].join(' ').slice(0, 300);
             const link = gj.relatedLinks?.[0]?.link || gj.applyLink || '';
             const postedDate = gj.extensions?.find((e) => /ago|day|week|month/i.test(e)) || 'Recent';
             if (!title)
                 continue;
-            if (!isRelevant(title, snippet))
-                continue;
             if (!passesHardFilter(title))
                 continue;
+            if (!isRelevant(title, snippet))
+                continue;
+            if (!hasTechnicalAnchor(title, snippet))
+                continue; // must be in Pooja's domain
             if (isAgencySpam(title, snippet))
                 continue;
-            // Lower suitability threshold for confirmed listings
             const suitability = poojaSuitabilityScore(title, snippet, company);
             if (suitability < 2)
                 continue;
@@ -293,20 +384,28 @@ async function scanViaWebSearch(org) {
         const organicResults = data.organic || [];
         console.log(`[Monitor] ${org.name}: organic=${organicResults.length}`);
         for (const r of organicResults) {
-            const title = (r.title || '').replace(/\s*[-|·].*$/, '').trim();
+            // Strip trailing site attribution from title (e.g. "Scientist | Genentech Careers")
+            const rawTitle = (r.title || '').trim();
+            const title = rawTitle
+                .replace(/\s*[|\-–—·]\s*(careers|jobs|indeed|linkedin|glassdoor|workday|lever|greenhouse|apply|join us)[^|]*$/i, '')
+                .trim() || rawTitle;
             const snippet = r.snippet || '';
             const link = r.link || '';
             if (!title)
                 continue;
-            // Strict gates for organic (could be news/blog/aggregator)
+            // Strict gates for organic (could be news/blog/aggregator/paper)
+            if (isBioResearchArticle(title, link))
+                continue; // reject papers first
             if (!isDirectJobUrl(link))
                 continue;
             if (!hasJobLanguage(snippet))
                 continue;
-            if (!isRelevant(title, snippet))
-                continue;
             if (!passesHardFilter(title))
                 continue;
+            if (!isRelevant(title, snippet))
+                continue;
+            if (!hasTechnicalAnchor(title, snippet))
+                continue; // domain gate
             if (isAgencySpam(title, snippet))
                 continue;
             const suitability = poojaSuitabilityScore(title, snippet, org.name);
@@ -411,10 +510,14 @@ async function scanViaRSS(org) {
             const desc = (item.match(/<description><!\[CDATA\[(.*?)\]\]><\/description>/)?.[1] ||
                 item.match(/<description>(.*?)<\/description>/)?.[1] || '').replace(/<[^>]+>/g, '').slice(0, 150).trim();
             const pubDate = item.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] || 'Recent';
-            if (!isRelevant(title, desc))
-                continue;
+            if (isBioResearchArticle(title, link))
+                continue; // reject papers / preprints
             if (!passesHardFilter(title))
                 continue;
+            if (!isRelevant(title, desc))
+                continue;
+            if (!hasTechnicalAnchor(title, desc))
+                continue; // must be in Pooja's domain
             if (isAgencySpam(title, desc))
                 continue;
             // For RSS — extract city from description if available, fall back to org country
