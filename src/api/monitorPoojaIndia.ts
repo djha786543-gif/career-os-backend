@@ -192,6 +192,31 @@ const NOISE_TITLE_TERMS = [
   'publications |', '| publications', 'emerging frontiers',
   'study with us', 'senior resident', 'senior demonstrator',
   'archive call for', 'revised_sanctioned', 'ibric -',
+  // Additional patterns seen in live output
+  'home|',                        // "Home| National Institute..."
+  'current members',              // lab member roster pages
+  'summer training',              // training programmes
+  'welcomes dr', 'welcomes prof', // welcome announcements
+  'receives best', 'receives award', // award news
+  '| home',                       // "Title | Home" generic pages
+  'what\'s new', "what's new",    // "What's New | DST"
+  'department of biotechnology',  // generic DBT homepage (sans job words)
+  'iiser mohali',                 // bare homepage titles
+  'centre for immunobiology',     // department page, not a position
+  'center for drug',              // CDD dept page
+  'protein bioinformatics lab',   // lab page
+  'bioscience and biotechnology -', // dept page
+  'biosciences and bioengineering –', // dept page
+  'biological sciences and engineering', // dept page
+  'molecular markers for',        // research paper title
+  'in vitro assembled',           // research paper title
+  'study reveals',                // news article
+  'notification : shortlisted',   // post-close notification
+  'notifications : shortlisted',
+  'list of archived',
+  'archive announcements',
+  '[pdf] annual report',
+  '[pdf] csir scientist recruitment & assessment promotion rules', // rules doc, not a posting
 ]
 
 // Token-level hard filters — roles that are never relevant for Pooja
@@ -205,15 +230,32 @@ const HARD_FILTER_TERMS = [
   'assistant manager', 'hindi officer', 'rajbhasha',
 ]
 
-// Regex for personal faculty/staff profile pages (not job ads)
-// Matches: "Dr. Firstname", "Prof. Firstname", "Lastname, F - Dept"
-const PROFILE_PAGE_RE = /^(dr\.?\s|prof\.?\s)|\b\w+,\s+[a-z]\s+-\s+/i
+// Regex for personal faculty/staff profile pages (not job ads).
+// Catches: "Dr. X", "Prof. X", "Surname, F - Dept",
+//          "[PDF] Firstname Lastname", "Firstname Lastname - IIT/IISER/AIIMS…"
+const PROFILE_PAGE_RE = new RegExp(
+  [
+    '^(dr\\.?\\s|prof\\.?\\s)',           // starts with Dr. / Prof.
+    '\\b\\w+,\\s+[a-z]\\s+-\\s+',         // "Surname, F - Dept"
+    '^\\[pdf\\]\\s+[a-z]+ [a-z]+\\s+[-–]', // "[PDF] First Last –"
+    '^[a-z]+ [a-z]+ [-–]\\s*(iit|iiser|aiims|ncbs|instem|thsti|nii|icmr' +
+      '|tifr|nipgr|nbrc|drdo|icar|rgcb|delhi|mumbai|bangalore|chennai' +
+      '|kolkata|indian institute)',          // "First Last - IIT/City"
+  ].join('|'),
+  'i'
+)
+
+// Email-address-as-title (e.g. "medicine@aiims.edu - Delhi")
+const EMAIL_TITLE_RE = /\S+@\S+\.\S+/
 
 function scoreJob(title: string, snippet: string): number {
   const titleLc = title.toLowerCase()
   const text    = `${titleLc} ${snippet.toLowerCase()}`
 
-  // Personal profile page — "Dr. X - InStem", "Bhaumik, P - BSBE"
+  // Email address in title — contact page, not a job ad
+  if (EMAIL_TITLE_RE.test(title)) return -1
+
+  // Personal profile page
   if (PROFILE_PAGE_RE.test(title)) return -1
 
   // Title-level noise check — reject informational / org-page content
@@ -228,33 +270,17 @@ function scoreJob(title: string, snippet: string): number {
   return score
 }
 
-// SQL ILIKE patterns that match noise titles already in DB (from pre-filter scans)
-// This list mirrors NOISE_TITLE_TERMS + PROFILE_PAGE_RE for SQL retroactive cleanup.
-const NOISE_SQL_PATTERNS = [
-  'Dr. %', 'Prof. %',                              // profile pages
-  '%, % - %',                                       // "Surname, F - Dept" profile PDFs
-  '%alumni%', '%holidays 20%', '%holiday list%',
-  '%governance%', '%official directory%',
-  '%telephone directory%', '%media report%',
-  '%circulars data%', '%public sector undertaking%',
-  '%senior resident%', '%senior demonstrator%',
-  '%appellate authority%', '%study with us%',
-  '%research news%', '%welcome to %',
-  '%lines of power%', '%ibric -%',
-  '%publications |%', '% | publications%',
-  '%emerging frontiers%', '%archive call for%',
-  '%revised_sanctioned%', '%- news -%', '%news - %',
-  '%shortlisted candidates%', '%selected candidates%',
-  '%previous question%', '%previous year%',
-]
+// Build SQL LIKE params from NOISE_TITLE_TERMS so the two lists stay in sync.
+// Used in runScan() to retroactively clean the DB after a rule change.
+const NOISE_SQL_LIKE_PARAMS = NOISE_TITLE_TERMS.map(t => `%${t.toLowerCase()}%`)
 
 // ─── GET /api/monitor/pooja-india/jobs ────────────────────────────────────────
 
 router.get('/jobs', async (req: Request, res: Response) => {
   const { category } = req.query
   const params: any[] = []
-  // Only return results from the past 30 days — older entries are stale
-  let where = `WHERE dismissed = false AND detected_at > NOW() - INTERVAL '30 days'`
+  // Only return results from the past 30 days with valid relevance score
+  let where = `WHERE dismissed = false AND relevance_score >= 1 AND detected_at > NOW() - INTERVAL '30 days'`
 
   if (category && category !== 'all') {
     params.push(category)
@@ -317,17 +343,41 @@ async function runScan(apiKey: string): Promise<void> {
   const client = await pool.connect()
   try {
     // ── Retroactive noise cleanup ─────────────────────────────────────────────
-    // Removes records that slipped in under older, looser rules.
-    // Runs every scan so the DB stays clean even after a rule change.
-    if (NOISE_SQL_PATTERNS.length > 0) {
-      const conditions = NOISE_SQL_PATTERNS.map((_, i) => `title ILIKE $${i + 1}`).join(' OR ')
-      const cleaned = await client.query(
-        `DELETE FROM pooja_india_monitor_jobs WHERE ${conditions}`,
-        NOISE_SQL_PATTERNS
+    // Runs at the START of every scan to erase records that passed old, looser
+    // rules. Three passes:
+    //   1. NOISE_TITLE_TERMS  — derived SQL LIKE conditions (stays in sync with JS)
+    //   2. Profile-page regex — Dr./Prof./[PDF] Firstname Lastname / email
+    //   3. Score 0 leftovers  — pre-threshold-change records that score 0 today
+    try {
+      // Pass 1: NOISE_TITLE_TERMS → LIKE conditions
+      const likeConditions = NOISE_SQL_LIKE_PARAMS
+        .map((_, i) => `LOWER(title) LIKE $${i + 1}`)
+        .join(' OR ')
+      const p1 = await client.query(
+        `DELETE FROM pooja_india_monitor_jobs WHERE ${likeConditions}`,
+        NOISE_SQL_LIKE_PARAMS
       )
-      if (cleaned.rowCount && cleaned.rowCount > 0) {
-        console.log(`[PoojaIndia] Cleaned ${cleaned.rowCount} stale noise records from DB`)
+
+      // Pass 2: profile/email patterns via PostgreSQL regex (~*)
+      const p2 = await client.query(`
+        DELETE FROM pooja_india_monitor_jobs WHERE
+          title ~* '^(Dr\\.?\\s|Prof\\.?\\s)'
+          OR title ~* '^\\[PDF\\]\\s+[A-Za-z]+ [A-Za-z]+\\s*[-–]'
+          OR title ~* '^[A-Za-z]+ [A-Za-z]+ [-–]\\s*(IIT|IISER|AIIMS|NCBS|InStem|THSTI|NII|ICMR|TIFR|NIPGR|NBRC|DRDO|ICAR|RGCB|Delhi|Mumbai|Bangalore|Chennai|Kolkata|Indian Institute)'
+          OR title ~* '\\S+@\\S+\\.\\S+'
+      `)
+
+      // Pass 3: score-0 records left from before the score>=1 threshold was added
+      const p3 = await client.query(
+        `DELETE FROM pooja_india_monitor_jobs WHERE relevance_score < 1`
+      )
+
+      const total = (p1.rowCount || 0) + (p2.rowCount || 0) + (p3.rowCount || 0)
+      if (total > 0) {
+        console.log(`[PoojaIndia] Retroactive cleanup: removed ${total} noise/score-0 records`)
       }
+    } catch (cleanErr) {
+      console.warn('[PoojaIndia] Cleanup step error (non-fatal):', (cleanErr as Error).message)
     }
 
     for (const portal of POOJA_INDIA_PORTALS) {
