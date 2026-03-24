@@ -176,26 +176,35 @@ function scoreJob(title: string, snippet: string): number {
 // ─── GET /api/monitor/pooja-india/jobs ────────────────────────────────────────
 
 router.get('/jobs', async (req: Request, res: Response) => {
+  const { category } = req.query
+  const params: any[] = []
+  let where = 'WHERE dismissed = false'
+
+  if (category && category !== 'all') {
+    params.push(category)
+    where += ` AND portal_category = $${params.length}`
+  }
+
+  // Use explicit client so we can set statement_timeout and guarantee release.
+  // pool.query() can hang indefinitely if a connection is never returned.
+  let client: any
   try {
-    const { category } = req.query
-    const params: any[] = []
-    let where = 'WHERE dismissed = false'
+    client = await pool.connect()
+    await client.query(`SET statement_timeout = 8000`)   // abort if stuck >8s
 
-    if (category && category !== 'all') {
-      params.push(category)
-      where += ` AND portal_category = $${params.length}`
-    }
-
-    const result = await pool.query(
-      `SELECT * FROM pooja_india_monitor_jobs
+    const result = await client.query(
+      `SELECT id, title, org_name, portal_category, snippet, apply_url,
+              posted_date, source_portal, relevance_score, is_new, dismissed,
+              detected_at, last_seen_at
+       FROM pooja_india_monitor_jobs
        ${where}
        ORDER BY relevance_score DESC, detected_at DESC
        LIMIT 150`,
-      params
+      params.length ? params : undefined
     )
 
-    const lastScan = await pool.query(
-      `SELECT MAX(detected_at) as last_scan, COUNT(*) as total
+    const meta = await client.query(
+      `SELECT MAX(detected_at) AS last_scan
        FROM pooja_india_monitor_jobs
        WHERE dismissed = false`
     )
@@ -204,10 +213,13 @@ router.get('/jobs', async (req: Request, res: Response) => {
       status:   'success',
       jobs:     result.rows,
       total:    result.rows.length,
-      lastScan: lastScan.rows[0]?.last_scan || null,
+      lastScan: meta.rows[0]?.last_scan || null,
     })
   } catch (err: any) {
-    res.status(500).json({ error: err.message, jobs: [] })
+    console.error('[PoojaIndia] /jobs error:', err.message)
+    if (!res.headersSent) res.status(500).json({ error: err.message, jobs: [] })
+  } finally {
+    if (client) client.release()
   }
 })
 
