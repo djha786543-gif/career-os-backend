@@ -165,18 +165,33 @@ const BOOST_KEYWORDS = [
 // Title-level hard filters — these nearly always indicate non-job content
 // (informational articles, preparation guides, result announcements, etc.)
 const NOISE_TITLE_TERMS = [
+  // How-to / guides / tips
   'how to', 'how-to', 'tips for', 'tips to', 'top 10', 'top 5', 'top 20',
   'list of', 'all about', 'everything you', 'a complete guide', 'complete guide',
-  'step by step', 'step-by-step', 'beginner\'s guide', 'beginners guide',
+  'step by step', 'step-by-step', "beginner's guide", 'beginners guide',
+  // Exam / preparation content
   'preparation', 'study material', 'study plan', 'mock test', 'practice set',
-  'previous year', 'previous papers', 'sample papers', 'question bank',
-  'syllabus', 'exam pattern', 'cut off', 'cutoff', 'merit list', 'result declared',
-  'answer key', 'admit card', 'hall ticket', 'scorecard',
+  'previous year', 'previous papers', 'previous question', 'sample papers',
+  'question bank', 'syllabus', 'exam pattern', 'cut off', 'cutoff',
+  // Application lifecycle pages (post-closing)
+  'merit list', 'result declared', 'answer key', 'admit card', 'hall ticket',
+  'scorecard', 'shortlisted candidates', 'list of shortlisted',
+  'selected candidates', 'list of selected',
+  // Informational / finance pages
   'salary', 'pay scale', 'pay band', 'age limit', 'eligibility criteria',
   'best books', 'recommended books', 'coaching', 'online course',
+  // News / media / press
   'news:', 'latest news', 'breaking news', 'press release', 'annual report',
   'newsletter', 'event report', 'workshop report', 'conference report',
+  'media report', 'research news', '- news -', 'news - ',
+  // Org / admin pages (not postings)
   'obituary', 'obituaries', 'covid', 'tender', 'e-tender', 'quotation',
+  'alumni', 'holidays 20', 'holiday list', 'governance', 'official directory',
+  'telephone directory', 'circulars data', 'public sector undertaking',
+  'welcome to ', 'appellate authority', 'lines of power',
+  'publications |', '| publications', 'emerging frontiers',
+  'study with us', 'senior resident', 'senior demonstrator',
+  'archive call for', 'revised_sanctioned', 'ibric -',
 ]
 
 // Token-level hard filters — roles that are never relevant for Pooja
@@ -190,11 +205,18 @@ const HARD_FILTER_TERMS = [
   'assistant manager', 'hindi officer', 'rajbhasha',
 ]
 
+// Regex for personal faculty/staff profile pages (not job ads)
+// Matches: "Dr. Firstname", "Prof. Firstname", "Lastname, F - Dept"
+const PROFILE_PAGE_RE = /^(dr\.?\s|prof\.?\s)|\b\w+,\s+[a-z]\s+-\s+/i
+
 function scoreJob(title: string, snippet: string): number {
   const titleLc = title.toLowerCase()
   const text    = `${titleLc} ${snippet.toLowerCase()}`
 
-  // Title-level noise check — reject informational content outright
+  // Personal profile page — "Dr. X - InStem", "Bhaumik, P - BSBE"
+  if (PROFILE_PAGE_RE.test(title)) return -1
+
+  // Title-level noise check — reject informational / org-page content
   if (NOISE_TITLE_TERMS.some(kw => titleLc.includes(kw))) return -1
 
   // Token-level role filter — reject non-relevant job types
@@ -205,6 +227,26 @@ function scoreJob(title: string, snippet: string): number {
   if (BOOST_KEYWORDS.some(kw => text.includes(kw))) score += 1
   return score
 }
+
+// SQL ILIKE patterns that match noise titles already in DB (from pre-filter scans)
+// This list mirrors NOISE_TITLE_TERMS + PROFILE_PAGE_RE for SQL retroactive cleanup.
+const NOISE_SQL_PATTERNS = [
+  'Dr. %', 'Prof. %',                              // profile pages
+  '%, % - %',                                       // "Surname, F - Dept" profile PDFs
+  '%alumni%', '%holidays 20%', '%holiday list%',
+  '%governance%', '%official directory%',
+  '%telephone directory%', '%media report%',
+  '%circulars data%', '%public sector undertaking%',
+  '%senior resident%', '%senior demonstrator%',
+  '%appellate authority%', '%study with us%',
+  '%research news%', '%welcome to %',
+  '%lines of power%', '%ibric -%',
+  '%publications |%', '% | publications%',
+  '%emerging frontiers%', '%archive call for%',
+  '%revised_sanctioned%', '%- news -%', '%news - %',
+  '%shortlisted candidates%', '%selected candidates%',
+  '%previous question%', '%previous year%',
+]
 
 // ─── GET /api/monitor/pooja-india/jobs ────────────────────────────────────────
 
@@ -274,6 +316,20 @@ async function runScan(apiKey: string): Promise<void> {
 
   const client = await pool.connect()
   try {
+    // ── Retroactive noise cleanup ─────────────────────────────────────────────
+    // Removes records that slipped in under older, looser rules.
+    // Runs every scan so the DB stays clean even after a rule change.
+    if (NOISE_SQL_PATTERNS.length > 0) {
+      const conditions = NOISE_SQL_PATTERNS.map((_, i) => `title ILIKE $${i + 1}`).join(' OR ')
+      const cleaned = await client.query(
+        `DELETE FROM pooja_india_monitor_jobs WHERE ${conditions}`,
+        NOISE_SQL_PATTERNS
+      )
+      if (cleaned.rowCount && cleaned.rowCount > 0) {
+        console.log(`[PoojaIndia] Cleaned ${cleaned.rowCount} stale noise records from DB`)
+      }
+    }
+
     for (const portal of POOJA_INDIA_PORTALS) {
       try {
         const resp = await fetch('https://google.serper.dev/search', {
