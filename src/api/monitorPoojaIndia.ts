@@ -489,9 +489,9 @@ const POOJA_INDIA_PORTALS: MonitorPortal[] = [
   },
   {
     id: 'biotecnika', name: 'Biotecnika', category: 'aggregator',
-    // -intitle:"apply now" blocks the SEO clickbait articles ("Scientist Job at Syngene | Apply Now…")
-    // -intitle:"jobs at" blocks private company aggregation articles
-    query: 'intitle:(vacancy OR recruitment OR opening OR advertisement OR position) -intitle:"apply now" -intitle:"jobs at" (scientist OR faculty OR "research officer") India 2026 site:biotecnika.org',
+    // -intitle:"apply now" blocks SEO-clickbait article titles ("Scientist Job at X | Apply Now…")
+    // Private company scientist/researcher roles are kept — PhD is still required
+    query: 'intitle:(vacancy OR recruitment OR opening OR advertisement OR position) -intitle:"apply now" (scientist OR faculty OR "research officer") India 2026 site:biotecnika.org',
   },
 ]
 
