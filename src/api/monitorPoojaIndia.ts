@@ -150,23 +150,56 @@ const POOJA_INDIA_PORTALS: MonitorPortal[] = [
 const CORE_KEYWORDS = [
   'scientist', 'faculty', 'professor', 'researcher', 'scientific officer',
   'research scientist', 'research associate', 'scientist-b', 'scientist-c',
-  'scientist-d', 'assistant professor', 'associate professor',
+  'scientist-d', 'assistant professor', 'associate professor', 'jr. research',
+  'junior research', 'phd position', 'phd opening', 'phd student', 'phd fellow',
+  'doctoral', 'project scientist', 'ra-i', 'ra-ii', 'ra-iii', 'vacancy',
+  'recruitment', 'application invited', 'applications invited',
 ]
 const BOOST_KEYWORDS = [
   'life science', 'biology', 'molecular', 'cardiovascular', 'biomedical',
   'phd', 'biotechnology', 'biochemistry', 'genomics', 'immunology',
-  'translational', 'stem cell', 'neuroscience',
+  'translational', 'stem cell', 'neuroscience', 'microbiology', 'cell biology',
+  'pharmacology', 'bioinformatics', 'structural biology',
 ]
+
+// Title-level hard filters — these nearly always indicate non-job content
+// (informational articles, preparation guides, result announcements, etc.)
+const NOISE_TITLE_TERMS = [
+  'how to', 'how-to', 'tips for', 'tips to', 'top 10', 'top 5', 'top 20',
+  'list of', 'all about', 'everything you', 'a complete guide', 'complete guide',
+  'step by step', 'step-by-step', 'beginner\'s guide', 'beginners guide',
+  'preparation', 'study material', 'study plan', 'mock test', 'practice set',
+  'previous year', 'previous papers', 'sample papers', 'question bank',
+  'syllabus', 'exam pattern', 'cut off', 'cutoff', 'merit list', 'result declared',
+  'answer key', 'admit card', 'hall ticket', 'scorecard',
+  'salary', 'pay scale', 'pay band', 'age limit', 'eligibility criteria',
+  'best books', 'recommended books', 'coaching', 'online course',
+  'news:', 'latest news', 'breaking news', 'press release', 'annual report',
+  'newsletter', 'event report', 'workshop report', 'conference report',
+  'obituary', 'obituaries', 'covid', 'tender', 'e-tender', 'quotation',
+]
+
+// Token-level hard filters — roles that are never relevant for Pooja
 const HARD_FILTER_TERMS = [
-  'intern', 'technical assistant', 'lab attendant', 'peon', 'stenographer',
-  'accountant', 'clerk', 'driver', 'nurse', 'pharmacist', 'radiographer',
-  'security guard', 'multi tasking', 'multi-tasking', 'mts', 'group d',
-  'lower division', 'upper division', 'assistant librarian',
+  'intern', 'internship', 'technical assistant', 'lab attendant', 'peon',
+  'stenographer', 'accountant', 'accountancy', 'clerk', 'driver', 'nurse',
+  'pharmacist', 'radiographer', 'security guard', 'multi tasking',
+  'multi-tasking', 'mts', 'group d', 'lower division', 'upper division',
+  'assistant librarian', 'junior assistant', 'data entry', 'finance officer',
+  'legal officer', 'executive director', 'general manager', 'deputy manager',
+  'assistant manager', 'hindi officer', 'rajbhasha',
 ]
 
 function scoreJob(title: string, snippet: string): number {
-  const text = `${title} ${snippet}`.toLowerCase()
+  const titleLc = title.toLowerCase()
+  const text    = `${titleLc} ${snippet.toLowerCase()}`
+
+  // Title-level noise check — reject informational content outright
+  if (NOISE_TITLE_TERMS.some(kw => titleLc.includes(kw))) return -1
+
+  // Token-level role filter — reject non-relevant job types
   if (HARD_FILTER_TERMS.some(kw => text.includes(kw))) return -1
+
   let score = 0
   if (CORE_KEYWORDS.some(kw => text.includes(kw))) score += 2
   if (BOOST_KEYWORDS.some(kw => text.includes(kw))) score += 1
@@ -178,7 +211,8 @@ function scoreJob(title: string, snippet: string): number {
 router.get('/jobs', async (req: Request, res: Response) => {
   const { category } = req.query
   const params: any[] = []
-  let where = 'WHERE dismissed = false'
+  // Only return results from the past 30 days — older entries are stale
+  let where = `WHERE dismissed = false AND detected_at > NOW() - INTERVAL '30 days'`
 
   if (category && category !== 'all') {
     params.push(category)
@@ -245,7 +279,8 @@ async function runScan(apiKey: string): Promise<void> {
         const resp = await fetch('https://google.serper.dev/search', {
           method: 'POST',
           headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ q: portal.query, num: 10, gl: 'in', hl: 'en' }),
+          // tbs:'qdr:m3' = Google's "past 3 months" filter — kills stale/archived pages
+          body: JSON.stringify({ q: portal.query, num: 10, gl: 'in', hl: 'en', tbs: 'qdr:m3' }),
         })
 
         if (!resp.ok) {
@@ -267,7 +302,8 @@ async function runScan(apiKey: string): Promise<void> {
           if (!title || !link) continue
 
           const score = scoreJob(title, snippet)
-          if (score < 0) continue   // hard-filtered out
+          // Require at least one CORE keyword (score >= 1) — pure noise scores 0
+          if (score < 1) continue
 
           const id = crypto
             .createHash('md5')
@@ -303,6 +339,15 @@ async function runScan(apiKey: string): Promise<void> {
       await new Promise(r => setTimeout(r, 200))
     }
     console.log(`[PoojaIndia] Scan complete — ${totalStored} jobs upserted`)
+
+    // Auto-purge records older than 30 days to keep the table clean
+    const purge = await client.query(
+      `DELETE FROM pooja_india_monitor_jobs
+       WHERE detected_at < NOW() - INTERVAL '30 days'`
+    )
+    if (purge.rowCount && purge.rowCount > 0) {
+      console.log(`[PoojaIndia] Purged ${purge.rowCount} stale jobs (>30 days)`)
+    }
   } finally {
     client.release()
   }
