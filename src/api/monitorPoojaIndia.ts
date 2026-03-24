@@ -443,11 +443,15 @@ const POOJA_INDIA_PORTALS: MonitorPortal[] = [
   },
   {
     id: 'jnu', name: 'JNU Delhi', category: 'academia',
-    query: 'intitle:(faculty OR "assistant professor" OR "associate professor" OR recruitment OR vacancy OR opening OR advertisement) (biology OR "life science" OR biochemistry) 2026 site:jnu.ac.in',
+    // -intitle:"welcome to" blocks the "Dr. X | Welcome to Jawaharlal Nehru University" profile pages
+    // Dropped standalone "faculty" from trigger so faculty-directory pages don't match
+    query: 'intitle:(recruitment OR vacancy OR opening OR advertisement OR "assistant professor" OR "associate professor") -intitle:"welcome to" (biology OR "life science" OR biochemistry) 2026 site:jnu.ac.in',
   },
   {
     id: 'bhu', name: 'BHU Varanasi', category: 'academia',
-    query: 'intitle:(faculty OR "assistant professor" OR "associate professor" OR recruitment OR vacancy OR advertisement OR opening) (biology OR "life science" OR biochemistry OR zoology OR botany) 2026 site:bhu.ac.in',
+    // Dropped standalone "faculty" trigger — "Department of Biochemistry Faculty" matched it
+    // -intitle:"department of" -intitle:"school of" -intitle:"section of" blocks directory listings
+    query: 'intitle:(recruitment OR vacancy OR advertisement OR opening OR "assistant professor" OR "associate professor") -intitle:"department of" -intitle:"school of" -intitle:"section of" (biology OR "life science" OR biochemistry OR zoology OR botany) 2026 site:bhu.ac.in',
   },
   {
     id: 'tezpur-univ', name: 'Tezpur University', category: 'academia',
@@ -485,7 +489,9 @@ const POOJA_INDIA_PORTALS: MonitorPortal[] = [
   },
   {
     id: 'biotecnika', name: 'Biotecnika', category: 'aggregator',
-    query: 'intitle:(job OR vacancy OR recruitment OR opening OR advertisement OR position) (scientist OR faculty OR "research officer") India 2026 site:biotecnika.org',
+    // -intitle:"apply now" blocks the SEO clickbait articles ("Scientist Job at Syngene | Apply Now…")
+    // -intitle:"jobs at" blocks private company aggregation articles
+    query: 'intitle:(vacancy OR recruitment OR opening OR advertisement OR position) -intitle:"apply now" -intitle:"jobs at" (scientist OR faculty OR "research officer") India 2026 site:biotecnika.org',
   },
 ]
 
@@ -550,6 +556,10 @@ const HARD_FILTER_TERMS = [
   'recruitments & results', 'recruitments and results', 'recruitment & results',
   // Recruitment Rules documents (not open vacancies)
   'recruitment rules, 20',
+  // Biotecnika "Apply Now" SEO clickbait articles (private company aggregation)
+  'apply now',
+  // Faculty profile / directory pages (JNU "Welcome to..." pattern, BHU dept listings)
+  'welcome to jawaharlal', 'welcome to banaras',
 ]
 
 // ─── Post-March 2026 date gate ─────────────────────────────────────────────
@@ -578,6 +588,10 @@ const NOISE_SQL_PATTERNS = [
   '%walk-in-interview results%', '%walk-in interview results%',
   '%case recruitments%',
   '%recruitment rules, 20%',
+  '%apply now%',
+  '%welcome to jawaharlal%',
+  '%welcome to banaras%',
+  '% | welcome to %',
 ]
 
 function scoreJob(title: string, snippet: string): number {
