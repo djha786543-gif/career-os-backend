@@ -247,7 +247,7 @@ interface ScannedJob {
   highSuitability: boolean
 }
 
-const POOJA_CITY_RE = /\b(bangalore|bengaluru|mumbai|delhi|hyderabad|pune|chennai|tokyo|osaka|yokohama|singapore|seoul|busan|shanghai|beijing|guangzhou|boston|cambridge|san francisco|san diego|la jolla|los angeles|new york|seattle|bethesda|london|heidelberg|zurich|basel|stockholm|oslo|copenhagen|paris|amsterdam|dublin|toronto|montreal|sydney|melbourne)\b/i
+const POOJA_CITY_RE = /\b(bangalore|bengaluru|mumbai|delhi|hyderabad|pune|chennai|kolkata|tokyo|osaka|yokohama|singapore|seoul|busan|shanghai|beijing|guangzhou|shenzhen|boston|cambridge|san francisco|san diego|la jolla|los angeles|new york|seattle|bethesda|new haven|philadelphia|baltimore|houston|chicago|durham|raleigh|london|oxford|edinburgh|manchester|birmingham|stevenage|sandwich|heidelberg|munich|berlin|frankfurt|hamburg|mannheim|darmstadt|mainz|leverkusen|zurich|basel|geneva|lausanne|bern|vienna|graz|stockholm|gothenburg|malmö|malmoe|oslo|bergen|copenhagen|aarhus|paris|lyon|marseille|strasbourg|toulouse|amsterdam|leiden|utrecht|rotterdam|ghent|brussels|antwerp|liege|dublin|cork|madrid|barcelona|milan|rome|florence|bologna|helsinki|tampere|singapore|toronto|montreal|vancouver|calgary|sydney|melbourne|brisbane|perth)\b/i
 
 // Serper web search — Google Jobs cards prioritised, organic fallback with quality gates.
 export async function scanViaWebSearch(org: MonitorOrg): Promise<ScannedJob[]> {
@@ -287,7 +287,7 @@ export async function scanViaWebSearch(org: MonitorOrg): Promise<ScannedJob[]> {
       const snippet = [
         gj.description || '',
         ...(gj.jobHighlights || []).flatMap((h: any) => h.items || []),
-      ].join(' ').slice(0, 200)
+      ].join(' ').slice(0, 400)
       const link = gj.relatedLinks?.[0]?.link || gj.applyLink || ''
       const postedDate = gj.extensions?.find((e: string) => /ago|day|week|month/i.test(e)) || 'Recent'
 
@@ -309,7 +309,7 @@ export async function scanViaWebSearch(org: MonitorOrg): Promise<ScannedJob[]> {
         location,
         country: org.country,
         applyUrl: link || org.careersUrl || '',
-        snippet: snippet.slice(0, 150),
+        snippet: snippet.slice(0, 300),
         postedDate,
         contentHash: hashContent(title, company, link || location),
         relevanceScore: relevanceScore(title, snippet),
@@ -349,7 +349,7 @@ export async function scanViaWebSearch(org: MonitorOrg): Promise<ScannedJob[]> {
         location,
         country: org.country,
         applyUrl: extractCanonicalUrl(link, org.careersUrl || ''),
-        snippet: snippet.slice(0, 150),
+        snippet: snippet.slice(0, 300),
         postedDate: 'Recent',
         contentHash: hashContent(title, org.name, link),
         relevanceScore: relevanceScore(title, snippet),
@@ -397,14 +397,14 @@ async function scanViaUSAJobs(org: MonitorOrg): Promise<ScannedJob[]> {
       .filter((item: any) => {
         const d = item.MatchedObjectDescriptor
         const title = d.PositionTitle || ''
-        const snippet = (d.UserArea?.Details?.JobSummary || '').slice(0, 150)
+        const snippet = (d.UserArea?.Details?.JobSummary || '').slice(0, 300)
         return poojaSuitabilityScore(title, snippet, org.name) >= 3
       })
       .map((item: any) => {
         const d = item.MatchedObjectDescriptor
         const title = d.PositionTitle || ''
         const location = d.PositionLocation?.[0]?.LocationName || 'Washington DC, USA'
-        const snippet = (d.UserArea?.Details?.JobSummary || '').slice(0, 150)
+        const snippet = (d.UserArea?.Details?.JobSummary || '').slice(0, 300)
         return {
           externalId: d.PositionID || hashContent(title, org.name, location),
           title,
@@ -457,7 +457,7 @@ async function scanViaRSS(org: MonitorOrg): Promise<ScannedJob[]> {
       const desc = (
         item.match(/<description><!\[CDATA\[(.*?)\]\]><\/description>/)?.[1] ||
         item.match(/<description>(.*?)<\/description>/)?.[1] || ''
-      ).replace(/<[^>]+>/g, '').slice(0, 150).trim()
+      ).replace(/<[^>]+>/g, '').slice(0, 300).trim()
 
       const pubDate = item.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] || 'Recent'
 
@@ -602,13 +602,13 @@ export async function runFullScan(): Promise<void> {
 
     console.log('[Monitor] Advisory lock acquired, starting full scan...')
 
-    // Cost optimisation: scan only 10 orgs per run (oldest-first).
-    // All 82 orgs rotate over 8-9 days.
+    // Cost optimisation: scan 15 orgs per run (oldest-first).
+    // All 85 orgs rotate over ~6 days.
     const orgs = await pool.query(
       `SELECT id, name FROM monitor_orgs
        WHERE is_active = true
        ORDER BY last_scanned_at ASC NULLS FIRST
-       LIMIT 10`
+       LIMIT 15`
     )
 
     for (const row of orgs.rows) {
