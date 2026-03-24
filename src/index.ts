@@ -9,6 +9,7 @@ import intelligenceRouter from './api/intelligence';
 import aiRouter from './api/ai';
 import monitorRouter from './api/monitor';
 import monitorDJRouter from './api/monitorDJ';
+import monitorPoojaIndiaRouter from './api/monitorPoojaIndia';
 import adminRouter from './api/admin';
 import { initMonitorScheduler } from './opportunity-monitor/scheduler';
 import { initMonitorSchedulerDJ } from './opportunity-monitor/schedulerDJ';
@@ -98,8 +99,9 @@ app.get('/', (req, res) => {
 app.use('/api/jobs',          jobsRouter);
 app.use('/api/kanban',        kanbanRouter);
 app.use('/api/ai',            aiRouter);            // /api/ai/skill, /api/ai/trend, /api/ai/assist, etc.
-app.use('/api/monitor/dj',    monitorDJRouter);     // /api/monitor/dj/jobs, /api/monitor/dj/orgs, /api/monitor/dj/scan, /api/monitor/dj/stats
-app.use('/api/monitor',       monitorRouter);       // /api/monitor/jobs, /api/monitor/orgs, /api/monitor/scan, /api/monitor/stats
+app.use('/api/monitor/dj',          monitorDJRouter);           // /api/monitor/dj/*  (isolated — DJ only)
+app.use('/api/monitor/pooja-india', monitorPoojaIndiaRouter);   // /api/monitor/pooja-india/*  (isolated — Pooja India only)
+app.use('/api/monitor',             monitorRouter);             // /api/monitor/*  (Pooja global)
 app.use('/api/admin',         adminRouter);         // /api/admin/usage
 app.use('/api',               intelligenceRouter);  // /api/trends, /api/skills, /api/salary, /api/market, /api/market/heatmap, /api/study/plan
 

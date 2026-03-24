@@ -248,6 +248,32 @@ export async function dbInit(): Promise<void> {
         ON dj_monitor_scans(scanned_at DESC);
       CREATE INDEX IF NOT EXISTS idx_dj_monitor_scans_org
         ON dj_monitor_scans(org_id, scanned_at DESC);
+
+      -- ─── Pooja India Monitor — isolated (no crossover with DJ tables) ────────
+      CREATE TABLE IF NOT EXISTS pooja_india_monitor_jobs (
+        id               TEXT         PRIMARY KEY,
+        title            TEXT         NOT NULL,
+        org_name         TEXT         NOT NULL,
+        portal_category  TEXT         NOT NULL DEFAULT 'central-govt',
+        snippet          TEXT,
+        apply_url        TEXT,
+        posted_date      TEXT,
+        source_portal    TEXT,
+        relevance_score  SMALLINT     NOT NULL DEFAULT 0,
+        is_new           BOOLEAN      NOT NULL DEFAULT TRUE,
+        dismissed        BOOLEAN      NOT NULL DEFAULT FALSE,
+        detected_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+        last_seen_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_pooja_india_jobs_cat
+        ON pooja_india_monitor_jobs(portal_category);
+      CREATE INDEX IF NOT EXISTS idx_pooja_india_jobs_new
+        ON pooja_india_monitor_jobs(is_new, detected_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_pooja_india_jobs_dismissed
+        ON pooja_india_monitor_jobs(dismissed, relevance_score DESC);
+
+      ALTER TABLE pooja_india_monitor_jobs ADD COLUMN IF NOT EXISTS relevance_score SMALLINT NOT NULL DEFAULT 0;
+      ALTER TABLE pooja_india_monitor_jobs ADD COLUMN IF NOT EXISTS dismissed        BOOLEAN  NOT NULL DEFAULT FALSE;
     `);
     console.log('✅ DB tables verified / created');
   } catch (err) {
