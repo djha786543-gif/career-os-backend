@@ -233,6 +233,88 @@ router.post('/seed', async (req: Request, res: Response) => {
   }
 })
 
+// GET /api/monitor/dj/indeed-jobs — live Indeed MCP search for DJ profile
+router.get('/indeed-jobs', async (req: Request, res: Response) => {
+  const key = process.env.ANTHROPIC_API_KEY
+  if (!key) return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured', jobs: [] })
+
+  const DJ_INDEED_QUERIES = [
+    'IT Audit Manager SOX ITGC remote',
+    'Senior IT Auditor CISA Cloud Security',
+    'Technology Risk Manager internal audit',
+  ]
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 25000)
+  const allRaw: any[] = []
+
+  try {
+    for (const q of DJ_INDEED_QUERIES) {
+      try {
+        const resp = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          signal: controller.signal,
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': key,
+            'anthropic-version': '2023-06-01',
+            'anthropic-beta': 'mcp-client-2025-04-04',
+          },
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-6',
+            max_tokens: 2000,
+            mcp_servers: [{ type: 'url', url: 'https://mcp.indeed.com/claude/mcp', name: 'indeed' }],
+            messages: [{
+              role: 'user',
+              content: `Search Indeed for: "${q}". Return ONLY a raw JSON array (no markdown) of up to 8 results. Each object: { "id": "string", "title": "string", "company": "string", "location": "string", "salary": "string or Not disclosed", "posted": "string", "url": "string", "snippet": "string" }.`,
+            }],
+          }),
+        })
+        const data: any = await resp.json()
+        const text: string = data?.content?.find((b: any) => b.type === 'text')?.text ?? '[]'
+        const jobs = JSON.parse(text.replace(/```json|```/g, '').trim())
+        if (Array.isArray(jobs)) allRaw.push(...jobs)
+      } catch { /* continue to next query */ }
+    }
+    clearTimeout(timer)
+
+    // Deduplicate by title + company
+    const seen = new Set<string>()
+    const unique = allRaw.filter(j => {
+      const k = `${(j.title || '').toLowerCase()}__${(j.company || '').toLowerCase()}`
+      if (seen.has(k)) return false
+      seen.add(k)
+      return true
+    })
+
+    // Normalise to DJ monitor job shape
+    const jobs = unique.map(j => ({
+      id:               j.id || `indeed_${Math.random().toString(36).slice(2)}`,
+      title:            j.title || '',
+      org_name:         j.company || '',
+      company:          j.company || '',
+      location:         j.location || 'USA',
+      country:          (j.location || '').toLowerCase().includes('india') ? 'India' : 'USA',
+      snippet:          j.snippet || '',
+      salary:           j.salary || 'Not disclosed',
+      apply_url:        j.url || '#',
+      applyUrl:         j.url || '#',
+      posted_date:      j.posted || 'Recent',
+      is_new:           true,
+      source:           'indeed',
+      ead_friendly:     true,
+      managerial_grade: false,
+      suitability_score: 0,
+    }))
+
+    console.log(`[DJ Indeed MCP] ${jobs.length} jobs returned`)
+    res.json({ status: 'success', profile: 'dj', source: 'indeed-mcp', jobs })
+  } catch (err: any) {
+    clearTimeout(timer)
+    res.status(500).json({ error: err.message, jobs: [] })
+  }
+})
+
 // GET /api/monitor/dj/test-search?org=Goldman+Sachs — hits Serper /jobs and returns raw results
 router.get('/test-search', async (req: Request, res: Response) => {
   const apiKey = process.env.SERPER_API_KEY
