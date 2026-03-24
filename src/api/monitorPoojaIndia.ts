@@ -179,7 +179,8 @@ router.get('/jobs', async (req: Request, res: Response) => {
   try {
     const { category } = req.query
     const params: any[] = []
-    let where = 'WHERE dismissed = false'
+    // Hard floor: never show anything detected before March 2026.
+    let where = `WHERE dismissed = false AND detected_at >= GREATEST('2026-03-01'::timestamptz, NOW() - INTERVAL '30 days')`
 
     if (category && category !== 'all') {
       params.push(category)
@@ -291,6 +292,15 @@ async function runScan(apiKey: string): Promise<void> {
       await new Promise(r => setTimeout(r, 200))
     }
     console.log(`[PoojaIndia] Scan complete — ${totalStored} jobs upserted`)
+
+    // Auto-purge records before March 2026 or older than 30 days
+    const purge = await client.query(
+      `DELETE FROM pooja_india_monitor_jobs
+       WHERE detected_at < GREATEST('2026-03-01'::timestamptz, NOW() - INTERVAL '30 days')`
+    )
+    if (purge.rowCount && purge.rowCount > 0) {
+      console.log(`[PoojaIndia] Purged ${purge.rowCount} stale jobs (pre-March 2026 or >30 days)`)
+    }
   } finally {
     client.release()
   }
