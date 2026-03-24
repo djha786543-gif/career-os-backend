@@ -42,15 +42,18 @@ const POOJA_INDIA_PORTALS: MonitorPortal[] = [
   },
   {
     id: 'csir', name: 'CSIR HQ', category: 'central-govt',
-    query: 'intitle:(scientist OR "senior scientist" OR recruitment OR vacancy OR advertisement) 2026 (site:csir.res.in OR site:csirhrdg.res.in)',
+    // -intitle:results blocks the noisy "Recruitments & Results" index page
+    query: 'intitle:(scientist OR "senior scientist" OR recruitment OR vacancy OR advertisement) -intitle:results -intitle:career 2026 (site:csir.res.in OR site:csirhrdg.res.in)',
   },
   {
     id: 'thsti', name: 'THSTI Faridabad', category: 'central-govt',
-    query: 'intitle:(scientist OR faculty OR recruitment OR vacancy OR opening OR position) 2026 site:thsti.res.in',
+    // -intitle:result -intitle:shortlisted blocks result/shortlist announcement pages
+    query: 'intitle:(scientist OR faculty OR recruitment OR vacancy OR opening OR position) -intitle:result -intitle:shortlisted -intitle:"list of" 2026 site:thsti.res.in',
   },
   {
     id: 'nii', name: 'NII Delhi', category: 'central-govt',
-    query: 'intitle:(scientist OR "research associate" OR recruitment OR vacancy OR advertisement) 2026 site:nii.res.in',
+    // -intitle:results blocks walk-in-interview results; -intitle:programme blocks generic postdoc programme page
+    query: 'intitle:(scientist OR "staff scientist" OR "project scientist" OR recruitment OR vacancy OR advertisement) -intitle:results -intitle:programme -intitle:"post-doctoral" 2026 site:nii.res.in',
   },
   {
     id: 'nbrc', name: 'NBRC Manesar', category: 'central-govt',
@@ -75,7 +78,8 @@ const POOJA_INDIA_PORTALS: MonitorPortal[] = [
   },
   {
     id: 'aiims-delhi', name: 'AIIMS Delhi', category: 'central-govt',
-    query: 'intitle:(scientist OR faculty OR "research officer" OR recruitment OR vacancy OR advertisement OR opening) 2026 site:aiims.edu',
+    // -intitle:fellowship -intitle:programme block "Fellowship Programme January 2026" noise
+    query: 'intitle:(scientist OR faculty OR "assistant professor" OR "associate professor" OR recruitment OR vacancy OR advertisement) -intitle:fellowship -intitle:programme -intitle:phd 2026 site:aiims.edu',
   },
   {
     id: 'aiims-new-1', name: 'AIIMS (Bhopal/Bhubaneswar/Jodhpur/Patna)', category: 'central-govt',
@@ -87,7 +91,8 @@ const POOJA_INDIA_PORTALS: MonitorPortal[] = [
   },
   {
     id: 'rgcb', name: 'RGCB Thiruvananthapuram', category: 'central-govt',
-    query: 'intitle:(scientist OR faculty OR recruitment OR vacancy OR opening OR advertisement) 2026 site:rgcb.res.in',
+    // -intitle:admission -intitle:admissions blocks "PhD ADMISSIONS – January 2026" pages
+    query: 'intitle:(scientist OR faculty OR recruitment OR vacancy OR opening OR advertisement) -intitle:admission -intitle:admissions 2026 site:rgcb.res.in',
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -286,7 +291,8 @@ const POOJA_INDIA_PORTALS: MonitorPortal[] = [
   // Kerala
   {
     id: 'kscste', name: 'KSCSTE Kerala', category: 'state-psc',
-    query: 'intitle:(scientist OR "junior scientist" OR recruitment OR vacancy OR opening OR advertisement) 2026 site:kscste.kerala.gov.in',
+    // -intitle:"selection list" blocks result pages; -intitle:fellowship blocks postdoc programme noise
+    query: 'intitle:(scientist OR "junior scientist" OR recruitment OR vacancy OR opening OR advertisement) -intitle:"selection list" -intitle:fellowship -intitle:postdoctoral -intitle:"post-doctoral" 2026 site:kscste.kerala.gov.in',
   },
   // Bihar
   {
@@ -416,7 +422,8 @@ const POOJA_INDIA_PORTALS: MonitorPortal[] = [
   },
   {
     id: 'ncbs', name: 'NCBS-TIFR Bengaluru', category: 'academia',
-    query: 'intitle:(faculty OR scientist OR researcher OR recruitment OR vacancy OR opening OR position OR advertisement) 2026 site:ncbs.res.in',
+    // -intitle:"final list" -intitle:result -intitle:eligible blocks result/shortlist announcements
+    query: 'intitle:(faculty OR scientist OR recruitment OR vacancy OR opening OR position OR advertisement) -intitle:"final list" -intitle:result -intitle:eligible 2026 site:ncbs.res.in',
   },
   {
     id: 'instem', name: 'InStem Bengaluru', category: 'academia',
@@ -456,7 +463,8 @@ const POOJA_INDIA_PORTALS: MonitorPortal[] = [
   // ═══════════════════════════════════════════════════════════════════════════
   {
     id: 'indiabioscience', name: 'IndiaBioscience', category: 'aggregator',
-    query: 'intitle:(job OR vacancy OR position OR opening OR recruitment OR advertisement) (scientist OR faculty OR "life science") 2026 site:indiabioscience.org',
+    // -intitle:"jobs in 20" -intitle:"research jobs" -intitle:"jobs based" blocks category/index pages
+    query: 'intitle:(job OR vacancy OR position OR opening OR recruitment OR advertisement) -intitle:"jobs in 20" -intitle:"research jobs" -intitle:"jobs based" (scientist OR faculty OR "life science") 2026 site:indiabioscience.org',
   },
   {
     id: 'employment-news', name: 'Employment News', category: 'aggregator',
@@ -468,7 +476,8 @@ const POOJA_INDIA_PORTALS: MonitorPortal[] = [
   },
   {
     id: 'serb-dst', name: 'SERB / DST', category: 'aggregator',
-    query: 'intitle:(vacancy OR opening OR recruitment OR advertisement OR position) (scientist OR researcher) 2026 (site:serb.gov.in OR site:dst.gov.in)',
+    // Require scientist/officer in title to block generic "Department of S&T" + "Announcement" pages
+    query: 'intitle:(scientist OR "research officer" OR "scientific officer" OR recruitment OR vacancy OR advertisement OR opening) -intitle:announcement 2026 (site:serb.gov.in OR site:dst.gov.in)',
   },
   {
     id: 'birac', name: 'BIRAC', category: 'aggregator',
@@ -489,6 +498,7 @@ const CORE_KEYWORDS = [
   'assistant professor', 'associate professor', 'principal scientist',
   'senior scientist', 'chief scientist', 'research officer',
   'principal investigator', 'ars scientist', 'emeritus scientist',
+  'staff scientist', 'project scientist', 'project research scientist',
 ]
 const BOOST_KEYWORDS = [
   'life science', 'biology', 'molecular', 'cardiovascular', 'biomedical',
@@ -500,22 +510,74 @@ const BOOST_KEYWORDS = [
   'reproductive health', 'environmental health', 'plant biology',
   'veterinary science', 'animal science', 'fisheries', 'dairy science',
 ]
-// Hard filter — these title/snippet signals mean the page is NOT a job vacancy.
-// Applied before scoring; match → score = -1 → record discarded entirely.
+
+// ─── Hard filter ──────────────────────────────────────────────────────────────
+// Any of these in title+snippet → score = -1 → record discarded entirely.
+// Covers: non-science roles, result/answer-key pages, admission pages,
+// programme-description pages, category/index pages, and profile pages.
 const HARD_FILTER_TERMS = [
   // Non-relevant support/admin roles
   'intern', 'technical assistant', 'lab attendant', 'peon', 'stenographer',
   'accountant', 'clerk', 'driver', 'nurse', 'pharmacist', 'radiographer',
   'security guard', 'multi tasking', 'multi-tasking', 'mts', 'group d',
   'lower division', 'upper division', 'assistant librarian',
-  // Exam result / answer-key / admit-card pages — never recruitment
+  // Exam result / answer-key / admit-card pages — not recruitment
   'answer key', 'admit card', 'merit list', 'cut off list', 'cutoff list',
   'final result', 'provisional result', 'exam result', 'examination result',
-  'selected candidates', 'shortlisted candidates', 'waiting list',
+  'selected candidates', 'waiting list',
   'scorecard', 'rank list', 'panel result', 'written result',
-  // Admission noise
+  'declaration of result', 'declaration of final result',
+  'walk-in-interview results', 'walk-in interview results',
+  // Selection/shortlist result announcements
+  'selection list for', 'list of candidates recommended',
+  'provisionally shortlisted', 'provisionally eligible',
+  'final list of provisionally',
+  // PhD admission / programme pages (not a scientist job)
+  'phd admission', 'phd admissions', 'ph.d. admission',
+  'phd programme', 'phd program', 'ph.d. programme',
+  'admissions – january', 'admissions – july', 'admissions open',
+  // Generic programme description pages (not specific open vacancies)
+  'post-doctoral programme', 'postdoctoral programme',
+  'fellowship programme', 'fellowship program',
+  // Admission / entrance noise
   'admission open', 'admission notice', 'entrance exam', 'entrance test',
   'prospectus', 'application form for admission',
+  // IndiaBioscience category/index pages
+  'jobs in 2025', 'jobs in 2024', 'research jobs in 2025', 'jobs based at',
+  // Profile / about / news pages (not job postings)
+  'my journey', 'career & opportunities',
+  // CSIR "Recruitments & Results" index page (appears as duplicates)
+  'recruitments & results', 'recruitments and results', 'recruitment & results',
+  // Recruitment Rules documents (not open vacancies)
+  'recruitment rules, 20',
+]
+
+// ─── Post-March 2026 date gate ─────────────────────────────────────────────
+// Returns false when Serper's r.date is an absolute date clearly before March 2026.
+// Relative dates ("3 days ago", "yesterday") and unparseable strings always pass.
+function isDateAcceptable(dateStr: string): boolean {
+  if (!dateStr || dateStr === 'Recent') return true
+  if (/\bago\b|\bhour|\bday|\bmin|\byesterday\b/i.test(dateStr)) return true
+  const parsed = new Date(dateStr)
+  if (isNaN(parsed.getTime())) return true
+  return parsed >= new Date('2026-03-01T00:00:00Z')
+}
+
+// ─── DB-level noise title patterns (run as DELETE after each scan) ─────────
+// Belt-and-suspenders: removes noise records that slipped past scoring,
+// including any that were stored in earlier scans before the filters hardened.
+const NOISE_SQL_PATTERNS = [
+  '%phd admission%', '%phd admissions%', '%phd programme%', '%phd program%',
+  '%recruitments & results%', '%recruitments and results%', '%recruitment & results%',
+  '%selection list for%', '%list of candidates recommended%',
+  '%provisionally shortlisted%', '%provisionally eligible%',
+  '%final list of provisionally%', '%fellowship programme%', '%fellowship program%',
+  '%post-doctoral programme%', '%postdoctoral programme%',
+  '%jobs in 2025%', '%jobs in 2024%', '%research jobs in 2025%', '%jobs based at%',
+  '%my journey%', '%career & opportunities%',
+  '%walk-in-interview results%', '%walk-in interview results%',
+  '%case recruitments%',
+  '%recruitment rules, 20%',
 ]
 
 function scoreJob(title: string, snippet: string): number {
@@ -533,8 +595,8 @@ router.get('/jobs', async (req: Request, res: Response) => {
   try {
     const { category } = req.query
     const params: any[] = []
-    // Hard floor: never show anything detected before March 2026.
-    let where = `WHERE dismissed = false AND detected_at >= GREATEST('2026-03-01'::timestamptz, NOW() - INTERVAL '30 days')`
+    // Hard floor: March 2026+, must have a core keyword (score ≥ 2).
+    let where = `WHERE dismissed = false AND relevance_score >= 2 AND detected_at >= GREATEST('2026-03-01'::timestamptz, NOW() - INTERVAL '30 days')`
 
     if (category && category !== 'all') {
       params.push(category)
@@ -588,7 +650,9 @@ async function runScan(apiKey: string): Promise<void> {
         const resp = await fetch('https://google.serper.dev/search', {
           method: 'POST',
           headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ q: portal.query, num: 10, gl: 'in', hl: 'en' }),
+          // tbs:'qdr:m1' → Google only returns pages published in the past 30 days,
+          // preventing old index entries (Aug/Nov/Jan) from ever reaching our DB.
+          body: JSON.stringify({ q: portal.query, num: 10, gl: 'in', hl: 'en', tbs: 'qdr:m1' }),
         })
 
         if (!resp.ok) {
@@ -609,12 +673,19 @@ async function runScan(apiKey: string): Promise<void> {
 
           if (!title || !link) continue
 
-          const score = scoreJob(title, snippet)
-          if (score < 0) continue   // hard-filtered out
+          // Gate 1: skip pages with explicit pre-March 2026 publish dates
+          const postedDate = (r.date || 'Recent').trim()
+          if (!isDateAcceptable(postedDate)) continue
 
+          // Gate 2: scoring — must pass hard filter AND have ≥1 core keyword
+          const score = scoreJob(title, snippet)
+          if (score < 2) continue   // 0 = no keywords; 1 = boost only; 2+ = has core keyword
+
+          // Dedup by URL so the same page can never appear as multiple rows
+          // (fixes CSIR "Recruitments & Results" appearing 5× per scan)
           const id = crypto
             .createHash('md5')
-            .update(`${title}__${link}`)
+            .update(link)
             .digest('hex')
             .slice(0, 24)
 
@@ -647,7 +718,20 @@ async function runScan(apiKey: string): Promise<void> {
     }
     console.log(`[PoojaIndia] Scan complete — ${totalStored} jobs upserted`)
 
-    // Auto-purge records before March 2026 or older than 30 days
+    // ── Noise sweep: delete known-bad title patterns that slipped past scoring ──
+    // Runs on every scan so records from older (looser) scans are retroactively cleaned.
+    const noiseWhere = NOISE_SQL_PATTERNS
+      .map((_, i) => `LOWER(title) LIKE $${i + 1}`)
+      .join(' OR ')
+    const noiseDel = await client.query(
+      `DELETE FROM pooja_india_monitor_jobs WHERE ${noiseWhere}`,
+      NOISE_SQL_PATTERNS
+    )
+    if (noiseDel.rowCount && noiseDel.rowCount > 0) {
+      console.log(`[PoojaIndia] Noise sweep removed ${noiseDel.rowCount} records`)
+    }
+
+    // ── Auto-purge: stale records before March 2026 or older than 30 days ──
     const purge = await client.query(
       `DELETE FROM pooja_india_monitor_jobs
        WHERE detected_at < GREATEST('2026-03-01'::timestamptz, NOW() - INTERVAL '30 days')`
