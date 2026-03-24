@@ -1,46 +1,23 @@
 import { pool } from '../db/client'
 import { MONITOR_ORGS, MonitorOrg } from './orgConfig'
 import crypto from 'crypto'
-import { validateJobSuitability, TIER1_ORG_NAMES, HIGH_SUITABILITY_THRESHOLD } from './validateJobSuitability'
 import { sendPoojaDigest } from '../notifications/mailer'
+import { sendPoojaTelegram } from '../notifications/telegram'
 
 // ─── Pooja-Core Profile ────────────────────────────────────────────────────
-// Rank 1 job title keywords — positions Pooja is actually targeting.
-// Deliberately NO standalone 'scientist' or 'investigator' — too generic.
+// Rank 1 job title keywords — positions Pooja is actually targeting
 const POOJA_RANK1_KEYWORDS = [
-  // Faculty / academic track
-  'assistant professor', 'associate professor', 'tenure track', 'tenure-track', 'faculty',
-  // Scientist track (compound phrases only)
-  'research scientist', 'senior scientist', 'staff scientist', 'principal scientist',
-  'scientist i', 'scientist ii', 'scientist iii', 'scientist 1', 'scientist 2', 'scientist 3',
-  // Investigator track (compound phrases only)
-  'senior investigator', 'principal investigator', 'associate investigator',
-  'investigator i', 'investigator ii',
-  // Group / lab leadership
-  'group leader', 'lab head', 'team leader',
-  // Fellowship / Associate
-  'research fellow', 'research associate', 'project scientist', 'project fellow',
+  'assistant professor', 'scientist', 'investigator', 'research scientist',
+  'group leader', 'tenure track', 'tenure-track', 'faculty', 'staff scientist',
+  'senior scientist', 'principal scientist', 'research fellow',
+  'research associate', 'project scientist', 'project fellow',
 ]
 
-// Technical domain anchors — Pooja's core expertise.
-// Any job that passes RANK1 but contains NONE of these is off-domain and rejected.
+// Technical domain anchors — Pooja's core expertise areas
 const TECHNICAL_ANCHORS = [
-  // Cardiovascular biology
-  'cardiovascular', 'cardiac', 'cardiology', 'heart', 'cardiomyopathy',
-  'heart failure', 'atrial fibrillation', 'arrhythmia', 'vascular',
-  // Molecular / cell biology core
-  'molecular biology', 'molecular', 'cell biology', 'cellular biology',
-  'genetics', 'genomics', 'epigenomics', 'chromatin',
-  'transcriptomics', 'proteomics', 'metabolomics',
-  // Technologies Pooja uses
-  'crispr', 'gene editing', 'base editing', 'gene therapy',
-  'rna', 'mrna', 'lncrna',
-  'single cell', 'single-cell', 'spatial transcriptomics', 'spatial genomics',
-  'bioinformatics', 'sequencing', 'ngs', 'next-generation sequencing',
-  // Models & biology
-  'in vivo', 'preclinical', 'mouse model', 'stem cell', 'ipsc', 'organoid',
-  // Industry context
-  'drug discovery', 'translational', 'target identification', 'biomarker',
+  'molecular', 'genetics', 'cardiovascular', 'genomics', 'bioinformatics',
+  'cell biology', 'molecular biology', 'cardiac', 'transcriptomics',
+  'proteomics', 'crispr', 'rna', 'heart'
 ]
 
 // Hard filter: discard these title terms UNLESS the title is 'Assistant Professor'
@@ -49,7 +26,25 @@ const HARD_FILTER_TERMS = [
   'junior', 'admin', 'administrative', 'coordinator', 'assistant'
 ]
 
-// TIER1_ORG_NAMES is imported from validateJobSuitability (single source of truth)
+// Tier 1 orgs for +1 suitability bonus
+const TIER1_ORG_NAMES = new Set([
+  'Harvard Medical School', 'Stanford Medicine', 'MIT Biology', 'UCSF',
+  'Broad Institute', 'Johns Hopkins Medicine', 'Mayo Clinic Research',
+  'Salk Institute', 'Columbia University Medical Center', 'Yale School of Medicine',
+  'Gladstone Institutes', 'Scripps Research', 'UT Southwestern Medical Center',
+  'Baylor College of Medicine', 'Washington University St Louis', 'Weill Cornell Medicine',
+  'NIH NHLBI', 'NIH NIGMS', 'NIH NCI',
+  'Karolinska Institute', 'ETH Zurich', 'EMBL Jobs', 'Francis Crick Institute',
+  'Wellcome Sanger Institute', 'Max Planck Heart and Lung', 'Roche',
+  'Genentech', 'Regeneron', 'Amgen', 'Pfizer Research', 'Merck Research',
+  'NCBS Bangalore', 'IISc Bangalore', 'TIFR Mumbai',
+  // Europe industry tier-1
+  'AstraZeneca UK', 'GSK UK', 'Novartis Basel', 'Roche Research Basel',
+  'Bayer Life Sciences', 'Boehringer Ingelheim', 'Novo Nordisk',
+  'BioNTech Germany', 'Sanofi Paris', 'UCB Pharma Belgium',
+  // Asia industry tier-1
+  'Daiichi Sankyo Japan', 'Takeda Japan', 'AstraZeneca China', 'Roche China',
+])
 
 // Pooja-relevant job title and domain keywords (used for legacy relevance scoring)
 const RELEVANT_KEYWORDS = [
@@ -117,33 +112,6 @@ function isRelevant(title: string, description: string = ''): boolean {
   return relevanceScore(title, description) >= 1
 }
 
-/**
- * Hard domain gate: at least one TECHNICAL_ANCHOR must appear in title or snippet.
- * Prevents off-domain jobs (oncology, neuroscience, immunology-only, data-science-only)
- * from passing just because they match RANK1 keyword + Tier 1 org.
- */
-function hasTechnicalAnchor(title: string, snippet: string): boolean {
-  const text = (title + ' ' + snippet).toLowerCase()
-  return TECHNICAL_ANCHORS.some(a => text.includes(a))
-}
-
-/**
- * Detect research article / preprint URLs and titles.
- * These appear in organic results for academic institution queries.
- */
-function isBioResearchArticle(title: string, url: string): boolean {
-  const u = url.toLowerCase()
-  // DOI / preprint / PubMed-style URLs
-  if (u.includes('/doi/') || u.includes('doi.org/') || u.includes('/pmc/')) return true
-  if (u.includes('/abstract/') || u.includes('/fulltext/') || u.includes('/article/')) return true
-  const t = title.toLowerCase()
-  // Paper-style title patterns
-  if (/\bin (mice|rats|patients|humans|adults|subjects)\b/.test(t)) return true
-  if (/\b(et al|doi:|volume \d|issue \d|\d{4};\s*\d)/.test(t)) return true
-  if (/^(a |the )?(role|effect|impact|association|prevalence|mechanism|characterization) of\b/i.test(title)) return true
-  return false
-}
-
 // RECOMMENDATION 1: Fixed location filter — require explicit location match
 function isRelevantLocation(location: string = ''): boolean {
   if (!location || location.trim() === '') return false
@@ -159,100 +127,76 @@ function passesHardFilter(title: string): boolean {
   return !HARD_FILTER_TERMS.some(term => t.includes(term))
 }
 
-// Legacy shim — thin wrapper around validateJobSuitability for any remaining call sites.
-// New code should call validateJobSuitability directly.
+// Pooja suitability scorer (0–5 scale). Jobs must score ≥ 3 to be stored.
 function poojaSuitabilityScore(title: string, snippet: string, orgName: string): number {
-  return validateJobSuitability(title, snippet, null, orgName).matchScore
+  const text = (title + ' ' + snippet).toLowerCase()
+  let score = 0
+  if (POOJA_RANK1_KEYWORDS.some(kw => text.includes(kw))) score += 2
+  if (TECHNICAL_ANCHORS.some(anchor => text.includes(anchor))) score += 2
+  if (TIER1_ORG_NAMES.has(orgName)) score += 1
+  return score
 }
 
-// Filter out generic social/landing-page URLs that don't point to actual job postings.
-// Note: linkedin.com/jobs/view/... (specific listings) are kept — only company/profile pages rejected.
+// Filter out generic social/landing-page URLs that don't point to actual job postings
 function extractCanonicalUrl(url: string, fallback: string): string {
   if (!url) return fallback
   const GENERIC_DOMAINS = [
-    'linkedin.com/company', 'linkedin.com/in/',
-    // linkedin.com/jobs/view/... are specific job listings → allowed through
+    'linkedin.com/company', 'linkedin.com/in/', 'linkedin.com/jobs',
     'twitter.com', 'x.com', 'facebook.com', 'instagram.com',
-    'youtube.com', 'glassdoor.com/Overview', 'glassdoor.com/overview',
+    'youtube.com', 'glassdoor.com/Overview'
   ]
-  if (GENERIC_DOMAINS.some(d => url.toLowerCase().includes(d.toLowerCase()))) return fallback
+  if (GENERIC_DOMAINS.some(d => url.includes(d))) return fallback
   return url
 }
 
 /**
  * URL quality gate — confirms the link points to an actual job posting.
- * Rejects: news, company bios, blog posts, social media, AND bio research articles / preprints.
+ * Rejects news sites, company bios, blog posts, social media.
  */
 function isDirectJobUrl(url: string): boolean {
   if (!url || url === '#') return false
   const lower = url.toLowerCase()
 
   const NOISE_PATTERNS = [
-    // General news & media
     'reuters.com', 'bloomberg.com', 'cnbc.com', 'wsj.com', 'forbes.com',
-    'businessinsider.com', 'techcrunch.com', 'venturebeat.com',
-    // Academic publishing & preprints — these are papers, not jobs
-    'nature.com/articles', 'nature.com/news', 'nature.com/nbt',
-    'sciencedirect.com', 'pubmed.ncbi', 'ncbi.nlm.nih.gov',
-    'biorxiv.org', 'medrxiv.org', 'arxiv.org',
-    'researchgate.net', 'academia.edu',
-    'semanticscholar.org', 'jstor.org', 'scopus.com',
-    'ahajournals.org/doi', 'jci.org/articles', 'nejm.org/doi',
-    'thelancet.com/article', 'cell.com/cell/fulltext', 'cell.com/cell/pdf',
-    'sciencemag.org', 'elifesciences.org/articles',
-    'frontiersin.org/articles', 'mdpi.com/journal',
-    '/doi/', '/pmc/', '/abstract/', '/fulltext/',
-    // Social & general noise
+    'businessinsider.com', 'techcrunch.com', 'nature.com/articles',
+    'sciencedirect.com', 'pubmed.ncbi', 'ncbi.nlm.nih.gov/pubmed',
     'wikipedia.org', 'twitter.com', 'x.com', 'facebook.com',
     'instagram.com', 'youtube.com',
-    'linkedin.com/company', 'linkedin.com/in/',
-    'glassdoor.com/overview', 'glassdoor.com/reviews', 'indeed.com/cmp/',
-    // Generic company pages
+    'linkedin.com/company', 'linkedin.com/in/', 'glassdoor.com/overview',
+    'glassdoor.com/reviews', 'indeed.com/cmp/',
     '/about-us', '/about/', '/team/', '/leadership/', '/history/',
-    '/blog/', '/news/', '/press/', '/insights/', '/resources/',
+    '/blog/', '/news/', '/press/', '/insights/', '/article/', '/resources/',
     '/culture/', '/overview', '/company/',
   ]
   if (NOISE_PATTERNS.some(p => lower.includes(p))) return false
 
   const JOB_PATTERNS = [
     '/jobs/', '/job/', '/careers/', '/career/', '/openings/', '/vacancies/',
-    '/position/', '/positions/', '/apply', '/requisition', '/job-id', '/jobid',
-    '/posting/', '/postings/', '/opportunity/', '/opportunities/',
+    '/position/', '/apply', '/requisition', '/job-id', '/jobid',
     'jobs.', 'careers.', 'apply.',
-    'indeed.com/viewjob', 'indeed.com/rc/clk',
-    'linkedin.com/jobs/view', 'linkedin.com/jobs/search',
+    'indeed.com/viewjob', 'linkedin.com/jobs/view',
     'lever.co/', 'greenhouse.io/', 'workday.com', 'myworkdayjobs.com',
     'taleo.net', 'icims.com', 'successfactors.com', 'smartrecruiters.com',
-    'bamboohr.com', 'workable.com', 'ashbyhq.com', 'rippling.com/jobs',
-    // Academic job boards
-    'higheredjobs.com', 'academicpositions.', 'jobs.ac.uk',
-    'eurosciencejobs.com', 'naturejobs.com', 'sciencecareers.org',
-    'vitae.ac.uk', 'timeshighereducation.com/unijobs',
-    // Indian job boards
-    'naukri.com/job', 'indiabioscience.org', 'iimjobs.com/job',
+    'bamboohr.com', 'workable.com', 'ashbyhq.com',
   ]
   return JOB_PATTERNS.some(p => lower.includes(p))
 }
 
 /**
  * Snippet must contain language typical of a job description.
- * Requires at least 2 matches to filter out research abstracts with single incidental matches.
+ * Filters out news summaries, press releases, and research abstracts.
  */
 function hasJobLanguage(snippet: string): boolean {
   if (!snippet) return false
   const s = snippet.toLowerCase()
   const JOB_WORDS = [
     'responsibilities', 'requirements', 'qualifications', 'years of experience',
-    'required', 'preferred', 'skills', 'bachelor', 'phd',
+    'required', 'preferred', 'skills', 'bachelor', 'phd', 'postdoc',
     'apply', 'role', 'position', 'opportunity', 'we are looking',
-    'you will', 'must have', 'salary', 'benefits', 'full-time', 'full time',
-    'join our', 'join the team', 'we are seeking', 'we seek', 'ideal candidate',
-    'what you will do', 'what you bring', 'about the role', 'about this role',
-    'minimum qualification', 'basic qualification', 'experience in',
-    'reporting to', 'work with', 'collaborate with',
+    'you will', 'must have', 'salary', 'benefits', 'full-time',
   ]
-  const matchCount = JOB_WORDS.filter(w => s.includes(w)).length
-  return matchCount >= 2
+  return JOB_WORDS.some(w => s.includes(w))
 }
 
 /**
@@ -303,16 +247,7 @@ interface ScannedJob {
   highSuitability: boolean
 }
 
-const POOJA_CITY_RE = /\b(bangalore|bengaluru|mumbai|delhi|hyderabad|pune|chennai|tokyo|osaka|yokohama|singapore|seoul|busan|shanghai|beijing|guangzhou|boston|cambridge|san francisco|san diego|la jolla|los angeles|new york|seattle|bethesda|london|heidelberg|zurich|basel|stockholm|oslo|copenhagen|paris|amsterdam|dublin|toronto|montreal|sydney|melbourne)\b/i
-
-// Google locale map — improves result relevance for non-US orgs
-const GL_MAP: Record<string, string> = {
-  'USA': 'us', 'Canada': 'ca', 'UK': 'gb', 'Germany': 'de',
-  'Switzerland': 'ch', 'France': 'fr', 'Denmark': 'dk', 'Netherlands': 'nl',
-  'Belgium': 'be', 'Ireland': 'ie', 'Sweden': 'se', 'Austria': 'at',
-  'Japan': 'jp', 'Singapore': 'sg', 'South Korea': 'kr', 'China': 'cn',
-  'Australia': 'au', 'India': 'in', 'Norway': 'no', 'Global': 'us',
-}
+const POOJA_CITY_RE = /\b(bangalore|bengaluru|mumbai|delhi|hyderabad|pune|chennai|kolkata|tokyo|osaka|yokohama|singapore|seoul|busan|shanghai|beijing|guangzhou|shenzhen|boston|cambridge|san francisco|san diego|la jolla|los angeles|new york|seattle|bethesda|new haven|philadelphia|baltimore|houston|chicago|durham|raleigh|london|oxford|edinburgh|manchester|birmingham|stevenage|sandwich|heidelberg|munich|berlin|frankfurt|hamburg|mannheim|darmstadt|mainz|leverkusen|zurich|basel|geneva|lausanne|bern|vienna|graz|stockholm|gothenburg|malmö|malmoe|oslo|bergen|copenhagen|aarhus|paris|lyon|marseille|strasbourg|toulouse|amsterdam|leiden|utrecht|rotterdam|ghent|brussels|antwerp|liege|dublin|cork|madrid|barcelona|milan|rome|florence|bologna|helsinki|tampere|singapore|toronto|montreal|vancouver|calgary|sydney|melbourne|brisbane|perth)\b/i
 
 // Serper web search — Google Jobs cards prioritised, organic fallback with quality gates.
 export async function scanViaWebSearch(org: MonitorOrg): Promise<ScannedJob[]> {
@@ -321,7 +256,6 @@ export async function scanViaWebSearch(org: MonitorOrg): Promise<ScannedJob[]> {
     console.warn(`[Monitor] SERPER_API_KEY not set — skipping ${org.name}`)
     return []
   }
-  const gl = GL_MAP[org.country] || 'us'
   try {
     const resp = await withTimeout(
       fetch('https://google.serper.dev/search', {
@@ -330,7 +264,7 @@ export async function scanViaWebSearch(org: MonitorOrg): Promise<ScannedJob[]> {
           'X-API-KEY': apiKey,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ q: org.searchQuery, num: 10, gl })
+        body: JSON.stringify({ q: org.searchQuery, num: 10 })
       }),
       10000,
       `Serper for ${org.name}`
@@ -353,20 +287,18 @@ export async function scanViaWebSearch(org: MonitorOrg): Promise<ScannedJob[]> {
       const snippet = [
         gj.description || '',
         ...(gj.jobHighlights || []).flatMap((h: any) => h.items || []),
-      ].join(' ').slice(0, 300)
+      ].join(' ').slice(0, 400)
       const link = gj.relatedLinks?.[0]?.link || gj.applyLink || ''
       const postedDate = gj.extensions?.find((e: string) => /ago|day|week|month/i.test(e)) || 'Recent'
 
       if (!title) continue
+      if (!isRelevant(title, snippet)) continue
+      if (!passesHardFilter(title)) continue
       if (isAgencySpam(title, snippet)) continue
 
-      // ── Central validation pipeline (Gates 1-2-3 + weighted score) ───────
-      // Relaxed mode for industry/international/india: skip seniority gate,
-      // accept secondary domain anchors — more opportunities surface.
-      const relaxed = ['industry', 'international', 'india'].includes(org.sector)
-      const vr = validateJobSuitability(title, snippet, link, company, TIER1_ORG_NAMES, relaxed)
-      if (!vr.passes) continue
-      if (vr.matchScore < (relaxed ? 1 : 2)) continue
+      // Lower suitability threshold for confirmed listings
+      const suitability = poojaSuitabilityScore(title, snippet, company)
+      if (suitability < 2) continue
 
       if (!isRelevantLocation(location)) continue
 
@@ -377,11 +309,11 @@ export async function scanViaWebSearch(org: MonitorOrg): Promise<ScannedJob[]> {
         location,
         country: org.country,
         applyUrl: link || org.careersUrl || '',
-        snippet: snippet.slice(0, 150),
+        snippet: snippet.slice(0, 300),
         postedDate,
         contentHash: hashContent(title, company, link || location),
         relevanceScore: relevanceScore(title, snippet),
-        highSuitability: vr.highSuitability,
+        highSuitability: suitability >= 3,
       })
     }
 
@@ -390,27 +322,21 @@ export async function scanViaWebSearch(org: MonitorOrg): Promise<ScannedJob[]> {
     console.log(`[Monitor] ${org.name}: organic=${organicResults.length}`)
 
     for (const r of organicResults) {
-      // Strip trailing site attribution from title (e.g. "Scientist | Genentech Careers")
-      const rawTitle = (r.title || '').trim()
-      const title = rawTitle
-        .replace(/\s*[|\-–—·]\s*(careers|jobs|indeed|linkedin|glassdoor|workday|lever|greenhouse|apply|join us)[^|]*$/i, '')
-        .trim() || rawTitle
+      const title = (r.title || '').replace(/\s*[-|·].*$/, '').trim()
       const snippet = r.snippet || ''
       const link = r.link || ''
 
       if (!title) continue
 
-      // ── URL quality gates (organic-specific: filter papers, aggregators, noise) ──
-      if (isBioResearchArticle(title, link)) continue
+      // Strict gates for organic (could be news/blog/aggregator)
       if (!isDirectJobUrl(link)) continue
       if (!hasJobLanguage(snippet)) continue
+      if (!isRelevant(title, snippet)) continue
+      if (!passesHardFilter(title)) continue
       if (isAgencySpam(title, snippet)) continue
 
-      // ── Central validation pipeline (Gates 1-2-3 + weighted score) ───────
-      const relaxedOrganic = ['industry', 'international', 'india'].includes(org.sector)
-      const vr = validateJobSuitability(title, snippet, link, org.name, TIER1_ORG_NAMES, relaxedOrganic)
-      if (!vr.passes) continue
-      if (vr.matchScore < (relaxedOrganic ? 1 : 3)) continue
+      const suitability = poojaSuitabilityScore(title, snippet, org.name)
+      if (suitability < 3) continue  // Stricter threshold for unverified organic
 
       const cityMatch = snippet.match(POOJA_CITY_RE) || title.match(POOJA_CITY_RE)
       const location = cityMatch ? cityMatch[0] : org.country
@@ -423,11 +349,11 @@ export async function scanViaWebSearch(org: MonitorOrg): Promise<ScannedJob[]> {
         location,
         country: org.country,
         applyUrl: extractCanonicalUrl(link, org.careersUrl || ''),
-        snippet: snippet.slice(0, 150),
+        snippet: snippet.slice(0, 300),
         postedDate: 'Recent',
         contentHash: hashContent(title, org.name, link),
         relevanceScore: relevanceScore(title, snippet),
-        highSuitability: vr.highSuitability,
+        highSuitability: suitability >= 3,
       })
     }
 
@@ -463,38 +389,36 @@ async function scanViaUSAJobs(org: MonitorOrg): Promise<ScannedJob[]> {
     const data = await resp.json()
     const items = data?.SearchResult?.SearchResultItems || []
 
-    const validated: ScannedJob[] = []
-    for (const item of items) {
-      const d = item.MatchedObjectDescriptor
-      const title   = (d.PositionTitle || '').trim()
-      const snippet = (d.UserArea?.Details?.JobSummary || '').slice(0, 150)
-      const location = d.PositionLocation?.[0]?.LocationName || 'Washington DC, USA'
-      const applyUrl = d.ApplyURI?.[0] || ''
-
-      if (!title) continue
-      if (isAgencySpam(title, snippet)) continue
-
-      // Central validation pipeline — USAJobs listings are trusted, threshold ≥ 2
-      const relaxedUSA = ['industry', 'international', 'india'].includes(org.sector)
-      const vr = validateJobSuitability(title, snippet, applyUrl, d.OrganizationName || org.name, TIER1_ORG_NAMES, relaxedUSA)
-      if (!vr.passes) continue
-      if (vr.matchScore < (relaxedUSA ? 1 : 2)) continue
-
-      validated.push({
-        externalId: d.PositionID || hashContent(title, org.name, location),
-        title,
-        orgName: d.OrganizationName || org.name,
-        location,
-        country: 'USA',
-        applyUrl,
-        snippet,
-        postedDate: d.PublicationStartDate?.split('T')[0] || 'Recent',
-        contentHash: hashContent(title, org.name, location),
-        relevanceScore: relevanceScore(title, snippet),
-        highSuitability: vr.highSuitability,
+    return items
+      .filter((item: any) => {
+        const title = item.MatchedObjectDescriptor?.PositionTitle || ''
+        return isRelevant(title) && passesHardFilter(title)
       })
-    }
-    return validated
+      .filter((item: any) => {
+        const d = item.MatchedObjectDescriptor
+        const title = d.PositionTitle || ''
+        const snippet = (d.UserArea?.Details?.JobSummary || '').slice(0, 300)
+        return poojaSuitabilityScore(title, snippet, org.name) >= 3
+      })
+      .map((item: any) => {
+        const d = item.MatchedObjectDescriptor
+        const title = d.PositionTitle || ''
+        const location = d.PositionLocation?.[0]?.LocationName || 'Washington DC, USA'
+        const snippet = (d.UserArea?.Details?.JobSummary || '').slice(0, 300)
+        return {
+          externalId: d.PositionID || hashContent(title, org.name, location),
+          title,
+          orgName: d.OrganizationName || org.name,
+          location,
+          country: 'USA',
+          applyUrl: d.ApplyURI?.[0] || '',
+          snippet,
+          postedDate: d.PublicationStartDate?.split('T')[0] || 'Recent',
+          contentHash: hashContent(title, org.name, location),
+          relevanceScore: relevanceScore(title),
+          highSuitability: true
+        }
+      })
   } catch (err) {
     console.error(`[Monitor] USAJobs failed for ${org.name}:`, (err as Error).message)
     return scanViaWebSearch(org)
@@ -533,23 +457,23 @@ async function scanViaRSS(org: MonitorOrg): Promise<ScannedJob[]> {
       const desc = (
         item.match(/<description><!\[CDATA\[(.*?)\]\]><\/description>/)?.[1] ||
         item.match(/<description>(.*?)<\/description>/)?.[1] || ''
-      ).replace(/<[^>]+>/g, '').slice(0, 150).trim()
+      ).replace(/<[^>]+>/g, '').slice(0, 300).trim()
 
       const pubDate = item.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] || 'Recent'
 
-      if (isBioResearchArticle(title, link)) continue  // reject papers / preprints
+      if (!isRelevant(title, desc)) continue
+      if (!passesHardFilter(title)) continue
       if (isAgencySpam(title, desc)) continue
 
-      // ── Central validation pipeline (Gates 1-2-3 + weighted score) ───────
-      const relaxedRSS = ['industry', 'international', 'india'].includes(org.sector)
-      const vr = validateJobSuitability(title, desc, link, org.name, TIER1_ORG_NAMES, relaxedRSS)
-      if (!vr.passes) continue
-      if (vr.matchScore < (relaxedRSS ? 1 : 2)) continue
-
-      // Extract city from description / title, fall back to org country
+      // For RSS — extract city from description if available, fall back to org country
       const rssCity = desc.match(POOJA_CITY_RE) || title.match(POOJA_CITY_RE)
       const location = rssCity ? rssCity[0] : org.country
+
       if (!isRelevantLocation(location)) continue
+
+      // Lower threshold for RSS (confirmed listings) vs websearch
+      const suitability = poojaSuitabilityScore(title, desc, org.name)
+      if (suitability < 2) continue
 
       items.push({
         externalId: hashContent(title, org.name, location),
@@ -562,7 +486,7 @@ async function scanViaRSS(org: MonitorOrg): Promise<ScannedJob[]> {
         postedDate: pubDate,
         contentHash: hashContent(title, org.name, location),
         relevanceScore: relevanceScore(title, desc),
-        highSuitability: vr.highSuitability,
+        highSuitability: suitability >= 3
       })
     }
 
@@ -659,6 +583,7 @@ export async function runFullScan(): Promise<void> {
 
   let lockAcquired = false
   let client
+  const runStart = new Date()
 
   try {
     client = await pool.connect()
@@ -676,15 +601,14 @@ export async function runFullScan(): Promise<void> {
     }
 
     console.log('[Monitor] Advisory lock acquired, starting full scan...')
-    const runStart = new Date()
 
-    // Scan 20 orgs per run (oldest-first). 134 active orgs rotate fully every ~7 days.
-    // Scan runs fire-and-forget so Railway timeout is not a concern.
+    // Cost optimisation: scan 15 orgs per run (oldest-first).
+    // All 85 orgs rotate over ~6 days.
     const orgs = await pool.query(
       `SELECT id, name FROM monitor_orgs
        WHERE is_active = true
        ORDER BY last_scanned_at ASC NULLS FIRST
-       LIMIT 20`
+       LIMIT 15`
     )
 
     for (const row of orgs.rows) {
@@ -708,10 +632,10 @@ export async function runFullScan(): Promise<void> {
       console.log(`[Monitor] Expired ${cleaned.rows.length} old job listings`)
     }
 
-    // Send email digest for any new high-suitability jobs found this run
-    await sendPoojaDigest(runStart)
-
     console.log('[Monitor] Full scan complete')
+
+    await sendPoojaDigest(runStart)
+    await sendPoojaTelegram(runStart)
 
   } catch (err) {
     console.error('[Monitor] Scan error:', (err as Error).message)

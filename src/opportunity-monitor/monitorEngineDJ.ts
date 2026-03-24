@@ -29,6 +29,7 @@ import { pool } from '../db/client'
 import { DJ_MONITOR_ORGS, DJCountry, DJMonitorOrg } from './orgConfigDJ'
 import crypto from 'crypto'
 import { sendDJDigest } from '../notifications/mailer'
+import { sendDJTelegram } from '../notifications/telegram'
 
 // ─── DJ Profile Keywords ──────────────────────────────────────────────────────
 
@@ -174,36 +175,8 @@ function isAgencySpam(title: string, snippet: string): boolean {
 
 // ─── Filter Functions ─────────────────────────────────────────────────────────
 
-/**
- * Detects remote/WFH signals from title, snippet, or location.
- * Remote jobs are treated differently — DJ wants all IT-audit-relevant
- * remote opportunities regardless of seniority level.
- */
-function isRemoteJob(title: string, snippet: string, location: string): boolean {
-  const text = (title + ' ' + snippet + ' ' + location).toLowerCase()
-  return (
-    text.includes('remote') ||
-    text.includes('work from home') ||
-    text.includes('fully remote') ||
-    text.includes('wfh')
-  )
-}
-
-function passesHardFilter(
-  title: string,
-  country: DJCountry,
-  snippet = '',
-  location = '',
-): boolean {
+function passesHardFilter(title: string, country: DJCountry): boolean {
   const t = title.toLowerCase()
-
-  // Remote jobs: bypass seniority/level hard filters entirely.
-  // More remote opportunities = better odds. Only block true internships.
-  if (isRemoteJob(title, snippet, location)) {
-    return !['intern', 'internship'].some(term => t.includes(term))
-  }
-
-  // Local / hybrid: apply existing seniority hard filters
   if (DJ_GLOBAL_HARD_FILTER.some(term => t.includes(term))) return false
   if (country === 'India') {
     if (DJ_INDIA_HARD_FILTER.some(term => t.includes(term))) return false
@@ -221,17 +194,8 @@ function hasTechnicalAnchor(title: string, snippet: string): boolean {
   return DJ_TECHNICAL_ANCHORS.some(anchor => text.includes(anchor))
 }
 
-/**
- * Remote jobs: only require a technical anchor — no seniority gate.
- * Local / hybrid: existing logic (rank-1 title OR seniority + technical anchor).
- */
-function isRelevantDJ(title: string, snippet = '', location = ''): boolean {
+function isRelevantDJ(title: string, snippet: string = ''): boolean {
   const text = (title + ' ' + snippet).toLowerCase()
-
-  if (isRemoteJob(title, snippet, location)) {
-    return hasTechnicalAnchor(title, snippet)
-  }
-
   return (
     DJ_RANK1_TITLES.some(kw => text.includes(kw)) ||
     (hasSenioritySignal(title) && hasTechnicalAnchor(title, snippet))
@@ -400,12 +364,12 @@ async function scanViaRSSDJ(org: DJMonitorOrg): Promise<DJScannedJob[]> {
 
       if (!cleanTitle) continue
       if (!isRelevantDJ(cleanTitle, desc)) continue
-      if (!passesHardFilter(cleanTitle, org.country, desc)) continue
+      if (!passesHardFilter(cleanTitle, org.country)) continue
       if (isAgencySpam(cleanTitle, desc)) continue
 
+      // Lower threshold for RSS — these are confirmed job listings
       const s = djSuitabilityScore(cleanTitle, desc, company)
-      // Remote jobs: store at score ≥ 1 — any technical anchor is worth surfacing
-      if (s < (isRemoteJob(cleanTitle, desc, '') ? 1 : 2)) continue
+      if (s < 2) continue
 
       const cityMatch = desc.match(CITY_RE) || cleanTitle.match(CITY_RE)
       const location = cityMatch ? cityMatch[0] : (org.country === 'USA' ? 'United States' : 'India')
@@ -472,12 +436,12 @@ async function scanViaRemotive(org: DJMonitorOrg): Promise<DJScannedJob[]> {
         .trim()
 
       if (!title) continue
-      if (!isRelevantDJ(title, snippet, 'Remote')) continue
-      if (!passesHardFilter(title, 'USA', snippet, 'Remote')) continue
+      if (!isRelevantDJ(title, snippet)) continue
+      if (!passesHardFilter(title, 'USA')) continue
       if (isAgencySpam(title, snippet)) continue
 
       const s = djSuitabilityScore(title, snippet, company)
-      if (s < 1) continue  // Remotive = always remote, score ≥ 1 sufficient
+      if (s < 2) continue
 
       jobs.push({
         externalId: String(item.id) || hashContent(title, company, item.url || ''),
@@ -522,20 +486,12 @@ async function scanViaWebSearchDJ(org: DJMonitorOrg): Promise<DJScannedJob[]> {
   const gl = org.serperGl ||
     (org.country === 'India' ? 'in' : org.country === 'Europe' ? 'gb' : 'us')
 
-  // All countries use /search — returns both data.jobs (Google for Jobs panel, Tier A)
-  // and data.organic (job board URLs, Tier B). The /jobs endpoint is not on Serper's plan.
-  // For USA, append site-operator hint to bias organic toward known ATS/job boards.
-  const usaSiteHint = org.country === 'USA'
-    ? ' (site:linkedin.com/jobs OR site:greenhouse.io OR site:lever.co OR site:myworkdayjobs.com OR site:icims.com)'
-    : ''
-  const query = org.searchQuery + usaSiteHint
-
   try {
     const resp = await withTimeout(
       fetch('https://google.serper.dev/search', {
         method: 'POST',
         headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ q: query, num: 10, gl }),
+        body: JSON.stringify({ q: org.searchQuery, num: 10, gl }),
       }),
       10000,
       `DJ Serper for ${org.name}`
@@ -563,12 +519,12 @@ async function scanViaWebSearchDJ(org: DJMonitorOrg): Promise<DJScannedJob[]> {
       const postedDate = gj.extensions?.find((e: string) => /ago|day|week|month/i.test(e)) || 'Recent'
 
       if (!title) continue
-      if (!isRelevantDJ(title, snippet, location)) continue
-      if (!passesHardFilter(title, org.country, snippet, location)) continue
+      if (!isRelevantDJ(title, snippet)) continue
+      if (!passesHardFilter(title, org.country)) continue
       if (isAgencySpam(title, snippet)) continue
 
       const s = djSuitabilityScore(title, snippet, company || org.name)
-      if (s < (isRemoteJob(title, snippet, location) ? 1 : 2)) continue
+      if (s < 2) continue
 
       jobs.push({
         externalId: hashContent(title, company || org.name, link || location),
@@ -604,11 +560,11 @@ async function scanViaWebSearchDJ(org: DJMonitorOrg): Promise<DJScannedJob[]> {
       if (!title) continue
       if (!isDirectJobUrl(link)) continue
       if (!isRelevantDJ(title, snippet)) continue
-      if (!passesHardFilter(title, org.country, snippet)) continue
+      if (!passesHardFilter(title, org.country)) continue
       if (isAgencySpam(title, snippet)) continue
 
       const s = djSuitabilityScore(title, snippet, org.name)
-      if (s < (isRemoteJob(title, snippet, '') ? 1 : 2)) continue
+      if (s < 2) continue
 
       const cityMatch = (snippet + ' ' + rawTitle).match(CITY_RE)
       const location = cityMatch ? cityMatch[0] : org.country
@@ -687,12 +643,12 @@ async function scanViaAdzuna(org: DJMonitorOrg): Promise<DJScannedJob[]> {
       const postedDate  = r.created ? r.created.slice(0, 10) : 'Recent'
 
       if (!title) continue
-      if (!isRelevantDJ(title, snippet, location)) continue
-      if (!passesHardFilter(title, org.country, snippet, location)) continue
+      if (!isRelevantDJ(title, snippet)) continue
+      if (!passesHardFilter(title, org.country)) continue
       if (isAgencySpam(title, snippet)) continue
 
       const s = djSuitabilityScore(title, snippet, company || org.name)
-      if (s < (isRemoteJob(title, snippet, location) ? 1 : 2)) continue
+      if (s < 2) continue
 
       jobs.push({
         externalId: String(r.id) || hashContent(title, company, applyUrl),
@@ -811,6 +767,7 @@ export async function runFullScanDJ(): Promise<void> {
 
   let lockAcquired = false
   let client
+  const runStart = new Date()
 
   try {
     client = await pool.connect()
@@ -828,14 +785,12 @@ export async function runFullScanDJ(): Promise<void> {
     }
 
     console.log('[MonitorDJ] Advisory lock acquired, starting full DJ scan...')
-    const runStart = new Date()
 
-    // Scan 20 orgs per run (oldest-first). 121 active orgs rotate fully every ~6 days.
     const orgs = await pool.query(
       `SELECT id, name FROM dj_monitor_orgs
        WHERE is_active = true
        ORDER BY last_scanned_at ASC NULLS FIRST
-       LIMIT 20`
+       LIMIT 10`
     )
 
     for (const row of orgs.rows) {
@@ -858,10 +813,10 @@ export async function runFullScanDJ(): Promise<void> {
       console.log(`[MonitorDJ] Expired ${cleaned.rows.length} old DJ job listings`)
     }
 
-    // Send email digest for any new high-suitability jobs found this run
-    await sendDJDigest(runStart)
-
     console.log('[MonitorDJ] Full DJ scan complete')
+
+    await sendDJDigest(runStart)
+    await sendDJTelegram(runStart)
 
   } catch (err) {
     console.error('[MonitorDJ] Scan error:', (err as Error).message)
