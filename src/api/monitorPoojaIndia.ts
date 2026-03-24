@@ -32,116 +32,451 @@ interface MonitorPortal {
 }
 
 const POOJA_INDIA_PORTALS: MonitorPortal[] = [
-  // ─── Central Govt ────────────────────────────────────────────────────────
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CENTRAL GOVT — Core Bodies
+  // ═══════════════════════════════════════════════════════════════════════════
   {
     id: 'icmr', name: 'ICMR', category: 'central-govt',
-    query: 'scientist vacancy recruitment 2025 2026 (site:icmr.nic.in OR site:recruitment.icmr.org.in)',
+    query: 'intitle:(scientist OR "research officer" OR recruitment OR vacancy OR advertisement) 2026 (site:icmr.nic.in OR site:recruitment.icmr.org.in)',
   },
   {
-    id: 'csir', name: 'CSIR', category: 'central-govt',
-    query: 'scientist senior scientist vacancy recruitment 2025 2026 (site:csir.res.in OR site:csirhrdg.res.in)',
+    id: 'csir', name: 'CSIR HQ', category: 'central-govt',
+    query: 'intitle:(scientist OR "senior scientist" OR recruitment OR vacancy OR advertisement) 2026 (site:csir.res.in OR site:csirhrdg.res.in)',
   },
   {
-    id: 'thsti', name: 'THSTI', category: 'central-govt',
-    query: 'scientist faculty vacancy recruitment 2025 2026 site:thsti.res.in',
+    id: 'thsti', name: 'THSTI Faridabad', category: 'central-govt',
+    query: 'intitle:(scientist OR faculty OR recruitment OR vacancy OR opening OR position) 2026 site:thsti.res.in',
   },
   {
-    id: 'nii', name: 'NII', category: 'central-govt',
-    query: 'scientist vacancy recruitment 2025 2026 site:nii.res.in',
+    id: 'nii', name: 'NII Delhi', category: 'central-govt',
+    query: 'intitle:(scientist OR "research associate" OR recruitment OR vacancy OR advertisement) 2026 site:nii.res.in',
   },
   {
-    id: 'nbrc', name: 'NBRC', category: 'central-govt',
-    query: 'scientist vacancy recruitment 2025 2026 site:nbrc.ac.in',
+    id: 'nbrc', name: 'NBRC Manesar', category: 'central-govt',
+    query: 'intitle:(scientist OR faculty OR recruitment OR vacancy OR opening) 2026 site:nbrc.ac.in',
   },
   {
-    id: 'nipgr', name: 'NIPGR', category: 'central-govt',
-    query: 'scientist vacancy recruitment 2025 2026 site:nipgr.ac.in',
+    id: 'nipgr', name: 'NIPGR Delhi', category: 'central-govt',
+    query: 'intitle:(scientist OR "research associate" OR recruitment OR vacancy OR opening OR position) 2026 site:nipgr.ac.in',
   },
   {
-    id: 'drdo', name: 'DRDO', category: 'central-govt',
-    query: 'scientist life sciences CEPTAM recruitment 2025 2026 site:drdo.gov.in',
+    id: 'drdo', name: 'DRDO CEPTAM', category: 'central-govt',
+    query: 'intitle:(scientist OR CEPTAM OR recruitment OR vacancy OR advertisement) (biology OR "life science" OR biomedical) 2026 site:drdo.gov.in',
   },
   {
-    id: 'icar', name: 'ICAR', category: 'central-govt',
-    query: 'scientist ARS life sciences recruitment 2025 2026 site:icar.org.in',
+    id: 'drdo-bio-labs', name: 'DRDO Bio Labs', category: 'central-govt',
+    // INMAS / DIPAS / DIBER / DFRL — DRDO institutes relevant to life sciences
+    query: 'intitle:(scientist OR "scientific officer" OR recruitment OR vacancy OR advertisement OR opening) 2026 (site:inmas.drdo.in OR site:dipas.drdo.in OR site:diber.drdo.in OR site:dfrl.drdo.in)',
   },
   {
-    id: 'aiims', name: 'AIIMS', category: 'central-govt',
-    query: 'research scientist assistant professor recruitment 2025 2026 (site:aiims.edu OR site:aiimsexams.ac.in)',
+    id: 'icar', name: 'ICAR HQ', category: 'central-govt',
+    query: 'intitle:(scientist OR ARS OR "agricultural research" OR recruitment OR vacancy OR advertisement) 2026 site:icar.org.in',
   },
   {
-    id: 'rgcb', name: 'RGCB', category: 'central-govt',
-    query: 'scientist vacancy recruitment 2025 2026 site:rgcb.res.in',
+    id: 'aiims-delhi', name: 'AIIMS Delhi', category: 'central-govt',
+    query: 'intitle:(scientist OR faculty OR "research officer" OR recruitment OR vacancy OR advertisement OR opening) 2026 site:aiims.edu',
+  },
+  {
+    id: 'aiims-new-1', name: 'AIIMS (Bhopal/Bhubaneswar/Jodhpur/Patna)', category: 'central-govt',
+    query: 'intitle:(scientist OR faculty OR "research officer" OR recruitment OR vacancy OR advertisement OR opening) 2026 (site:aiimsbhopal.edu.in OR site:aiimsbhubaneswar.edu.in OR site:aiimsjodhpur.edu.in OR site:aiimspatna.edu.in)',
+  },
+  {
+    id: 'aiims-new-2', name: 'AIIMS (Raipur/Rishikesh/Nagpur/Bathinda)', category: 'central-govt',
+    query: 'intitle:(scientist OR faculty OR "research officer" OR recruitment OR vacancy OR advertisement OR opening) 2026 (site:aiimsraipur.edu.in OR site:aiimsrishikesh.edu.in OR site:aiimsnagpur.edu.in OR site:aiimsbathinda.edu.in)',
+  },
+  {
+    id: 'rgcb', name: 'RGCB Thiruvananthapuram', category: 'central-govt',
+    query: 'intitle:(scientist OR faculty OR recruitment OR vacancy OR opening OR advertisement) 2026 site:rgcb.res.in',
   },
 
-  // ─── State PSC ───────────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CSIR LABORATORY NETWORK
+  // ═══════════════════════════════════════════════════════════════════════════
   {
-    id: 'mppsc', name: 'MPPSC', category: 'state-psc',
-    query: 'scientific officer biology advertisement 2025 2026 site:mppsc.mp.gov.in',
+    id: 'csir-ccmb', name: 'CSIR-CCMB Hyderabad', category: 'central-govt',
+    query: 'intitle:(scientist OR faculty OR recruitment OR vacancy OR opening OR position OR advertisement) 2026 site:ccmb.res.in',
   },
+  {
+    id: 'csir-cdri', name: 'CSIR-CDRI Lucknow', category: 'central-govt',
+    query: 'intitle:(scientist OR "research officer" OR recruitment OR vacancy OR opening OR advertisement) 2026 site:cdri.res.in',
+  },
+  {
+    id: 'csir-igib', name: 'CSIR-IGIB Delhi', category: 'central-govt',
+    query: 'intitle:(scientist OR faculty OR recruitment OR vacancy OR opening OR position) 2026 site:igib.res.in',
+  },
+  {
+    id: 'csir-imtech', name: 'CSIR-IMTECH Chandigarh', category: 'central-govt',
+    query: 'intitle:(scientist OR "research associate" OR recruitment OR vacancy OR opening OR advertisement) 2026 site:imtech.res.in',
+  },
+  {
+    id: 'csir-iicb', name: 'CSIR-IICB Kolkata', category: 'central-govt',
+    query: 'intitle:(scientist OR faculty OR recruitment OR vacancy OR opening OR position OR advertisement) 2026 site:iicb.res.in',
+  },
+  {
+    id: 'csir-ihbt', name: 'CSIR-IHBT Palampur', category: 'central-govt',
+    query: 'intitle:(scientist OR faculty OR recruitment OR vacancy OR opening OR advertisement) 2026 site:ihbt.res.in',
+  },
+  {
+    id: 'csir-nbri', name: 'CSIR-NBRI Lucknow', category: 'central-govt',
+    query: 'intitle:(scientist OR faculty OR recruitment OR vacancy OR opening OR advertisement) 2026 site:nbri.res.in',
+  },
+  {
+    id: 'csir-cimap', name: 'CSIR-CIMAP Lucknow', category: 'central-govt',
+    query: 'intitle:(scientist OR faculty OR recruitment OR vacancy OR opening OR advertisement) 2026 site:cimap.res.in',
+  },
+  {
+    id: 'csir-ncl', name: 'CSIR-NCL Pune', category: 'central-govt',
+    query: 'intitle:(scientist OR faculty OR recruitment OR vacancy OR opening OR position) (biology OR biochemistry OR biotech) 2026 (site:ncl-india.org OR site:ncl.res.in)',
+  },
+  {
+    id: 'csir-cftri', name: 'CSIR-CFTRI Mysore', category: 'central-govt',
+    query: 'intitle:(scientist OR "research officer" OR recruitment OR vacancy OR opening OR advertisement) 2026 site:cftri.res.in',
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ICMR INSTITUTE NETWORK
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    id: 'icmr-nin', name: 'ICMR-NIN Hyderabad', category: 'central-govt',
+    query: 'intitle:(scientist OR "research officer" OR recruitment OR vacancy OR opening OR advertisement) 2026 site:nin.res.in',
+  },
+  {
+    id: 'icmr-nimr', name: 'ICMR-NIMR Delhi', category: 'central-govt',
+    query: 'intitle:(scientist OR "research officer" OR recruitment OR vacancy OR opening OR advertisement) 2026 site:nimr.icmr.org.in',
+  },
+  {
+    id: 'icmr-nirt', name: 'ICMR-NIRT Chennai', category: 'central-govt',
+    query: 'intitle:(scientist OR "research officer" OR recruitment OR vacancy OR opening OR advertisement) 2026 site:nirt.res.in',
+  },
+  {
+    id: 'icmr-niced', name: 'ICMR-NICED Kolkata', category: 'central-govt',
+    query: 'intitle:(scientist OR "research officer" OR recruitment OR vacancy OR opening OR advertisement) 2026 site:niced.org.in',
+  },
+  {
+    id: 'icmr-nirrh', name: 'ICMR-NIRRH Mumbai', category: 'central-govt',
+    query: 'intitle:(scientist OR "research officer" OR recruitment OR vacancy OR opening OR advertisement) 2026 (site:nirrch.res.in OR site:nirrh.res.in)',
+  },
+  {
+    id: 'icmr-nari', name: 'ICMR-NARI Pune', category: 'central-govt',
+    query: 'intitle:(scientist OR "research officer" OR recruitment OR vacancy OR opening OR advertisement) 2026 site:nari-icmr.res.in',
+  },
+  {
+    id: 'icmr-nireh', name: 'ICMR-NIREH Bhopal', category: 'central-govt',
+    query: 'intitle:(scientist OR "research officer" OR recruitment OR vacancy OR opening OR advertisement) 2026 site:nireh.icmr.org.in',
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ICAR INSTITUTE NETWORK
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    id: 'icar-iari', name: 'ICAR-IARI Delhi', category: 'central-govt',
+    query: 'intitle:(scientist OR ARS OR recruitment OR vacancy OR opening OR advertisement) 2026 site:iari.res.in',
+  },
+  {
+    id: 'icar-ndri', name: 'ICAR-NDRI Karnal', category: 'central-govt',
+    query: 'intitle:(scientist OR "research associate" OR recruitment OR vacancy OR opening OR advertisement) 2026 site:ndri.res.in',
+  },
+  {
+    id: 'icar-ivri', name: 'ICAR-IVRI Izatnagar', category: 'central-govt',
+    query: 'intitle:(scientist OR "research officer" OR recruitment OR vacancy OR opening OR advertisement) 2026 site:ivri.nic.in',
+  },
+  {
+    id: 'icar-nbfgr', name: 'ICAR-NBFGR Lucknow', category: 'central-govt',
+    query: 'intitle:(scientist OR "research associate" OR recruitment OR vacancy OR opening OR advertisement) 2026 site:nbfgr.res.in',
+  },
+  {
+    id: 'icar-nbagr', name: 'ICAR-NBAGR Karnal', category: 'central-govt',
+    query: 'intitle:(scientist OR "research associate" OR recruitment OR vacancy OR opening OR advertisement) 2026 site:nbagr.res.in',
+  },
+  {
+    id: 'icar-cife', name: 'ICAR-CIFE Mumbai', category: 'central-govt',
+    query: 'intitle:(scientist OR faculty OR "research officer" OR recruitment OR vacancy OR opening OR advertisement) 2026 site:cife.edu.in',
+  },
+  {
+    id: 'icar-nbpgr', name: 'ICAR-NBPGR Delhi', category: 'central-govt',
+    query: 'intitle:(scientist OR "research associate" OR recruitment OR vacancy OR opening OR advertisement) 2026 site:nbpgr.org.in',
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // AUTONOMOUS & APEX RESEARCH INSTITUTES
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    id: 'tifr', name: 'TIFR Mumbai', category: 'central-govt',
+    query: 'intitle:(scientist OR faculty OR "research officer" OR recruitment OR vacancy OR opening OR position) (biology OR "life science" OR biochemistry) 2026 site:tifr.res.in',
+  },
+  {
+    id: 'nccs', name: 'NCCS Pune', category: 'central-govt',
+    query: 'intitle:(scientist OR "research associate" OR recruitment OR vacancy OR opening OR advertisement OR position) 2026 site:nccs.res.in',
+  },
+  {
+    id: 'barc', name: 'BARC Mumbai', category: 'central-govt',
+    query: 'intitle:(scientist OR "scientific officer" OR recruitment OR vacancy OR advertisement OR opening) (biology OR "life science" OR biochemistry OR bioscience) 2026 site:barc.gov.in',
+  },
+  {
+    id: 'nimhans', name: 'NIMHANS Bengaluru', category: 'central-govt',
+    query: 'intitle:(scientist OR faculty OR "research officer" OR recruitment OR vacancy OR advertisement OR opening) 2026 (site:nimhans.ac.in OR site:nimhans.co.in)',
+  },
+  {
+    id: 'sctimst', name: 'SCTIMST Thiruvananthapuram', category: 'central-govt',
+    query: 'intitle:(scientist OR faculty OR "research officer" OR recruitment OR vacancy OR advertisement OR opening) 2026 site:sctimst.ac.in',
+  },
+  {
+    id: 'pgimer', name: 'PGIMER Chandigarh', category: 'central-govt',
+    query: 'intitle:(scientist OR faculty OR "research officer" OR recruitment OR vacancy OR advertisement OR opening) 2026 site:pgimer.edu.in',
+  },
+  {
+    id: 'jipmer', name: 'JIPMER Pondicherry', category: 'central-govt',
+    query: 'intitle:(scientist OR faculty OR "research officer" OR recruitment OR vacancy OR advertisement OR opening) 2026 site:jipmer.edu.in',
+  },
+  {
+    id: 'sgpgims', name: 'SGPGIMS Lucknow', category: 'central-govt',
+    query: 'intitle:(scientist OR faculty OR "research officer" OR recruitment OR vacancy OR opening OR advertisement) 2026 (site:sgpgims.org.in OR site:sgpgi.ac.in)',
+  },
+  {
+    id: 'actrec', name: 'ACTREC Mumbai', category: 'central-govt',
+    query: 'intitle:(scientist OR "research officer" OR faculty OR recruitment OR vacancy OR opening OR advertisement) 2026 site:actrec.gov.in',
+  },
+  {
+    id: 'icgeb', name: 'ICGEB Delhi', category: 'central-govt',
+    query: 'intitle:(scientist OR faculty OR researcher OR recruitment OR vacancy OR opening OR position) India 2026 site:icgeb.org',
+  },
+  {
+    id: 'zsi-bsi', name: 'ZSI / BSI', category: 'central-govt',
+    query: 'intitle:(scientist OR "zoological survey" OR "botanical survey" OR recruitment OR vacancy OR advertisement) 2026 (site:zsi.gov.in OR site:bsi.gov.in)',
+  },
+  {
+    id: 'wii', name: 'WII Dehradun', category: 'central-govt',
+    query: 'intitle:(scientist OR faculty OR researcher OR recruitment OR vacancy OR opening OR advertisement) 2026 site:wii.gov.in',
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // STATE PSC — All Major States
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Uttar Pradesh
   {
     id: 'uppsc', name: 'UPPSC', category: 'state-psc',
-    query: 'scientific officer lecturer notification 2025 2026 site:uppsc.up.nic.in',
+    query: 'intitle:(recruitment OR vacancy OR advertisement OR notification) (scientist OR "scientific officer" OR lecturer OR professor OR biology) 2026 site:uppsc.up.nic.in',
   },
+  // Madhya Pradesh
+  {
+    id: 'mppsc', name: 'MPPSC', category: 'state-psc',
+    query: 'intitle:(recruitment OR vacancy OR advertisement OR notification) (scientist OR "scientific officer" OR biology OR "life science") 2026 site:mppsc.mp.gov.in',
+  },
+  // West Bengal
   {
     id: 'wbpsc', name: 'WBPSC', category: 'state-psc',
-    query: 'scientist professor scientific officer advertisement 2025 2026 site:psc.wb.gov.in',
+    query: 'intitle:(recruitment OR vacancy OR advertisement OR notification) (scientist OR professor OR "scientific officer" OR biology OR "life science") 2026 site:psc.wb.gov.in',
   },
-  {
-    id: 'kscste', name: 'KSCSTE', category: 'state-psc',
-    query: 'scientist junior scientist recruitment 2025 2026 site:kscste.kerala.gov.in',
-  },
+  // Tamil Nadu
   {
     id: 'tnpsc', name: 'TNPSC', category: 'state-psc',
-    query: 'assistant professor life sciences biology notification 2025 2026 site:tnpsc.gov.in',
+    query: 'intitle:(recruitment OR vacancy OR advertisement OR notification) (professor OR "assistant professor" OR "scientific officer" OR biology OR "life science") 2026 site:tnpsc.gov.in',
   },
+  // Rajasthan
   {
     id: 'rpsc', name: 'RPSC', category: 'state-psc',
-    query: 'assistant professor life sciences 2025 2026 site:rpsc.rajasthan.gov.in',
+    query: 'intitle:(recruitment OR vacancy OR advertisement OR notification) (professor OR "assistant professor" OR "scientific officer" OR biology OR "life science") 2026 site:rpsc.rajasthan.gov.in',
   },
+  // Karnataka
   {
-    id: 'kpsc', name: 'KPSC', category: 'state-psc',
-    query: 'scientific officer lecturer biology 2025 2026 site:kpsc.kar.nic.in',
+    id: 'kpsc', name: 'KPSC Karnataka', category: 'state-psc',
+    query: 'intitle:(recruitment OR vacancy OR advertisement OR notification) (scientist OR "scientific officer" OR lecturer OR professor OR biology) 2026 site:kpsc.kar.nic.in',
+  },
+  // Kerala
+  {
+    id: 'kscste', name: 'KSCSTE Kerala', category: 'state-psc',
+    query: 'intitle:(scientist OR "junior scientist" OR recruitment OR vacancy OR opening OR advertisement) 2026 site:kscste.kerala.gov.in',
+  },
+  // Bihar
+  {
+    id: 'bpsc', name: 'BPSC Bihar', category: 'state-psc',
+    query: 'intitle:(recruitment OR vacancy OR advertisement OR notification) (scientist OR professor OR "assistant professor" OR "scientific officer" OR biology OR "life science") 2026 site:bpsc.bihar.gov.in',
+  },
+  // Jharkhand
+  {
+    id: 'jpsc', name: 'JPSC Jharkhand', category: 'state-psc',
+    query: 'intitle:(recruitment OR vacancy OR advertisement OR notification) (scientist OR professor OR "scientific officer" OR biology OR "life science") 2026 site:jpsc.gov.in',
+  },
+  // Odisha
+  {
+    id: 'opsc', name: 'OPSC Odisha', category: 'state-psc',
+    query: 'intitle:(recruitment OR vacancy OR advertisement OR notification) (scientist OR professor OR "assistant professor" OR "scientific officer" OR biology OR "life science") 2026 site:opsc.gov.in',
+  },
+  // Himachal Pradesh
+  {
+    id: 'hppsc', name: 'HPPSC Himachal', category: 'state-psc',
+    query: 'intitle:(recruitment OR vacancy OR advertisement OR notification) (scientist OR professor OR "scientific officer" OR biology OR "life science") 2026 site:hppsc.hp.gov.in',
+  },
+  // Haryana
+  {
+    id: 'hpsc', name: 'HPSC Haryana', category: 'state-psc',
+    query: 'intitle:(recruitment OR vacancy OR advertisement OR notification) (scientist OR professor OR "scientific officer" OR biology OR "life science") 2026 site:hpsc.gov.in',
+  },
+  // Punjab
+  {
+    id: 'ppsc', name: 'PPSC Punjab', category: 'state-psc',
+    query: 'intitle:(recruitment OR vacancy OR advertisement OR notification) (scientist OR professor OR "scientific officer" OR biology OR "life science") 2026 site:ppsc.gov.in',
+  },
+  // Chhattisgarh
+  {
+    id: 'cgpsc', name: 'CGPSC Chhattisgarh', category: 'state-psc',
+    query: 'intitle:(recruitment OR vacancy OR advertisement OR notification) (scientist OR professor OR "scientific officer" OR biology OR "life science") 2026 site:psc.cg.gov.in',
+  },
+  // Gujarat
+  {
+    id: 'gpsc-guj', name: 'GPSC Gujarat', category: 'state-psc',
+    query: 'intitle:(recruitment OR vacancy OR advertisement OR notification) (scientist OR professor OR "scientific officer" OR biology OR "life science") 2026 site:gpsc.gujarat.gov.in',
+  },
+  // Andhra Pradesh
+  {
+    id: 'appsc', name: 'APPSC Andhra Pradesh', category: 'state-psc',
+    query: 'intitle:(recruitment OR vacancy OR advertisement OR notification) (scientist OR professor OR "assistant professor" OR "scientific officer" OR biology OR "life science") 2026 site:psc.ap.gov.in',
+  },
+  // Telangana
+  {
+    id: 'tspsc', name: 'TSPSC Telangana', category: 'state-psc',
+    query: 'intitle:(recruitment OR vacancy OR advertisement OR notification) (scientist OR professor OR "assistant professor" OR "scientific officer" OR biology OR "life science") 2026 site:tgpsc.gov.in',
+  },
+  // Maharashtra
+  {
+    id: 'mpsc', name: 'MPSC Maharashtra', category: 'state-psc',
+    query: 'intitle:(recruitment OR vacancy OR advertisement OR notification) (scientist OR professor OR "scientific officer" OR biology OR "life science") 2026 site:mpsc.gov.in',
+  },
+  // Assam
+  {
+    id: 'apsc', name: 'APSC Assam', category: 'state-psc',
+    query: 'intitle:(recruitment OR vacancy OR advertisement OR notification) (scientist OR professor OR "scientific officer" OR biology OR "life science") 2026 site:apsc.nic.in',
+  },
+  // Jammu & Kashmir
+  {
+    id: 'jkpsc', name: 'JKPSC J&K', category: 'state-psc',
+    query: 'intitle:(recruitment OR vacancy OR advertisement OR notification) (scientist OR professor OR "scientific officer" OR biology OR "life science") 2026 site:jkpsc.nic.in',
+  },
+  // Uttarakhand
+  {
+    id: 'ukpsc', name: 'UKPSC Uttarakhand', category: 'state-psc',
+    query: 'intitle:(recruitment OR vacancy OR advertisement OR notification) (scientist OR professor OR "scientific officer" OR biology OR "life science") 2026 site:ukpsc.gov.in',
+  },
+  // Goa
+  {
+    id: 'gpsc-goa', name: 'Goa PSC', category: 'state-psc',
+    query: 'intitle:(recruitment OR vacancy OR advertisement OR notification) (scientist OR professor OR "scientific officer" OR biology OR "life science") 2026 site:gpsc.goa.gov.in',
+  },
+  // Manipur
+  {
+    id: 'manipur-psc', name: 'Manipur PSC', category: 'state-psc',
+    query: 'intitle:(recruitment OR vacancy OR advertisement OR notification) (scientist OR professor OR "scientific officer" OR biology) 2026 site:mpscmanipur.gov.in',
+  },
+  // Nagaland
+  {
+    id: 'nagaland-psc', name: 'Nagaland PSC', category: 'state-psc',
+    query: 'intitle:(recruitment OR vacancy OR advertisement OR notification) (scientist OR professor OR "scientific officer" OR biology) 2026 site:npsc.nagaland.gov.in',
+  },
+  // Tripura
+  {
+    id: 'tripura-psc', name: 'Tripura PSC', category: 'state-psc',
+    query: 'intitle:(recruitment OR vacancy OR advertisement OR notification) (scientist OR professor OR "scientific officer" OR biology) 2026 site:tpsc.tripura.gov.in',
   },
 
-  // ─── Academia ────────────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ACADEMIA — IITs, IISERs, NISER, NIT, Central & Deemed Universities
+  // ═══════════════════════════════════════════════════════════════════════════
   {
-    id: 'iit', name: 'IIT System', category: 'academia',
-    query: 'assistant professor biosciences biochemistry biology faculty opening 2025 2026 (site:iitk.ac.in OR site:iitb.ac.in OR site:iitm.ac.in OR site:iitd.ac.in OR site:iitkgp.ac.in OR site:iith.ac.in OR site:iitgn.ac.in)',
+    id: 'iit-a', name: 'IIT (Delhi/Bombay/Madras/Kanpur)', category: 'academia',
+    query: 'intitle:("assistant professor" OR "associate professor" OR faculty OR recruitment OR vacancy OR opening OR advertisement) (biosciences OR biology OR biochemistry OR biomedical) 2026 (site:iitd.ac.in OR site:iitb.ac.in OR site:iitm.ac.in OR site:iitk.ac.in)',
   },
   {
-    id: 'iiser', name: 'IISER', category: 'academia',
-    query: 'assistant professor biology molecular 2025 2026 (site:iiserfaculty.in OR site:iiserpune.ac.in OR site:iiserb.ac.in OR site:iiserk.ac.in OR site:iisermohali.ac.in)',
+    id: 'iit-b', name: 'IIT (Kharagpur/Hyderabad/Gandhinagar/Roorkee)', category: 'academia',
+    query: 'intitle:("assistant professor" OR "associate professor" OR faculty OR recruitment OR vacancy OR opening OR advertisement) (biosciences OR biology OR biochemistry) 2026 (site:iitkgp.ac.in OR site:iith.ac.in OR site:iitgn.ac.in OR site:iitr.ac.in)',
   },
   {
-    id: 'ncbs', name: 'NCBS-TIFR', category: 'academia',
-    query: 'faculty scientist position 2025 2026 site:ncbs.res.in',
+    id: 'iit-c', name: 'IIT (Indore/Mandi/Tirupati/Palakkad/Jodhpur)', category: 'academia',
+    query: 'intitle:("assistant professor" OR "associate professor" OR faculty OR recruitment OR vacancy OR opening) (biosciences OR biology OR biochemistry OR biomedical) 2026 (site:iiti.ac.in OR site:iitmandi.ac.in OR site:iittirupati.ac.in OR site:iitpkd.ac.in OR site:iitj.ac.in)',
   },
   {
-    id: 'instem', name: 'InStem', category: 'academia',
-    query: 'faculty scientist cardiovascular biology 2025 2026 site:instem.res.in',
+    id: 'iiser-a', name: 'IISER (Pune/Bhopal/Kolkata/Mohali)', category: 'academia',
+    query: 'intitle:("assistant professor" OR "associate professor" OR faculty OR recruitment OR vacancy OR opening OR advertisement) (biology OR molecular OR bioscience) 2026 (site:iiserpune.ac.in OR site:iiserb.ac.in OR site:iiserk.ac.in OR site:iisermohali.ac.in)',
   },
   {
-    id: 'central-univ', name: 'Central Universities', category: 'academia',
-    query: 'assistant professor life sciences biology recruitment 2025 2026 site:ugc.ac.in',
+    id: 'iiser-b', name: 'IISER (Tirupati/TVM/Berhampur)', category: 'academia',
+    query: 'intitle:("assistant professor" OR "associate professor" OR faculty OR recruitment OR vacancy OR opening) (biology OR molecular OR bioscience) 2026 (site:iisertirupati.ac.in OR site:iisertvm.ac.in OR site:iiserbpr.ac.in)',
+  },
+  {
+    id: 'niser', name: 'NISER Bhubaneswar', category: 'academia',
+    query: 'intitle:(faculty OR "assistant professor" OR scientist OR recruitment OR vacancy OR opening OR position) (biology OR bioscience OR molecular) 2026 site:niser.ac.in',
+  },
+  {
+    id: 'iisc', name: 'IISc Bengaluru', category: 'academia',
+    query: 'intitle:(faculty OR "assistant professor" OR "associate professor" OR recruitment OR vacancy OR opening OR position) (biology OR biomedical OR biochemistry OR "molecular biophysics") 2026 site:iisc.ac.in',
+  },
+  {
+    id: 'jncasr', name: 'JNCASR Bengaluru', category: 'academia',
+    query: 'intitle:(faculty OR scientist OR recruitment OR vacancy OR opening OR position OR advertisement) (biology OR "molecular biology" OR bioscience) 2026 site:jncasr.ac.in',
+  },
+  {
+    id: 'ncbs', name: 'NCBS-TIFR Bengaluru', category: 'academia',
+    query: 'intitle:(faculty OR scientist OR researcher OR recruitment OR vacancy OR opening OR position OR advertisement) 2026 site:ncbs.res.in',
+  },
+  {
+    id: 'instem', name: 'InStem Bengaluru', category: 'academia',
+    query: 'intitle:(faculty OR scientist OR researcher OR recruitment OR vacancy OR opening OR position OR advertisement) 2026 site:instem.res.in',
+  },
+  {
+    id: 'nit', name: 'NIT System', category: 'academia',
+    query: 'intitle:("assistant professor" OR "associate professor" OR faculty OR recruitment OR vacancy OR advertisement OR opening) (bioscience OR biology OR biochemistry OR biotechnology) 2026 (site:nitrkl.ac.in OR site:nitw.ac.in OR site:nitk.ac.in OR site:nitt.edu OR site:nitc.ac.in)',
+  },
+  {
+    id: 'niper', name: 'NIPER Network', category: 'academia',
+    query: 'intitle:(faculty OR "assistant professor" OR scientist OR recruitment OR vacancy OR opening OR advertisement) 2026 (site:niper.gov.in OR site:niperhyd.ac.in OR site:niperahm.ac.in OR site:niperkolkata.edu.in OR site:niperguwahati.ac.in OR site:niperraebareli.edu.in)',
+  },
+  {
+    id: 'uoh', name: 'University of Hyderabad', category: 'academia',
+    query: 'intitle:(faculty OR "assistant professor" OR recruitment OR vacancy OR opening OR advertisement) (biology OR "life science" OR biochemistry) 2026 site:uohyd.ac.in',
+  },
+  {
+    id: 'jnu', name: 'JNU Delhi', category: 'academia',
+    query: 'intitle:(faculty OR "assistant professor" OR "associate professor" OR recruitment OR vacancy OR opening OR advertisement) (biology OR "life science" OR biochemistry) 2026 site:jnu.ac.in',
+  },
+  {
+    id: 'bhu', name: 'BHU Varanasi', category: 'academia',
+    query: 'intitle:(faculty OR "assistant professor" OR "associate professor" OR recruitment OR vacancy OR advertisement OR opening) (biology OR "life science" OR biochemistry OR zoology OR botany) 2026 site:bhu.ac.in',
+  },
+  {
+    id: 'tezpur-univ', name: 'Tezpur University', category: 'academia',
+    query: 'intitle:(faculty OR "assistant professor" OR recruitment OR vacancy OR opening OR advertisement) (biology OR bioscience OR molecular) 2026 site:tezu.ernet.in',
+  },
+  {
+    id: 'ugc-central', name: 'Central Universities (UGC)', category: 'academia',
+    query: 'intitle:("assistant professor" OR "associate professor" OR faculty OR recruitment OR vacancy OR advertisement) ("life sciences" OR biology OR biochemistry) 2026 site:ugc.ac.in',
   },
 
-  // ─── Aggregators ─────────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+  // AGGREGATORS & OFFICIAL JOB PORTALS
+  // ═══════════════════════════════════════════════════════════════════════════
   {
     id: 'indiabioscience', name: 'IndiaBioscience', category: 'aggregator',
-    query: 'scientist faculty PhD life science position vacancy site:indiabioscience.org',
+    query: 'intitle:(job OR vacancy OR position OR opening OR recruitment OR advertisement) (scientist OR faculty OR "life science") 2026 site:indiabioscience.org',
   },
   {
     id: 'employment-news', name: 'Employment News', category: 'aggregator',
-    query: 'scientist fellowship life science vacancy recruitment 2026 site:employmentnews.gov.in',
+    query: 'intitle:(recruitment OR vacancy OR advertisement) (scientist OR "scientific officer" OR "life science" OR biology) 2026 site:employmentnews.gov.in',
   },
   {
     id: 'dbt', name: 'DBT Portal', category: 'aggregator',
-    query: 'scientist vacancy recruitment opening 2025 2026 site:dbtindia.gov.in',
+    query: 'intitle:(scientist OR recruitment OR vacancy OR opening OR advertisement) 2026 site:dbtindia.gov.in',
   },
   {
     id: 'serb-dst', name: 'SERB / DST', category: 'aggregator',
-    query: 'vacancy opening recruitment 2025 2026 (site:serb.gov.in OR site:dst.gov.in)',
+    query: 'intitle:(vacancy OR opening OR recruitment OR advertisement OR position) (scientist OR researcher) 2026 (site:serb.gov.in OR site:dst.gov.in)',
+  },
+  {
+    id: 'birac', name: 'BIRAC', category: 'aggregator',
+    query: 'intitle:(scientist OR "research officer" OR recruitment OR vacancy OR advertisement OR opening) 2026 site:birac.nic.in',
+  },
+  {
+    id: 'biotecnika', name: 'Biotecnika', category: 'aggregator',
+    query: 'intitle:(job OR vacancy OR recruitment OR opening OR advertisement OR position) (scientist OR faculty OR "research officer") India 2026 site:biotecnika.org',
   },
 ]
 
@@ -150,18 +485,37 @@ const POOJA_INDIA_PORTALS: MonitorPortal[] = [
 const CORE_KEYWORDS = [
   'scientist', 'faculty', 'professor', 'researcher', 'scientific officer',
   'research scientist', 'research associate', 'scientist-b', 'scientist-c',
-  'scientist-d', 'assistant professor', 'associate professor',
+  'scientist-d', 'scientist-e', 'scientist-f', 'scientist-g',
+  'assistant professor', 'associate professor', 'principal scientist',
+  'senior scientist', 'chief scientist', 'research officer',
+  'principal investigator', 'ars scientist', 'emeritus scientist',
 ]
 const BOOST_KEYWORDS = [
   'life science', 'biology', 'molecular', 'cardiovascular', 'biomedical',
   'phd', 'biotechnology', 'biochemistry', 'genomics', 'immunology',
-  'translational', 'stem cell', 'neuroscience',
+  'translational', 'stem cell', 'neuroscience', 'microbiology', 'virology',
+  'pharmacology', 'toxicology', 'bioinformatics', 'cell biology', 'genetics',
+  'ecology', 'zoology', 'botany', 'biophysics', 'structural biology',
+  'cancer biology', 'infectious disease', 'epidemiology', 'nutrition',
+  'reproductive health', 'environmental health', 'plant biology',
+  'veterinary science', 'animal science', 'fisheries', 'dairy science',
 ]
+// Hard filter — these title/snippet signals mean the page is NOT a job vacancy.
+// Applied before scoring; match → score = -1 → record discarded entirely.
 const HARD_FILTER_TERMS = [
+  // Non-relevant support/admin roles
   'intern', 'technical assistant', 'lab attendant', 'peon', 'stenographer',
   'accountant', 'clerk', 'driver', 'nurse', 'pharmacist', 'radiographer',
   'security guard', 'multi tasking', 'multi-tasking', 'mts', 'group d',
   'lower division', 'upper division', 'assistant librarian',
+  // Exam result / answer-key / admit-card pages — never recruitment
+  'answer key', 'admit card', 'merit list', 'cut off list', 'cutoff list',
+  'final result', 'provisional result', 'exam result', 'examination result',
+  'selected candidates', 'shortlisted candidates', 'waiting list',
+  'scorecard', 'rank list', 'panel result', 'written result',
+  // Admission noise
+  'admission open', 'admission notice', 'entrance exam', 'entrance test',
+  'prospectus', 'application form for admission',
 ]
 
 function scoreJob(title: string, snippet: string): number {
@@ -191,7 +545,7 @@ router.get('/jobs', async (req: Request, res: Response) => {
       `SELECT * FROM pooja_india_monitor_jobs
        ${where}
        ORDER BY relevance_score DESC, detected_at DESC
-       LIMIT 150`,
+       LIMIT 500`,
       params
     )
 
