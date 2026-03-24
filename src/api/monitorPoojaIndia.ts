@@ -43,7 +43,9 @@ const POOJA_INDIA_PORTALS: MonitorPortal[] = [
   },
   {
     id: 'thsti', name: 'THSTI', category: 'central-govt',
-    query: 'scientist faculty vacancy recruitment 2025 2026 site:thsti.res.in',
+    // intitle: forces Google to only return pages where the title itself mentions
+    // a job word — eliminating org homepages and dept pages from results.
+    query: 'intitle:(scientist OR faculty OR recruitment OR vacancy OR "open position") 2025 2026 site:thsti.res.in',
   },
   {
     id: 'nii', name: 'NII', category: 'central-govt',
@@ -97,7 +99,8 @@ const POOJA_INDIA_PORTALS: MonitorPortal[] = [
   },
   {
     id: 'rpsc', name: 'RPSC', category: 'state-psc',
-    query: 'assistant professor life sciences 2025 2026 site:rpsc.rajasthan.gov.in',
+    // -syllabus -answer prevents "Syllabus - RPSC" and "Answer Keys - RPSC" pages
+    query: 'assistant professor life sciences recruitment notification 2025 2026 site:rpsc.rajasthan.gov.in -syllabus -answer',
   },
   {
     id: 'kpsc', name: 'KPSC', category: 'state-psc',
@@ -107,19 +110,22 @@ const POOJA_INDIA_PORTALS: MonitorPortal[] = [
   // ─── Academia ────────────────────────────────────────────────────────────
   {
     id: 'iit', name: 'IIT System', category: 'academia',
-    query: 'assistant professor biosciences biochemistry biology faculty opening 2025 2026 (site:iitk.ac.in OR site:iitb.ac.in OR site:iitm.ac.in OR site:iitd.ac.in OR site:iitkgp.ac.in OR site:iith.ac.in OR site:iitgn.ac.in)',
+    // Quoted phrases force title to show "assistant professor" or "associate professor",
+    // not dept pages like "Chemistry - IIT Gandhinagar".
+    query: 'intitle:("assistant professor" OR "associate professor" OR recruitment OR vacancy) biosciences biochemistry biology 2025 2026 (site:iitk.ac.in OR site:iitb.ac.in OR site:iitm.ac.in OR site:iitd.ac.in OR site:iitkgp.ac.in OR site:iith.ac.in OR site:iitgn.ac.in)',
   },
   {
     id: 'iiser', name: 'IISER', category: 'academia',
-    query: 'assistant professor biology molecular 2025 2026 (site:iiserfaculty.in OR site:iiserpune.ac.in OR site:iiserb.ac.in OR site:iiserk.ac.in OR site:iisermohali.ac.in)',
+    query: 'intitle:("assistant professor" OR "associate professor" OR faculty OR recruitment OR vacancy) biology molecular 2025 2026 (site:iiserfaculty.in OR site:iiserpune.ac.in OR site:iiserb.ac.in OR site:iiserk.ac.in OR site:iisermohali.ac.in)',
   },
   {
     id: 'ncbs', name: 'NCBS-TIFR', category: 'academia',
-    query: 'faculty scientist position 2025 2026 site:ncbs.res.in',
+    query: 'intitle:(faculty OR scientist OR position OR vacancy OR recruitment) 2025 2026 site:ncbs.res.in',
   },
   {
     id: 'instem', name: 'InStem', category: 'academia',
-    query: 'faculty scientist cardiovascular biology 2025 2026 site:instem.res.in',
+    // intitle: eliminates "inStem welcomes Dr. X" and "The New Vanguard of STEM" articles
+    query: 'intitle:(faculty OR scientist OR position OR recruitment OR vacancy) cardiovascular biology 2025 2026 site:instem.res.in',
   },
   {
     id: 'central-univ', name: 'Central Universities', category: 'academia',
@@ -129,7 +135,10 @@ const POOJA_INDIA_PORTALS: MonitorPortal[] = [
   // ─── Aggregators ─────────────────────────────────────────────────────────
   {
     id: 'indiabioscience', name: 'IndiaBioscience', category: 'aggregator',
-    query: 'scientist faculty PhD life science position vacancy site:indiabioscience.org',
+    // intitle: eliminates category pages: "Jobs in 2025 - IndiaBioscience",
+    // "Jobs based at Karnataka", "Research Jobs 2025" (none contain these words in title).
+    // Specific postings DO: "Scientist-III - IndiaBioscience", "Faculty Positions at NCBS - IB"
+    query: 'intitle:(scientist OR faculty OR researcher OR "research associate" OR postdoctoral OR lecturer OR vacancy) site:indiabioscience.org',
   },
   {
     id: 'employment-news', name: 'Employment News', category: 'aggregator',
@@ -148,12 +157,25 @@ const POOJA_INDIA_PORTALS: MonitorPortal[] = [
 // ─── Relevance Scoring ────────────────────────────────────────────────────────
 
 const CORE_KEYWORDS = [
+  // Role titles
   'scientist', 'faculty', 'professor', 'researcher', 'scientific officer',
   'research scientist', 'research associate', 'scientist-b', 'scientist-c',
   'scientist-d', 'assistant professor', 'associate professor', 'jr. research',
-  'junior research', 'phd position', 'phd opening', 'phd student', 'phd fellow',
-  'doctoral', 'project scientist', 'ra-i', 'ra-ii', 'ra-iii', 'vacancy',
-  'recruitment', 'application invited', 'applications invited',
+  'junior research', 'project scientist', 'ra-i', 'ra-ii', 'ra-iii',
+  // Seniority tiers common in Indian government research
+  'senior scientist', 'principal scientist', 'scientist i', 'scientist ii',
+  'scientist iii', 'scientist iv', 'senior researcher', 'principal investigator',
+  // Postdoc / fellowship / PhD (all formulations used on Indian portals)
+  'postdoctoral', 'post-doctoral', 'post doctoral', 'postdoc',
+  'research fellow', 'research fellowship', 'fellowship programme',
+  'phd position', 'phd opening', 'phd student', 'phd fellow', 'phd admission',
+  'phd admissions', 'ph.d', 'doctoral',
+  // State PSC designation
+  'lecturer',
+  // Action / intent signals
+  'vacancy', 'recruitment', 'application invited', 'applications invited',
+  'applications are invited', 'walk-in', 'walk in interview', 'advertised post',
+  'open position', 'open positions',
 ]
 const BOOST_KEYWORDS = [
   'life science', 'biology', 'molecular', 'cardiovascular', 'biomedical',
@@ -217,6 +239,11 @@ const NOISE_TITLE_TERMS = [
   'archive announcements',
   '[pdf] annual report',
   '[pdf] csir scientist recruitment & assessment promotion rules', // rules doc, not a posting
+  'announcement-archive',       // "Latest Announcement-Archive | DBT" archive page
+  '– page ',                    // "kscste@web – Page 6 –" pagination artifact
+  '- page ',                    // hyphen variant of above
+  'recruitment rules, 20',      // "Recruitment Rules, 2025 for the post of Chairperson"
+  'recruitment rules 20',       // variant without comma
 ]
 
 // Token-level hard filters — roles that are never relevant for Pooja
@@ -249,24 +276,43 @@ const PROFILE_PAGE_RE = new RegExp(
 const EMAIL_TITLE_RE = /\S+@\S+\.\S+/
 
 function scoreJob(title: string, snippet: string): number {
-  const titleLc = title.toLowerCase()
-  const text    = `${titleLc} ${snippet.toLowerCase()}`
+  const titleLc   = title.toLowerCase()
+  const snippetLc = snippet.toLowerCase()
+  const combined  = `${titleLc} ${snippetLc}`
 
   // Email address in title — contact page, not a job ad
   if (EMAIL_TITLE_RE.test(title)) return -1
 
-  // Personal profile page
+  // Personal profile page — must come before noise check
   if (PROFILE_PAGE_RE.test(title)) return -1
 
   // Title-level noise check — reject informational / org-page content
   if (NOISE_TITLE_TERMS.some(kw => titleLc.includes(kw))) return -1
 
-  // Token-level role filter — reject non-relevant job types
-  if (HARD_FILTER_TERMS.some(kw => text.includes(kw))) return -1
+  // Token-level role filter — reject non-relevant job types (applied to combined)
+  if (HARD_FILTER_TERMS.some(kw => combined.includes(kw))) return -1
 
   let score = 0
-  if (CORE_KEYWORDS.some(kw => text.includes(kw))) score += 2
-  if (BOOST_KEYWORDS.some(kw => text.includes(kw))) score += 1
+
+  // ── Title-centric scoring ─────────────────────────────────────────────────
+  // An org homepage / dept page typically has NO job keyword in its title —
+  // only in its snippet. Weighting title 3× more than snippet prevents those
+  // pages from inflating to score 3 just because the snippet mentions "scientist".
+  //
+  //   Title CORE  → +3   (page is about a job)
+  //   Snippet CORE only → +1   (page mentions jobs in passing)
+  //   Title BOOST → +1   (life-sciences field match in title)
+  //
+  // Threshold for insertion/display: score >= 2
+  // This means a result must have a CORE keyword IN ITS TITLE to be stored.
+  if (CORE_KEYWORDS.some(kw => titleLc.includes(kw))) {
+    score += 3
+  } else if (CORE_KEYWORDS.some(kw => snippetLc.includes(kw))) {
+    score += 1    // weak signal — org homepage; below threshold
+  }
+
+  if (BOOST_KEYWORDS.some(kw => titleLc.includes(kw))) score += 1
+
   return score
 }
 
@@ -279,8 +325,9 @@ const NOISE_SQL_LIKE_PARAMS = NOISE_TITLE_TERMS.map(t => `%${t.toLowerCase()}%`)
 router.get('/jobs', async (req: Request, res: Response) => {
   const { category } = req.query
   const params: any[] = []
-  // Only return results from the past 30 days with valid relevance score
-  let where = `WHERE dismissed = false AND relevance_score >= 1 AND detected_at > NOW() - INTERVAL '30 days'`
+  // Only return results from the past 30 days with valid relevance score.
+  // Threshold 2 = must have had a CORE keyword in title (title-centric scoring).
+  let where = `WHERE dismissed = false AND relevance_score >= 2 AND detected_at > NOW() - INTERVAL '30 days'`
 
   if (category && category !== 'all') {
     params.push(category)
@@ -367,12 +414,30 @@ async function runScan(apiKey: string): Promise<void> {
           OR title ~* '\\S+@\\S+\\.\\S+'
       `)
 
-      // Pass 3: score-0 records left from before the score>=1 threshold was added
+      // Pass 3: records below the new threshold (score >= 2 required)
       const p3 = await client.query(
-        `DELETE FROM pooja_india_monitor_jobs WHERE relevance_score < 1`
+        `DELETE FROM pooja_india_monitor_jobs WHERE relevance_score < 2`
       )
 
-      const total = (p1.rowCount || 0) + (p2.rowCount || 0) + (p3.rowCount || 0)
+      // Pass 4: deduplicate by exact title — same org homepage stored under
+      // 3 different URLs (e.g. THSTI) produces 3 identical titles. Keep only
+      // the highest-scoring, most-recently-seen copy.
+      const p4 = await client.query(`
+        DELETE FROM pooja_india_monitor_jobs
+        WHERE id IN (
+          SELECT id FROM (
+            SELECT id,
+                   ROW_NUMBER() OVER (
+                     PARTITION BY LOWER(title)
+                     ORDER BY relevance_score DESC, detected_at DESC
+                   ) AS rn
+            FROM pooja_india_monitor_jobs
+          ) ranked
+          WHERE rn > 1
+        )
+      `)
+
+      const total = (p1.rowCount || 0) + (p2.rowCount || 0) + (p3.rowCount || 0) + (p4.rowCount || 0)
       if (total > 0) {
         console.log(`[PoojaIndia] Retroactive cleanup: removed ${total} noise/score-0 records`)
       }
@@ -408,8 +473,9 @@ async function runScan(apiKey: string): Promise<void> {
           if (!title || !link) continue
 
           const score = scoreJob(title, snippet)
-          // Require at least one CORE keyword (score >= 1) — pure noise scores 0
-          if (score < 1) continue
+          // Require CORE keyword in title (title-centric scoring, score >= 2)
+          // Org homepages score 1 (snippet-only) and are rejected here.
+          if (score < 2) continue
 
           const id = crypto
             .createHash('md5')
