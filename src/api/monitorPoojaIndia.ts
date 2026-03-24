@@ -337,4 +337,27 @@ router.get('/status', async (req: Request, res: Response) => {
   }
 })
 
+// ─── GET /api/monitor/pooja-india/debug ──────────────────────────────────────
+
+router.get('/debug', async (req: Request, res: Response) => {
+  const result: Record<string, any> = {
+    route:      'pooja-india-monitor',
+    serperKey:  !!process.env.SERPER_API_KEY,
+    dbUrl:      !!(process.env.DATABASE_PUBLIC_URL || process.env.DATABASE_PRIVATE_URL || process.env.DATABASE_URL),
+    portalCount: POOJA_INDIA_PORTALS.length,
+  }
+  try {
+    const row = await pool.query(
+      `SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE dismissed=false) as active
+       FROM pooja_india_monitor_jobs`
+    )
+    result.jobsInDb = { total: parseInt(row.rows[0]?.total || '0'), active: parseInt(row.rows[0]?.active || '0') }
+    result.tableExists = true
+  } catch (err: any) {
+    result.tableExists = false
+    result.dbError = err.message
+  }
+  res.json(result)
+})
+
 export default router
