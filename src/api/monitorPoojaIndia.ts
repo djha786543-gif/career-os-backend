@@ -578,6 +578,18 @@ const HARD_FILTER_TERMS = [
   'jobs 2025', 'jobs 2024',
   // Workshop / seminar / conference (not jobs)
   'workshop', 'seminar', 'conference', 'symposium', 'webinar',
+  // Tender / procurement pages
+  'tender', 'tenders', 'active tenders', 'e-tender', 'rate contract', 'quotation',
+  'procurement', 'purchase', 'bioreactor', 'cell processing system',
+  'equipment', 'supply of',
+  // Events / news / committee / admin pages (not vacancies)
+  'events calendar', 'events by week', 'event-details',
+  'building committee', 'technical group', 'technical-group',
+  'dbt-ra program', '-ra program', 'ra program', 'ra scheme',
+  // Generic announcements / news (not recruitment)
+  'announcements', 'news page', '| news',
+  // Coordinator / warden / non-science roles
+  'coordinator and warden', 'warden',
 ]
 
 // ─── Post-March 2026 date gate ─────────────────────────────────────────────
@@ -627,6 +639,13 @@ const NOISE_SQL_PATTERNS = [
   '%workshop%', '%seminar%', '%conference%', '%symposium%',
   // Aggregator archive sites
   '%biotecnika.org%', '%pharmatutor.org%',
+  // Tender / event / announcement / committee URL paths
+  '%/tenders%', '%/tender%', '%active_tenders%',
+  '%/events/%', '%/event-%', '%eventsbyweek%',
+  '%/announcements%', '%/announcement%',
+  '%/news/%', '%/news?%',
+  '%building-committee%', '%technical-group%',
+  '%/people/%', '%/People/%', '%/faculty%',
 ]
 
 // Regex patterns for noise that ILIKE can't easily express (run in JS, not SQL)
