@@ -41,6 +41,10 @@ const POOJA_INDIA_PORTALS: MonitorPortal[] = [
     query: 'intitle:(scientist OR "research officer" OR recruitment OR vacancy OR advertisement) 2026 (site:icmr.nic.in OR site:recruitment.icmr.org.in)',
   },
   {
+    id: 'icmr-institutes', name: 'ICMR Institutes (NIMR/NIOH/NICED/NIV/NARI)', category: 'central-govt',
+    query: 'intitle:(scientist OR "scientific officer" OR "research officer" OR recruitment OR vacancy OR advertisement OR opening) 2026 (site:nimr.org.in OR site:nioh.res.in OR site:niced.org.in OR site:icmr-niv.in OR site:nari.res.in)',
+  },
+  {
     id: 'csir', name: 'CSIR HQ', category: 'central-govt',
     // -intitle:results blocks the noisy "Recruitments & Results" index page
     query: 'intitle:(scientist OR "senior scientist" OR recruitment OR vacancy OR advertisement) -intitle:results -intitle:career 2026 (site:csir.res.in OR site:csirhrdg.res.in)',
@@ -74,7 +78,15 @@ const POOJA_INDIA_PORTALS: MonitorPortal[] = [
   },
   {
     id: 'icar', name: 'ICAR HQ', category: 'central-govt',
-    query: 'intitle:(scientist OR ARS OR "agricultural research" OR recruitment OR vacancy OR advertisement) 2026 site:icar.org.in',
+    query: 'intitle:(scientist OR ARS OR "agricultural research" OR recruitment OR vacancy OR advertisement) -intitle:"science fund" -intitle:"career advancement" 2026 site:icar.org.in',
+  },
+  {
+    id: 'icar-institutes', name: 'ICAR Institutes (IARI/NBPGR/CIFE/CMFRI)', category: 'central-govt',
+    query: 'intitle:(scientist OR "principal scientist" OR "senior scientist" OR recruitment OR vacancy OR advertisement OR opening) 2026 (site:iari.res.in OR site:nbpgr.ernet.in OR site:cife.edu.in OR site:cmfri.org.in)',
+  },
+  {
+    id: 'zsi', name: 'Zoological Survey of India', category: 'central-govt',
+    query: 'intitle:(scientist OR "scientific officer" OR recruitment OR vacancy OR advertisement OR opening) 2026 site:zsi.gov.in',
   },
   {
     id: 'aiims-delhi', name: 'AIIMS Delhi', category: 'central-govt',
@@ -93,6 +105,18 @@ const POOJA_INDIA_PORTALS: MonitorPortal[] = [
     id: 'rgcb', name: 'RGCB Thiruvananthapuram', category: 'central-govt',
     // -intitle:admission -intitle:admissions blocks "PhD ADMISSIONS – January 2026" pages
     query: 'intitle:(scientist OR faculty OR recruitment OR vacancy OR opening OR advertisement) -intitle:admission -intitle:admissions 2026 site:rgcb.res.in',
+  },
+  {
+    id: 'bric', name: 'BRIC (DBT Institutes)', category: 'central-govt',
+    query: 'intitle:(scientist OR faculty OR "scientific officer" OR recruitment OR vacancy OR advertisement OR opening) 2026 site:bric.res.in',
+  },
+  {
+    id: 'ncdc', name: 'NCDC Delhi', category: 'central-govt',
+    query: 'intitle:(scientist OR "research officer" OR "scientific officer" OR recruitment OR vacancy OR advertisement) 2026 site:ncdc.gov.in',
+  },
+  {
+    id: 'wii', name: 'Wildlife Institute of India', category: 'central-govt',
+    query: 'intitle:(scientist OR "wildlife biologist" OR recruitment OR vacancy OR advertisement OR opening) -intitle:"tiger cell" -intitle:events -intitle:forthcoming 2026 site:wii.gov.in',
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -117,6 +141,30 @@ const POOJA_INDIA_PORTALS: MonitorPortal[] = [
   {
     id: 'csir-iicb', name: 'CSIR-IICB Kolkata', category: 'central-govt',
     query: 'intitle:(scientist OR faculty OR recruitment OR vacancy OR opening OR position OR advertisement) 2026 site:iicb.res.in',
+  },
+  {
+    id: 'csir-iict', name: 'CSIR-IICT Hyderabad', category: 'central-govt',
+    query: 'intitle:(scientist OR "scientific officer" OR recruitment OR vacancy OR opening OR advertisement) 2026 site:iictindia.org',
+  },
+  {
+    id: 'csir-iitr', name: 'CSIR-IITR Lucknow', category: 'central-govt',
+    query: 'intitle:(scientist OR "scientific officer" OR recruitment OR vacancy OR opening OR advertisement) 2026 site:iitr.res.in',
+  },
+  {
+    id: 'csir-nio', name: 'CSIR-NIO Goa', category: 'central-govt',
+    query: 'intitle:(scientist OR "scientific officer" OR recruitment OR vacancy OR opening OR advertisement) 2026 site:nio.org',
+  },
+  {
+    id: 'csir-nbri', name: 'CSIR-NBRI Lucknow', category: 'central-govt',
+    query: 'intitle:(scientist OR "scientific officer" OR recruitment OR vacancy OR opening OR advertisement) 2026 site:nbri.res.in',
+  },
+  {
+    id: 'csir-neeri', name: 'CSIR-NEERI Nagpur', category: 'central-govt',
+    query: 'intitle:(scientist OR "scientific officer" OR recruitment OR vacancy OR opening OR advertisement) 2026 site:neeri.res.in',
+  },
+  {
+    id: 'csir-cftri', name: 'CSIR-CFTRI Mysuru', category: 'central-govt',
+    query: 'intitle:(scientist OR "scientific officer" OR recruitment OR vacancy OR opening OR advertisement) 2026 site:cftri.com',
   },
   {
     id: 'csir-ihbt', name: 'CSIR-IHBT Palampur', category: 'central-govt',
@@ -236,23 +284,23 @@ const POOJA_INDIA_PORTALS: MonitorPortal[] = [
   },
   {
     id: 'sgpgims', name: 'SGPGIMS Lucknow', category: 'central-govt',
-    query: 'intitle:(scientist OR faculty OR "research officer" OR recruitment OR vacancy OR opening OR advertisement) 2026 (site:sgpgims.org.in OR site:sgpgi.ac.in)',
+    // -intitle:events -intitle:nams -intitle:forthcoming blocks non-job pages
+    query: 'intitle:(scientist OR faculty OR "research officer" OR recruitment OR vacancy OR opening OR advertisement) -intitle:events -intitle:nams -intitle:forthcoming 2026 (site:sgpgims.org.in OR site:sgpgi.ac.in)',
   },
   {
     id: 'actrec', name: 'ACTREC Mumbai', category: 'central-govt',
-    query: 'intitle:(scientist OR "research officer" OR faculty OR recruitment OR vacancy OR opening OR advertisement) 2026 site:actrec.gov.in',
+    // -intitle:tender -intitle:procurement -intitle:"cell processing" blocks equipment/procurement noise
+    query: 'intitle:(scientist OR "research officer" OR faculty OR recruitment OR vacancy OR opening OR advertisement) -intitle:tender -intitle:procurement -intitle:"cell processing" 2026 site:actrec.gov.in',
   },
   {
     id: 'icgeb', name: 'ICGEB Delhi', category: 'central-govt',
-    query: 'intitle:(scientist OR faculty OR researcher OR recruitment OR vacancy OR opening OR position) India 2026 site:icgeb.org',
+    // -intitle:fellowship -intitle:fellowships -intitle:discovery blocks fellowship pages and news articles
+    query: 'intitle:(scientist OR faculty OR recruitment OR vacancy OR opening OR position OR advertisement) -intitle:fellowship -intitle:fellowships -intitle:discovery 2026 site:icgeb.org',
   },
   {
-    id: 'zsi-bsi', name: 'ZSI / BSI', category: 'central-govt',
-    query: 'intitle:(scientist OR "zoological survey" OR "botanical survey" OR recruitment OR vacancy OR advertisement) 2026 (site:zsi.gov.in OR site:bsi.gov.in)',
-  },
-  {
-    id: 'wii', name: 'WII Dehradun', category: 'central-govt',
-    query: 'intitle:(scientist OR faculty OR researcher OR recruitment OR vacancy OR opening OR advertisement) 2026 site:wii.gov.in',
+    id: 'bsi', name: 'Botanical Survey of India', category: 'central-govt',
+    // Require recruitment/vacancy in title — blocks garden/regional centre/scientist-profile pages
+    query: 'intitle:(recruitment OR vacancy OR advertisement OR opening) (scientist OR "botanical survey" OR "research officer") 2026 site:bsi.gov.in',
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -498,13 +546,26 @@ const POOJA_INDIA_PORTALS: MonitorPortal[] = [
 // ─── Relevance Scoring ────────────────────────────────────────────────────────
 
 const CORE_KEYWORDS = [
-  'scientist', 'faculty', 'professor', 'researcher', 'scientific officer',
-  'research scientist', 'research associate', 'scientist-b', 'scientist-c',
+  'scientist', 'faculty', 'professor', 'scientific officer',
+  'research scientist', 'scientist-b', 'scientist-c',
   'scientist-d', 'scientist-e', 'scientist-f', 'scientist-g',
   'assistant professor', 'associate professor', 'principal scientist',
   'senior scientist', 'chief scientist', 'research officer',
-  'principal investigator', 'ars scientist', 'emeritus scientist',
-  'staff scientist', 'project scientist', 'project research scientist',
+  'ars scientist', 'emeritus scientist', 'staff scientist',
+]
+
+// ─── Temporary / contractual position terms (title-only filter) ───────────────
+// Applied only to job title (not snippet) so legitimate permanent jobs that
+// mention RA/postdoc in their description still pass the score check.
+const TEMP_POSITION_TERMS = [
+  'research associate', 'project associate', 'project assistant',
+  'project scientist', 'project research scientist',
+  'junior research fellow', 'senior research fellow', 'research fellow',
+  'jrf', 'srf', 'postdoctoral', 'post-doctoral', 'post doctoral',
+  'young scientist', 'national post doctoral', 'npdf',
+  'on contract', 'contractual basis', 'fixed term',
+  'externally funded project', 'project staff',
+  'walk-in', 'walk in interview',
 ]
 const BOOST_KEYWORDS = [
   'life science', 'biology', 'molecular', 'cardiovascular', 'biomedical',
@@ -725,6 +786,10 @@ const NOISE_TITLE_REGEX = [
 function scoreJob(title: string, snippet: string): number {
   // Reject individual person-name titles (faculty profiles returned by Google)
   if (NOISE_TITLE_REGEX.some(re => re.test(title))) return -1
+  // Reject temporary/contractual positions by title only (not snippet — permanent
+  // jobs often mention RA/postdoc experience in description)
+  const titleLower = title.toLowerCase()
+  if (TEMP_POSITION_TERMS.some(kw => titleLower.includes(kw))) return -1
   const text = `${title} ${snippet}`.toLowerCase()
   if (HARD_FILTER_TERMS.some(kw => text.includes(kw))) return -1
   let score = 0
@@ -918,6 +983,23 @@ async function runScan(apiKey: string): Promise<void> {
         OR LOWER(title) LIKE '%spotlight%'
         OR LOWER(title) LIKE '%purchase/work/contract%'
         OR LOWER(title) LIKE '%[pdf]%' OR LOWER(title) LIKE '%[doc]%'
+        -- Temporary / contractual positions (permanent-only portal)
+        OR LOWER(title) LIKE '%research associate%'
+        OR LOWER(title) LIKE '%project associate%'
+        OR LOWER(title) LIKE '%project assistant%'
+        OR LOWER(title) LIKE '%project scientist%'
+        OR LOWER(title) LIKE '%project research scientist%'
+        OR LOWER(title) LIKE '%junior research fellow%'
+        OR LOWER(title) LIKE '%senior research fellow%'
+        OR LOWER(title) LIKE '%research fellow%'
+        OR LOWER(title) LIKE '% jrf %' OR LOWER(title) LIKE '%jrf)'
+        OR LOWER(title) LIKE '% srf %' OR LOWER(title) LIKE '%srf)'
+        OR LOWER(title) LIKE '%postdoctoral%' OR LOWER(title) LIKE '%post-doctoral%'
+        OR LOWER(title) LIKE '%post doctoral%'
+        OR LOWER(title) LIKE '%young scientist%'
+        OR LOWER(title) LIKE '%national post doctoral%'
+        OR LOWER(title) LIKE '%on contract%' OR LOWER(title) LIKE '%contractual basis%'
+        OR LOWER(title) LIKE '%fixed term%' OR LOWER(title) LIKE '%externally funded%'
         OR title ~* '^\s*(Dr\.|Prof\.|Professor |Mr\.|Ms\.|Mrs\.)'
         -- URL: aggregator archives
         OR LOWER(apply_url) LIKE '%biotecnika.org%'
@@ -1046,6 +1128,23 @@ router.post('/cleanup', async (_req: Request, res: Response) => {
         OR LOWER(title) LIKE '%spotlight%'
         OR LOWER(title) LIKE '%purchase/work/contract%'
         OR LOWER(title) LIKE '%[pdf]%' OR LOWER(title) LIKE '%[doc]%'
+        -- Temporary / contractual positions (permanent-only portal)
+        OR LOWER(title) LIKE '%research associate%'
+        OR LOWER(title) LIKE '%project associate%'
+        OR LOWER(title) LIKE '%project assistant%'
+        OR LOWER(title) LIKE '%project scientist%'
+        OR LOWER(title) LIKE '%project research scientist%'
+        OR LOWER(title) LIKE '%junior research fellow%'
+        OR LOWER(title) LIKE '%senior research fellow%'
+        OR LOWER(title) LIKE '%research fellow%'
+        OR LOWER(title) LIKE '% jrf %' OR LOWER(title) LIKE '%jrf)'
+        OR LOWER(title) LIKE '% srf %' OR LOWER(title) LIKE '%srf)'
+        OR LOWER(title) LIKE '%postdoctoral%' OR LOWER(title) LIKE '%post-doctoral%'
+        OR LOWER(title) LIKE '%post doctoral%'
+        OR LOWER(title) LIKE '%young scientist%'
+        OR LOWER(title) LIKE '%national post doctoral%'
+        OR LOWER(title) LIKE '%on contract%' OR LOWER(title) LIKE '%contractual basis%'
+        OR LOWER(title) LIKE '%fixed term%' OR LOWER(title) LIKE '%externally funded%'
         -- Title: person names (Dr./Prof. prefix = faculty profile)
         OR title ~* '^\s*(Dr\.|Prof\.|Professor |Mr\.|Ms\.|Mrs\.)'
         -- URL: aggregator archives
