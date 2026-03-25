@@ -560,6 +560,24 @@ const HARD_FILTER_TERMS = [
   'apply now',
   // Faculty profile / directory pages (JNU "Welcome to..." pattern, BHU dept listings)
   'welcome to jawaharlal', 'welcome to banaras',
+  // Individual faculty profile pages returned by Google (name-only titles)
+  // These contain "faculty/scientist" in snippet but are NOT job postings
+  'faculty members', 'faculty member', 'our faculty', 'meet the faculty',
+  'faculty profile', 'faculty directory', 'faculty list',
+  // Department info pages (not a vacancy)
+  'department of biosciences', 'department of biochemical',
+  'department of biology', 'department of biotechnology',
+  'department of molecular', 'department of life science',
+  'school of biology', 'school of biosciences', 'school of life science',
+  'school of biological', 'division of biology',
+  // Entry-level / archive aggregator noise
+  'freshers', 'fresher job', 'fresher vacancy', 'fresher opening',
+  // Old-year dated archive content
+  'recruitment 2025', 'recruitment 2024', 'recruitment 2023',
+  'vacancy 2025', 'vacancy 2024', 'vacancies 2024',
+  'jobs 2025', 'jobs 2024',
+  // Workshop / seminar / conference (not jobs)
+  'workshop', 'seminar', 'conference', 'symposium', 'webinar',
 ]
 
 // ─── Post-March 2026 date gate ─────────────────────────────────────────────
@@ -592,9 +610,34 @@ const NOISE_SQL_PATTERNS = [
   '%welcome to jawaharlal%',
   '%welcome to banaras%',
   '% | welcome to %',
+  // Faculty directory / department info pages
+  '%faculty members%', '%faculty member%', '%our faculty%', '%meet the faculty%',
+  '%faculty profile%', '%faculty directory%', '%faculty list%',
+  '%department of biosciences%', '%department of biochemical%',
+  '%department of biology%', '%department of biotechnology%',
+  '%department of molecular%', '%department of life science%',
+  '%school of biology%', '%school of biosciences%', '%school of life science%',
+  '%school of biological%', '%division of biology%',
+  // Entry-level / archive content
+  '%freshers%', '%fresher job%', '%fresher vacancy%',
+  '%recruitment 2025%', '%recruitment 2024%', '%recruitment 2023%',
+  '%vacancy 2025%', '%vacancy 2024%',
+  '%jobs 2025%', '%jobs 2024%',
+  // Event noise
+  '%workshop%', '%seminar%', '%conference%', '%symposium%',
+  // Aggregator archive sites
+  '%biotecnika.org%', '%pharmatutor.org%',
+]
+
+// Regex patterns for noise that ILIKE can't easily express (run in JS, not SQL)
+// Catches individual person-name titles like "Dr. Sabyasachi Rakshit" or "Prof. Sangram Sahoo"
+const NOISE_TITLE_REGEX = [
+  /^\s*(dr\.|prof\.|professor |mr\.|ms\.|mrs\.)/i,
 ]
 
 function scoreJob(title: string, snippet: string): number {
+  // Reject individual person-name titles (faculty profiles returned by Google)
+  if (NOISE_TITLE_REGEX.some(re => re.test(title))) return -1
   const text = `${title} ${snippet}`.toLowerCase()
   if (HARD_FILTER_TERMS.some(kw => text.includes(kw))) return -1
   let score = 0
@@ -734,12 +777,16 @@ async function runScan(apiKey: string): Promise<void> {
 
     // ── Noise sweep: delete known-bad title patterns that slipped past scoring ──
     // Runs on every scan so records from older (looser) scans are retroactively cleaned.
-    const noiseWhere = NOISE_SQL_PATTERNS
-      .map((_, i) => `LOWER(title) LIKE $${i + 1}`)
-      .join(' OR ')
+    const titlePatterns = NOISE_SQL_PATTERNS.filter(p => !p.includes('://') && !p.includes('.org') && !p.includes('.com'))
+    const urlPatterns   = ['%biotecnika.org%', '%pharmatutor.org%', '%biotecharticles.com%', '%.pdf']
+
+    const titleWhere = titlePatterns.map((_, i) => `LOWER(title) LIKE $${i + 1}`).join(' OR ')
+    const urlWhere   = urlPatterns.map((_, i) => `LOWER(apply_url) LIKE $${titlePatterns.length + i + 1}`).join(' OR ')
+
     const noiseDel = await client.query(
-      `DELETE FROM pooja_india_monitor_jobs WHERE ${noiseWhere}`,
-      NOISE_SQL_PATTERNS
+      `DELETE FROM pooja_india_monitor_jobs WHERE (${titleWhere}) OR (${urlWhere})
+       OR title ~* '^\\s*(Dr\\.|Prof\\.|Professor |Mr\\.|Ms\\.|Mrs\\.)'`,
+      [...titlePatterns, ...urlPatterns]
     )
     if (noiseDel.rowCount && noiseDel.rowCount > 0) {
       console.log(`[PoojaIndia] Noise sweep removed ${noiseDel.rowCount} records`)
@@ -757,6 +804,30 @@ async function runScan(apiKey: string): Promise<void> {
     client.release()
   }
 }
+
+// ─── POST /api/monitor/pooja-india/cleanup ────────────────────────────────────
+// Immediately runs the full noise sweep against existing DB records.
+// Call this right after a deploy to retroactively clean old dirty data.
+
+router.post('/cleanup', async (_req: Request, res: Response) => {
+  try {
+    const titlePatterns = NOISE_SQL_PATTERNS.filter(p => !p.includes('://') && !p.includes('.org') && !p.includes('.com'))
+    const urlPatterns   = ['%biotecnika.org%', '%pharmatutor.org%', '%biotecharticles.com%', '%.pdf']
+
+    const titleWhere = titlePatterns.map((_, i) => `LOWER(title) LIKE $${i + 1}`).join(' OR ')
+    const urlWhere   = urlPatterns.map((_, i) => `LOWER(apply_url) LIKE $${titlePatterns.length + i + 1}`).join(' OR ')
+
+    const result = await pool.query(
+      `DELETE FROM pooja_india_monitor_jobs WHERE (${titleWhere}) OR (${urlWhere})
+       OR title ~* '^\\s*(Dr\\.|Prof\\.|Professor |Mr\\.|Ms\\.|Mrs\\.)'
+       RETURNING id`,
+      [...titlePatterns, ...urlPatterns]
+    )
+    res.json({ deleted: result.rows.length, message: `Deleted ${result.rows.length} noisy records from pooja_india_monitor_jobs` })
+  } catch (err: any) {
+    res.status(500).json({ error: err.message })
+  }
+})
 
 // ─── DELETE /api/monitor/pooja-india/jobs/:id  (dismiss — applied / done) ────
 
