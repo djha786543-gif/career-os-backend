@@ -586,10 +586,18 @@ const HARD_FILTER_TERMS = [
   'events calendar', 'events by week', 'event-details',
   'building committee', 'technical group', 'technical-group',
   'dbt-ra program', '-ra program', 'ra program', 'ra scheme',
-  // Generic announcements / news (not recruitment)
-  'announcements', 'news page', '| news',
+  // Generic announcements / news (not recruitment) — both singular and plural
+  'announcement', 'announcements', 'news page', '| news',
   // Coordinator / warden / non-science roles
   'coordinator and warden', 'warden',
+  // Complaints / HR policy pages
+  'sexual harassment', 'handling of complaints',
+  // Staff / people directory pages (not vacancies)
+  'r&d staff', 'meet our team', 'staff directory',
+  // Fellowships (not permanent scientist posts)
+  'fulbright', 'nehru fellowship', 'fulbright-nehru',
+  // Research council / committee governance pages
+  'research council of',
 ]
 
 // ─── Post-March 2026 date gate ─────────────────────────────────────────────
@@ -646,6 +654,10 @@ const NOISE_SQL_PATTERNS = [
   '%/news/%', '%/news?%',
   '%building-committee%', '%technical-group%',
   '%/people/%', '%/People/%', '%/faculty%',
+  // Faculty list pages (BHU and similar)
+  '%/FacultyList%', '%facultylist%',
+  // Staff directory pages
+  '%/staff/%', '%/rd-staff%',
 ]
 
 // Regex patterns for noise that ILIKE can't easily express (run in JS, not SQL)
@@ -825,9 +837,14 @@ async function runScan(apiKey: string): Promise<void> {
         OR LOWER(title) LIKE '%bioreactor%' OR LOWER(title) LIKE '%events calendar%'
         OR LOWER(title) LIKE '%building committee%' OR LOWER(title) LIKE '%technical group%'
         OR LOWER(title) LIKE '%technical-group%' OR LOWER(title) LIKE '%dbt-ra program%'
-        OR LOWER(title) LIKE '%announcements%' OR LOWER(title) LIKE '%warden%'
+        OR LOWER(title) LIKE '%announcement%' OR LOWER(title) LIKE '%announcements%'
+        OR LOWER(title) LIKE '%warden%'
         OR LOWER(title) LIKE '%merit list%' OR LOWER(title) LIKE '%answer key%'
         OR LOWER(title) LIKE '%news - %' OR LOWER(title) LIKE '%| news%'
+        OR LOWER(title) LIKE '%sexual harassment%' OR LOWER(title) LIKE '%handling of complaints%'
+        OR LOWER(title) LIKE '%r&d staff%' OR LOWER(title) LIKE '%staff directory%'
+        OR LOWER(title) LIKE '%fulbright%' OR LOWER(title) LIKE '%nehru fellowship%'
+        OR LOWER(title) LIKE '%research council of%'
         OR title ~* '^\s*(Dr\.|Prof\.|Professor |Mr\.|Ms\.|Mrs\.)'
         OR LOWER(apply_url) LIKE '%biotecnika.org%'
         OR LOWER(apply_url) LIKE '%pharmatutor.org%'
@@ -835,10 +852,14 @@ async function runScan(apiKey: string): Promise<void> {
         OR LOWER(apply_url) LIKE '%.pdf'
         OR LOWER(apply_url) LIKE '%/tenders%' OR LOWER(apply_url) LIKE '%active_tenders%'
         OR LOWER(apply_url) LIKE '%/events/%' OR LOWER(apply_url) LIKE '%/event-%'
+        OR LOWER(apply_url) LIKE '%eventsbyweek%'
         OR LOWER(apply_url) LIKE '%/announcements%' OR LOWER(apply_url) LIKE '%/announcement%'
         OR LOWER(apply_url) LIKE '%/news/%' OR LOWER(apply_url) LIKE '%building-committee%'
         OR LOWER(apply_url) LIKE '%technical-group%' OR LOWER(apply_url) LIKE '%/people/%'
-        OR LOWER(apply_url) LIKE '%/faculty%' OR LOWER(apply_url) LIKE '%/seminar%'
+        OR LOWER(apply_url) LIKE '%/faculty%' OR LOWER(apply_url) LIKE '%/FacultyList%'
+        OR LOWER(apply_url) LIKE '%facultylist%'
+        OR LOWER(apply_url) LIKE '%/staff/%' OR LOWER(apply_url) LIKE '%/rd-staff%'
+        OR LOWER(apply_url) LIKE '%/seminar%'
         OR LOWER(apply_url) LIKE '%/workshop%'
     `)
     if (noiseDel.rowCount && noiseDel.rowCount > 0) {
@@ -896,12 +917,17 @@ router.post('/cleanup', async (_req: Request, res: Response) => {
         OR LOWER(title) LIKE '%events calendar%' OR LOWER(title) LIKE '%events by week%'
         OR LOWER(title) LIKE '%building committee%' OR LOWER(title) LIKE '%technical group%'
         OR LOWER(title) LIKE '%technical-group%' OR LOWER(title) LIKE '%dbt-ra program%'
-        OR LOWER(title) LIKE '%announcements%'
+        OR LOWER(title) LIKE '%announcement%' OR LOWER(title) LIKE '%announcements%'
         OR LOWER(title) LIKE '%warden%' OR LOWER(title) LIKE '%coordinator and warden%'
         OR LOWER(title) LIKE '%merit list%' OR LOWER(title) LIKE '%answer key%'
         OR LOWER(title) LIKE '%written result%' OR LOWER(title) LIKE '%rank list%'
         OR LOWER(title) LIKE '%news - centre%' OR LOWER(title) LIKE '%news - %'
         OR LOWER(title) LIKE '%| news%'
+        OR LOWER(title) LIKE '%sexual harassment%'
+        OR LOWER(title) LIKE '%handling of complaints%'
+        OR LOWER(title) LIKE '%r&d staff%' OR LOWER(title) LIKE '%staff directory%'
+        OR LOWER(title) LIKE '%fulbright%' OR LOWER(title) LIKE '%nehru fellowship%'
+        OR LOWER(title) LIKE '%research council of%'
         -- Title: person names (Dr./Prof. prefix = faculty profile)
         OR title ~* '^\s*(Dr\.|Prof\.|Professor |Mr\.|Ms\.|Mrs\.)'
         -- URL: aggregator archives
@@ -922,6 +948,10 @@ router.post('/cleanup', async (_req: Request, res: Response) => {
         OR LOWER(apply_url) LIKE '%technical-group%'
         OR LOWER(apply_url) LIKE '%/people/%'
         OR LOWER(apply_url) LIKE '%/faculty%'
+        OR LOWER(apply_url) LIKE '%/FacultyList%'
+        OR LOWER(apply_url) LIKE '%facultylist%'
+        OR LOWER(apply_url) LIKE '%/staff/%'
+        OR LOWER(apply_url) LIKE '%/rd-staff%'
         OR LOWER(apply_url) LIKE '%/seminar%'
         OR LOWER(apply_url) LIKE '%/workshop%'
       RETURNING id
