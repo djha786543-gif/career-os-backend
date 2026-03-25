@@ -49,6 +49,17 @@ const NOISE_FILTER_TERMS = [
   'applications are invited', 'applications invited',
   // Admission notices
   'admission notice', 'admission fee', 'fee structure', 'prospectus',
+  // Faculty directory / department info pages (NOT job postings)
+  'faculty members', 'faculty member', 'our faculty', 'meet the faculty',
+  'school of biology', 'school of biosciences', 'school of life',
+  'department of biosciences', 'department of biochemical', 'department of biology',
+  'department of biotechnology', 'department of molecular',
+  // Entry-level / archive aggregator content
+  'freshers', 'fresher job', 'fresher vacancy',
+  // Generic recruitment listing pages (not a specific opening)
+  'recruitment 2025', 'recruitment 2024', 'recruitment 2023',
+  'vacancy 2025', 'vacancy 2024', 'vacancies 2025',
+  'jobs 2025', 'jobs 2024',
 ]
 
 // URL noise patterns — skip results whose URL suggests non-job content
@@ -58,6 +69,11 @@ const URL_NOISE_PATTERNS = [
   '/admissions/', '/admission/', '/exam/', '/syllabus/',
   'faculty-profile', 'staff-profile', '/people/', '/person/',
   'profile.aspx', 'profile.php', '/directory/', 'faculty-directory',
+  '/faculty/', 'faculty.html', 'faculty.php',
+  // Aggregator archive sites — not direct institute postings
+  'biotecnika.org', 'pharmatutor.org', 'biotecharticles.com',
+  'indiabioscience.org/blogs', 'indiabioscience.org/articles',
+  'naukri.com/blog', 'shine.com/articles',
 ]
 
 // Tier 1 orgs for +1 suitability bonus
@@ -164,10 +180,14 @@ function passesHardFilter(title: string): boolean {
 // Noise filter: rejects event announcements, admin notices, non-science roles
 function passesNoiseFilter(title: string): boolean {
   const t = title.toLowerCase()
-  return !NOISE_FILTER_TERMS.some(term => t.includes(term))
+  if (NOISE_FILTER_TERMS.some(term => t.includes(term))) return false
+  // Reject individual person-name titles (faculty profiles returned by Google)
+  // Pattern: starts with "Dr." / "Prof." OR is a plain name (2-3 words, no job keywords)
+  if (/^(dr\.|prof\.|professor |mr\.|ms\.|mrs\.)/i.test(title.trim())) return false
+  return true
 }
 
-// URL filter: rejects PDFs, profile pages, event/notice pages
+// URL filter: rejects PDFs, profile pages, event/notice pages, aggregator archives
 function passesUrlFilter(url: string): boolean {
   if (!url) return true
   const u = url.toLowerCase()
@@ -339,8 +359,10 @@ export async function scanViaWebSearch(org: MonitorOrg): Promise<ScannedJob[]> {
       const postedDate = gj.extensions?.find((e: string) => /ago|day|week|month/i.test(e)) || 'Recent'
 
       if (!title) continue
-      if (!isRelevant(title, snippet)) continue
       if (!passesHardFilter(title)) continue
+      if (!passesNoiseFilter(title)) continue    // faculty profiles, dept pages, archives
+      if (!passesUrlFilter(link)) continue        // aggregator archives, PDF links
+      if (!isRelevant(title, snippet)) continue
       if (isAgencySpam(title, snippet)) continue
 
       // Lower suitability threshold for confirmed listings
@@ -682,6 +704,20 @@ export async function runFullScan(): Promise<void> {
         OR title ILIKE '%walk-in interview%' OR title ILIKE '%walk in interview%'
         OR title ILIKE '%admission notice%' OR title ILIKE '%admission fee%'
         OR title ILIKE '%last date extended%'
+        -- Title: faculty directory / department info pages
+        OR title ILIKE '%faculty members%' OR title ILIKE '%faculty member%'
+        OR title ILIKE '%our faculty%' OR title ILIKE '%meet the faculty%'
+        OR title ILIKE '%school of biology%' OR title ILIKE '%school of biosciences%'
+        OR title ILIKE '%department of biosciences%' OR title ILIKE '%department of biochemical%'
+        OR title ILIKE '%department of biology%' OR title ILIKE '%department of biotechnology%'
+        OR title ILIKE '%department of molecular%'
+        -- Title: entry-level / old archive content
+        OR title ILIKE '%freshers%'
+        OR title ILIKE '%recruitment 2025%' OR title ILIKE '%recruitment 2024%'
+        OR title ILIKE '%vacancy 2025%' OR title ILIKE '%vacancy 2024%'
+        OR title ILIKE '%jobs 2025%' OR title ILIKE '%jobs 2024%'
+        -- Title: individual person names (Dr./Prof. prefix = faculty profile not job)
+        OR title ~* '^\s*(Dr\.|Prof\.|Professor |Mr\.|Ms\.|Mrs\.)'
         -- URL: PDF documents
         OR apply_url ILIKE '%.pdf'
         -- URL: event / notice / profile pages
@@ -693,6 +729,11 @@ export async function runFullScan(): Promise<void> {
         OR apply_url ILIKE '%/admissions/%' OR apply_url ILIKE '%/admission/%'
         OR apply_url ILIKE '%faculty-profile%' OR apply_url ILIKE '%/people/%'
         OR apply_url ILIKE '%/directory/%' OR apply_url ILIKE '%/exam/%'
+        OR apply_url ILIKE '%/faculty/%' OR apply_url ILIKE '%faculty.html%'
+        -- URL: aggregator archive sites
+        OR apply_url ILIKE '%biotecnika.org%'
+        OR apply_url ILIKE '%pharmatutor.org%'
+        OR apply_url ILIKE '%biotecharticles.com%'
         -- Age: listings older than 30 days
         OR detected_at < NOW() - INTERVAL '30 days'
       )
