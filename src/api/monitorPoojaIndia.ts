@@ -794,19 +794,53 @@ async function runScan(apiKey: string): Promise<void> {
     }
     console.log(`[PoojaIndia] Scan complete — ${totalStored} jobs upserted`)
 
-    // ── Noise sweep: delete known-bad title patterns that slipped past scoring ──
-    // Runs on every scan so records from older (looser) scans are retroactively cleaned.
-    const titlePatterns = NOISE_SQL_PATTERNS.filter(p => !p.includes('://') && !p.includes('.org') && !p.includes('.com'))
-    const urlPatterns   = ['%biotecnika.org%', '%pharmatutor.org%', '%biotecharticles.com%', '%.pdf']
-
-    const titleWhere = titlePatterns.map((_, i) => `LOWER(title) LIKE $${i + 1}`).join(' OR ')
-    const urlWhere   = urlPatterns.map((_, i) => `LOWER(apply_url) LIKE $${titlePatterns.length + i + 1}`).join(' OR ')
-
-    const noiseDel = await client.query(
-      `DELETE FROM pooja_india_monitor_jobs WHERE (${titleWhere}) OR (${urlWhere})
-       OR title ~* '^\\s*(Dr\\.|Prof\\.|Professor |Mr\\.|Ms\\.|Mrs\\.)'`,
-      [...titlePatterns, ...urlPatterns]
-    )
+    // ── Noise sweep: delete known-bad patterns that slipped past scoring ──────
+    const noiseDel = await client.query(`
+      DELETE FROM pooja_india_monitor_jobs WHERE
+        LOWER(title) LIKE '%phd admission%' OR LOWER(title) LIKE '%phd admissions%'
+        OR LOWER(title) LIKE '%phd programme%' OR LOWER(title) LIKE '%phd program%'
+        OR LOWER(title) LIKE '%recruitments & results%' OR LOWER(title) LIKE '%recruitments and results%'
+        OR LOWER(title) LIKE '%selection list for%' OR LOWER(title) LIKE '%provisionally shortlisted%'
+        OR LOWER(title) LIKE '%fellowship programme%' OR LOWER(title) LIKE '%fellowship program%'
+        OR LOWER(title) LIKE '%post-doctoral programme%' OR LOWER(title) LIKE '%postdoctoral programme%'
+        OR LOWER(title) LIKE '%admission open%' OR LOWER(title) LIKE '%admission notice%'
+        OR LOWER(title) LIKE '%entrance exam%' OR LOWER(title) LIKE '%entrance test%'
+        OR LOWER(title) LIKE '%jobs in 2025%' OR LOWER(title) LIKE '%jobs in 2024%'
+        OR LOWER(title) LIKE '%apply now%' OR LOWER(title) LIKE '%welcome to jawaharlal%'
+        OR LOWER(title) LIKE '%faculty members%' OR LOWER(title) LIKE '%faculty member%'
+        OR LOWER(title) LIKE '%faculty profile%' OR LOWER(title) LIKE '%faculty directory%'
+        OR LOWER(title) LIKE '%faculty list%' OR LOWER(title) LIKE '%our faculty%'
+        OR LOWER(title) LIKE '%department of biosciences%' OR LOWER(title) LIKE '%department of biochemical%'
+        OR LOWER(title) LIKE '%department of biology%' OR LOWER(title) LIKE '%department of biotechnology%'
+        OR LOWER(title) LIKE '%department of molecular%' OR LOWER(title) LIKE '%department of life science%'
+        OR LOWER(title) LIKE '%school of biology%' OR LOWER(title) LIKE '%school of biosciences%'
+        OR LOWER(title) LIKE '%school of life science%' OR LOWER(title) LIKE '%school of biological%'
+        OR LOWER(title) LIKE '%freshers%'
+        OR LOWER(title) LIKE '%recruitment 2025%' OR LOWER(title) LIKE '%recruitment 2024%'
+        OR LOWER(title) LIKE '%vacancy 2025%' OR LOWER(title) LIKE '%vacancy 2024%'
+        OR LOWER(title) LIKE '%jobs 2025%' OR LOWER(title) LIKE '%jobs 2024%'
+        OR LOWER(title) LIKE '%workshop%' OR LOWER(title) LIKE '%seminar%'
+        OR LOWER(title) LIKE '%conference%' OR LOWER(title) LIKE '%symposium%'
+        OR LOWER(title) LIKE '%tender%' OR LOWER(title) LIKE '%procurement%'
+        OR LOWER(title) LIKE '%bioreactor%' OR LOWER(title) LIKE '%events calendar%'
+        OR LOWER(title) LIKE '%building committee%' OR LOWER(title) LIKE '%technical group%'
+        OR LOWER(title) LIKE '%technical-group%' OR LOWER(title) LIKE '%dbt-ra program%'
+        OR LOWER(title) LIKE '%announcements%' OR LOWER(title) LIKE '%warden%'
+        OR LOWER(title) LIKE '%merit list%' OR LOWER(title) LIKE '%answer key%'
+        OR LOWER(title) LIKE '%news - %' OR LOWER(title) LIKE '%| news%'
+        OR title ~* '^\s*(Dr\.|Prof\.|Professor |Mr\.|Ms\.|Mrs\.)'
+        OR LOWER(apply_url) LIKE '%biotecnika.org%'
+        OR LOWER(apply_url) LIKE '%pharmatutor.org%'
+        OR LOWER(apply_url) LIKE '%biotecharticles.com%'
+        OR LOWER(apply_url) LIKE '%.pdf'
+        OR LOWER(apply_url) LIKE '%/tenders%' OR LOWER(apply_url) LIKE '%active_tenders%'
+        OR LOWER(apply_url) LIKE '%/events/%' OR LOWER(apply_url) LIKE '%/event-%'
+        OR LOWER(apply_url) LIKE '%/announcements%' OR LOWER(apply_url) LIKE '%/announcement%'
+        OR LOWER(apply_url) LIKE '%/news/%' OR LOWER(apply_url) LIKE '%building-committee%'
+        OR LOWER(apply_url) LIKE '%technical-group%' OR LOWER(apply_url) LIKE '%/people/%'
+        OR LOWER(apply_url) LIKE '%/faculty%' OR LOWER(apply_url) LIKE '%/seminar%'
+        OR LOWER(apply_url) LIKE '%/workshop%'
+    `)
     if (noiseDel.rowCount && noiseDel.rowCount > 0) {
       console.log(`[PoojaIndia] Noise sweep removed ${noiseDel.rowCount} records`)
     }
@@ -830,18 +864,68 @@ async function runScan(apiKey: string): Promise<void> {
 
 router.post('/cleanup', async (_req: Request, res: Response) => {
   try {
-    const titlePatterns = NOISE_SQL_PATTERNS.filter(p => !p.includes('://') && !p.includes('.org') && !p.includes('.com'))
-    const urlPatterns   = ['%biotecnika.org%', '%pharmatutor.org%', '%biotecharticles.com%', '%.pdf']
-
-    const titleWhere = titlePatterns.map((_, i) => `LOWER(title) LIKE $${i + 1}`).join(' OR ')
-    const urlWhere   = urlPatterns.map((_, i) => `LOWER(apply_url) LIKE $${titlePatterns.length + i + 1}`).join(' OR ')
-
-    const result = await pool.query(
-      `DELETE FROM pooja_india_monitor_jobs WHERE (${titleWhere}) OR (${urlWhere})
-       OR title ~* '^\\s*(Dr\\.|Prof\\.|Professor |Mr\\.|Ms\\.|Mrs\\.)'
-       RETURNING id`,
-      [...titlePatterns, ...urlPatterns]
-    )
+    const result = await pool.query(`
+      DELETE FROM pooja_india_monitor_jobs WHERE
+        -- Title: noise patterns
+        LOWER(title) LIKE '%phd admission%' OR LOWER(title) LIKE '%phd admissions%'
+        OR LOWER(title) LIKE '%phd programme%' OR LOWER(title) LIKE '%phd program%'
+        OR LOWER(title) LIKE '%recruitments & results%' OR LOWER(title) LIKE '%recruitments and results%'
+        OR LOWER(title) LIKE '%selection list for%' OR LOWER(title) LIKE '%provisionally shortlisted%'
+        OR LOWER(title) LIKE '%fellowship programme%' OR LOWER(title) LIKE '%fellowship program%'
+        OR LOWER(title) LIKE '%post-doctoral programme%' OR LOWER(title) LIKE '%postdoctoral programme%'
+        OR LOWER(title) LIKE '%admission open%' OR LOWER(title) LIKE '%admission notice%'
+        OR LOWER(title) LIKE '%entrance exam%' OR LOWER(title) LIKE '%entrance test%'
+        OR LOWER(title) LIKE '%jobs in 2025%' OR LOWER(title) LIKE '%jobs in 2024%'
+        OR LOWER(title) LIKE '%apply now%' OR LOWER(title) LIKE '%welcome to jawaharlal%'
+        OR LOWER(title) LIKE '%faculty members%' OR LOWER(title) LIKE '%faculty member%'
+        OR LOWER(title) LIKE '%faculty profile%' OR LOWER(title) LIKE '%faculty directory%'
+        OR LOWER(title) LIKE '%faculty list%' OR LOWER(title) LIKE '%our faculty%'
+        OR LOWER(title) LIKE '%department of biosciences%' OR LOWER(title) LIKE '%department of biochemical%'
+        OR LOWER(title) LIKE '%department of biology%' OR LOWER(title) LIKE '%department of biotechnology%'
+        OR LOWER(title) LIKE '%department of molecular%' OR LOWER(title) LIKE '%department of life science%'
+        OR LOWER(title) LIKE '%school of biology%' OR LOWER(title) LIKE '%school of biosciences%'
+        OR LOWER(title) LIKE '%school of life science%' OR LOWER(title) LIKE '%school of biological%'
+        OR LOWER(title) LIKE '%freshers%'
+        OR LOWER(title) LIKE '%recruitment 2025%' OR LOWER(title) LIKE '%recruitment 2024%'
+        OR LOWER(title) LIKE '%vacancy 2025%' OR LOWER(title) LIKE '%vacancy 2024%'
+        OR LOWER(title) LIKE '%jobs 2025%' OR LOWER(title) LIKE '%jobs 2024%'
+        OR LOWER(title) LIKE '%workshop%' OR LOWER(title) LIKE '%seminar%'
+        OR LOWER(title) LIKE '%conference%' OR LOWER(title) LIKE '%symposium%'
+        OR LOWER(title) LIKE '%tender%' OR LOWER(title) LIKE '%active tenders%'
+        OR LOWER(title) LIKE '%procurement%' OR LOWER(title) LIKE '%bioreactor%'
+        OR LOWER(title) LIKE '%events calendar%' OR LOWER(title) LIKE '%events by week%'
+        OR LOWER(title) LIKE '%building committee%' OR LOWER(title) LIKE '%technical group%'
+        OR LOWER(title) LIKE '%technical-group%' OR LOWER(title) LIKE '%dbt-ra program%'
+        OR LOWER(title) LIKE '%announcements%'
+        OR LOWER(title) LIKE '%warden%' OR LOWER(title) LIKE '%coordinator and warden%'
+        OR LOWER(title) LIKE '%merit list%' OR LOWER(title) LIKE '%answer key%'
+        OR LOWER(title) LIKE '%written result%' OR LOWER(title) LIKE '%rank list%'
+        OR LOWER(title) LIKE '%news - centre%' OR LOWER(title) LIKE '%news - %'
+        OR LOWER(title) LIKE '%| news%'
+        -- Title: person names (Dr./Prof. prefix = faculty profile)
+        OR title ~* '^\s*(Dr\.|Prof\.|Professor |Mr\.|Ms\.|Mrs\.)'
+        -- URL: aggregator archives
+        OR LOWER(apply_url) LIKE '%biotecnika.org%'
+        OR LOWER(apply_url) LIKE '%pharmatutor.org%'
+        OR LOWER(apply_url) LIKE '%biotecharticles.com%'
+        OR LOWER(apply_url) LIKE '%.pdf'
+        -- URL: non-job page paths
+        OR LOWER(apply_url) LIKE '%/tenders%'
+        OR LOWER(apply_url) LIKE '%active_tenders%'
+        OR LOWER(apply_url) LIKE '%/events/%'
+        OR LOWER(apply_url) LIKE '%/event-%'
+        OR LOWER(apply_url) LIKE '%eventsbyweek%'
+        OR LOWER(apply_url) LIKE '%/announcements%'
+        OR LOWER(apply_url) LIKE '%/announcement%'
+        OR LOWER(apply_url) LIKE '%/news/%'
+        OR LOWER(apply_url) LIKE '%building-committee%'
+        OR LOWER(apply_url) LIKE '%technical-group%'
+        OR LOWER(apply_url) LIKE '%/people/%'
+        OR LOWER(apply_url) LIKE '%/faculty%'
+        OR LOWER(apply_url) LIKE '%/seminar%'
+        OR LOWER(apply_url) LIKE '%/workshop%'
+      RETURNING id
+    `)
     res.json({ deleted: result.rows.length, message: `Deleted ${result.rows.length} noisy records from pooja_india_monitor_jobs` })
   } catch (err: any) {
     res.status(500).json({ error: err.message })
