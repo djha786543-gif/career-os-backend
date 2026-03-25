@@ -218,4 +218,20 @@ router.post('/cleanup-jobs', async (_req: Request, res: Response) => {
   }
 })
 
+// POST /api/admin/purge-before-march
+// One-time purge: deactivates all monitor_jobs detected before 2026-03-01.
+router.post('/purge-before-march', async (_req: Request, res: Response) => {
+  try {
+    const result = await pool.query(`
+      UPDATE monitor_jobs SET is_active = false
+      WHERE is_active = true
+        AND detected_at < '2026-03-01'
+      RETURNING id
+    `)
+    res.json({ purged: result.rows.length, message: `Deactivated ${result.rows.length} records detected before 2026-03-01` })
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message })
+  }
+})
+
 export default router
