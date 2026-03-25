@@ -596,8 +596,39 @@ const HARD_FILTER_TERMS = [
   'r&d staff', 'meet our team', 'staff directory',
   // Fellowships (not permanent scientist posts)
   'fulbright', 'nehru fellowship', 'fulbright-nehru',
+  'postdoctoral fellowship', 'post-doctoral fellowship', 'post doctoral fellowship',
+  'smart fellowships',
   // Research council / committee governance pages
   'research council of',
+  // Event/colloquia (not jobs)
+  'colloquium',
+  // Walk-in interviews
+  'walk-in interview', 'walk-in-interview',
+  // Research / news / info pages (not vacancies)
+  'research highlights',
+  'right to information',
+  'forthcoming events',
+  'career advancement scheme',
+  'administrative and technical cadre',
+  'trial coordinator',
+  'national agricultural science fund',
+  // Training/event pages
+  'skill development program', 'skill development programme',
+  // People/team directory pages
+  'visiting faculty',
+  // Raw file title prefixes
+  '[pdf]', '[doc]',
+  // Institute homepage "Home|" pattern
+  '| welcome to',
+  // Admission portals (not jobs)
+  'admission portal',
+  'admissions 2026', 'admissions 2027',
+  // News/spotlight pages
+  'spotlight',
+  // Notification index/paginated listing pages (not specific vacancies)
+  'notification?page',
+  // Purchase / procurement orders
+  'purchase/work/contract',
 ]
 
 // ─── Post-March 2026 date gate ─────────────────────────────────────────────
@@ -658,6 +689,31 @@ const NOISE_SQL_PATTERNS = [
   '%/FacultyList%', '%facultylist%',
   // Staff directory pages
   '%/staff/%', '%/rd-staff%',
+  // Colloquia / events (generic /events path)
+  '%/events%',
+  // Walk-in / fellowship titles
+  '%walk-in%', '%fellowship%',
+  // Research highlights / news / info pages
+  '%research highlights%', '%right to information%',
+  '%forthcoming events%', '%career advancement scheme%',
+  '%trial coordinator%', '%visiting faculty%',
+  '%skill development%', '%administrative and technical cadre%',
+  '%national agricultural science fund%',
+  '%admission portal%', '%admissions 2026%', '%admissions 2027%',
+  '%spotlight%', '%purchase/work/contract%', '%colloquium%',
+  '%[pdf]%', '%[doc]%',
+  // Additional URL patterns for institute-specific noise
+  '%/happenings%', '%/home/allnews%', '%/home/researchinnovations%',
+  '%/home/intellectualproperty%', '%/rc-page%', '%/rc-whats-new%',
+  '%garden-page%', '%/research-highlights%', '%/infra.aspx%',
+  '%/purch_ord%', '%employeeprofile%', '%/phd-program/%',
+  '%/forthcominginterviews%', '%/forthcomarchive%',
+  '%/results?%', '%/syllabus%', '%/bulletins%',
+  '%/notice-board%', '%/old-question-paper%', '%/marks-information%',
+  '%questionpaper%', '%newseventdetail%', '%/notification?page%',
+  '%cepqip.iitd.ac.in%', '%/~%',
+  '%news.ncbs.res.in%', '%/admissions/%', '%/admissions?%',
+  '%.ashx%', '%.doc',
 ]
 
 // Regex patterns for noise that ILIKE can't easily express (run in JS, not SQL)
@@ -845,22 +901,67 @@ async function runScan(apiKey: string): Promise<void> {
         OR LOWER(title) LIKE '%r&d staff%' OR LOWER(title) LIKE '%staff directory%'
         OR LOWER(title) LIKE '%fulbright%' OR LOWER(title) LIKE '%nehru fellowship%'
         OR LOWER(title) LIKE '%research council of%'
+        OR LOWER(title) LIKE '%fellowship%'
+        OR LOWER(title) LIKE '%colloquium%'
+        OR LOWER(title) LIKE '%walk-in%'
+        OR LOWER(title) LIKE '%research highlights%'
+        OR LOWER(title) LIKE '%right to information%'
+        OR LOWER(title) LIKE '%forthcoming events%'
+        OR LOWER(title) LIKE '%career advancement scheme%'
+        OR LOWER(title) LIKE '%trial coordinator%'
+        OR LOWER(title) LIKE '%visiting faculty%'
+        OR LOWER(title) LIKE '%skill development%'
+        OR LOWER(title) LIKE '%administrative and technical cadre%'
+        OR LOWER(title) LIKE '%national agricultural science fund%'
+        OR LOWER(title) LIKE '%admission portal%'
+        OR LOWER(title) LIKE '%admissions 2026%' OR LOWER(title) LIKE '%admissions 2027%'
+        OR LOWER(title) LIKE '%spotlight%'
+        OR LOWER(title) LIKE '%purchase/work/contract%'
+        OR LOWER(title) LIKE '%[pdf]%' OR LOWER(title) LIKE '%[doc]%'
         OR title ~* '^\s*(Dr\.|Prof\.|Professor |Mr\.|Ms\.|Mrs\.)'
+        -- URL: aggregator archives
         OR LOWER(apply_url) LIKE '%biotecnika.org%'
         OR LOWER(apply_url) LIKE '%pharmatutor.org%'
         OR LOWER(apply_url) LIKE '%biotecharticles.com%'
         OR LOWER(apply_url) LIKE '%.pdf'
+        OR LOWER(apply_url) LIKE '%.ashx'
+        OR LOWER(apply_url) LIKE '%.doc'
+        -- URL: non-job section paths
         OR LOWER(apply_url) LIKE '%/tenders%' OR LOWER(apply_url) LIKE '%active_tenders%'
-        OR LOWER(apply_url) LIKE '%/events/%' OR LOWER(apply_url) LIKE '%/event-%'
-        OR LOWER(apply_url) LIKE '%eventsbyweek%'
+        OR LOWER(apply_url) LIKE '%/events%'
+        OR LOWER(apply_url) LIKE '%/event-%' OR LOWER(apply_url) LIKE '%eventsbyweek%'
         OR LOWER(apply_url) LIKE '%/announcements%' OR LOWER(apply_url) LIKE '%/announcement%'
         OR LOWER(apply_url) LIKE '%/news/%' OR LOWER(apply_url) LIKE '%building-committee%'
         OR LOWER(apply_url) LIKE '%technical-group%' OR LOWER(apply_url) LIKE '%/people/%'
-        OR LOWER(apply_url) LIKE '%/faculty%' OR LOWER(apply_url) LIKE '%/FacultyList%'
-        OR LOWER(apply_url) LIKE '%facultylist%'
+        OR LOWER(apply_url) LIKE '%/faculty%'
+        OR LOWER(apply_url) LIKE '%/facultylist%'
         OR LOWER(apply_url) LIKE '%/staff/%' OR LOWER(apply_url) LIKE '%/rd-staff%'
-        OR LOWER(apply_url) LIKE '%/seminar%'
-        OR LOWER(apply_url) LIKE '%/workshop%'
+        OR LOWER(apply_url) LIKE '%/seminar%' OR LOWER(apply_url) LIKE '%/workshop%'
+        OR LOWER(apply_url) LIKE '%/happenings%'
+        OR LOWER(apply_url) LIKE '%/home/allnews%'
+        OR LOWER(apply_url) LIKE '%/home/researchinnovations%'
+        OR LOWER(apply_url) LIKE '%/home/intellectualproperty%'
+        OR LOWER(apply_url) LIKE '%/rc-page%' OR LOWER(apply_url) LIKE '%/rc-whats-new%'
+        OR LOWER(apply_url) LIKE '%garden-page%'
+        OR LOWER(apply_url) LIKE '%/research-highlights%'
+        OR LOWER(apply_url) LIKE '%/infra.aspx%' OR LOWER(apply_url) LIKE '%/purch_ord%'
+        OR LOWER(apply_url) LIKE '%employeeprofile%'
+        OR LOWER(apply_url) LIKE '%/phd-program/%'
+        OR LOWER(apply_url) LIKE '%/forthcominginterviews%'
+        OR LOWER(apply_url) LIKE '%/forthcomarchive%'
+        OR LOWER(apply_url) LIKE '%/results?%'
+        OR LOWER(apply_url) LIKE '%/syllabus%' OR LOWER(apply_url) LIKE '%/bulletins%'
+        OR LOWER(apply_url) LIKE '%/notice-board%'
+        OR LOWER(apply_url) LIKE '%/old-question-paper%'
+        OR LOWER(apply_url) LIKE '%/marks-information%'
+        OR LOWER(apply_url) LIKE '%questionpaper%'
+        OR LOWER(apply_url) LIKE '%newseventdetail%'
+        OR LOWER(apply_url) LIKE '%/notification?page%'
+        OR LOWER(apply_url) LIKE '%cepqip.iitd.ac.in%'
+        OR LOWER(apply_url) LIKE '%/~%'
+        OR LOWER(apply_url) LIKE '%news.ncbs.res.in%'
+        OR LOWER(apply_url) LIKE '%/admissions/%'
+        OR LOWER(apply_url) LIKE '%/admissions?%'
     `)
     if (noiseDel.rowCount && noiseDel.rowCount > 0) {
       console.log(`[PoojaIndia] Noise sweep removed ${noiseDel.rowCount} records`)
@@ -928,6 +1029,23 @@ router.post('/cleanup', async (_req: Request, res: Response) => {
         OR LOWER(title) LIKE '%r&d staff%' OR LOWER(title) LIKE '%staff directory%'
         OR LOWER(title) LIKE '%fulbright%' OR LOWER(title) LIKE '%nehru fellowship%'
         OR LOWER(title) LIKE '%research council of%'
+        OR LOWER(title) LIKE '%fellowship%'
+        OR LOWER(title) LIKE '%colloquium%'
+        OR LOWER(title) LIKE '%walk-in%'
+        OR LOWER(title) LIKE '%research highlights%'
+        OR LOWER(title) LIKE '%right to information%'
+        OR LOWER(title) LIKE '%forthcoming events%'
+        OR LOWER(title) LIKE '%career advancement scheme%'
+        OR LOWER(title) LIKE '%trial coordinator%'
+        OR LOWER(title) LIKE '%visiting faculty%'
+        OR LOWER(title) LIKE '%skill development%'
+        OR LOWER(title) LIKE '%administrative and technical cadre%'
+        OR LOWER(title) LIKE '%national agricultural science fund%'
+        OR LOWER(title) LIKE '%admission portal%'
+        OR LOWER(title) LIKE '%admissions 2026%' OR LOWER(title) LIKE '%admissions 2027%'
+        OR LOWER(title) LIKE '%spotlight%'
+        OR LOWER(title) LIKE '%purchase/work/contract%'
+        OR LOWER(title) LIKE '%[pdf]%' OR LOWER(title) LIKE '%[doc]%'
         -- Title: person names (Dr./Prof. prefix = faculty profile)
         OR title ~* '^\s*(Dr\.|Prof\.|Professor |Mr\.|Ms\.|Mrs\.)'
         -- URL: aggregator archives
@@ -935,10 +1053,12 @@ router.post('/cleanup', async (_req: Request, res: Response) => {
         OR LOWER(apply_url) LIKE '%pharmatutor.org%'
         OR LOWER(apply_url) LIKE '%biotecharticles.com%'
         OR LOWER(apply_url) LIKE '%.pdf'
-        -- URL: non-job page paths
+        OR LOWER(apply_url) LIKE '%.ashx'
+        OR LOWER(apply_url) LIKE '%.doc'
+        -- URL: non-job section paths
         OR LOWER(apply_url) LIKE '%/tenders%'
         OR LOWER(apply_url) LIKE '%active_tenders%'
-        OR LOWER(apply_url) LIKE '%/events/%'
+        OR LOWER(apply_url) LIKE '%/events%'
         OR LOWER(apply_url) LIKE '%/event-%'
         OR LOWER(apply_url) LIKE '%eventsbyweek%'
         OR LOWER(apply_url) LIKE '%/announcements%'
@@ -948,12 +1068,39 @@ router.post('/cleanup', async (_req: Request, res: Response) => {
         OR LOWER(apply_url) LIKE '%technical-group%'
         OR LOWER(apply_url) LIKE '%/people/%'
         OR LOWER(apply_url) LIKE '%/faculty%'
-        OR LOWER(apply_url) LIKE '%/FacultyList%'
-        OR LOWER(apply_url) LIKE '%facultylist%'
+        OR LOWER(apply_url) LIKE '%/facultylist%'
         OR LOWER(apply_url) LIKE '%/staff/%'
         OR LOWER(apply_url) LIKE '%/rd-staff%'
         OR LOWER(apply_url) LIKE '%/seminar%'
         OR LOWER(apply_url) LIKE '%/workshop%'
+        OR LOWER(apply_url) LIKE '%/happenings%'
+        OR LOWER(apply_url) LIKE '%/home/allnews%'
+        OR LOWER(apply_url) LIKE '%/home/researchinnovations%'
+        OR LOWER(apply_url) LIKE '%/home/intellectualproperty%'
+        OR LOWER(apply_url) LIKE '%/rc-page%'
+        OR LOWER(apply_url) LIKE '%/rc-whats-new%'
+        OR LOWER(apply_url) LIKE '%garden-page%'
+        OR LOWER(apply_url) LIKE '%/research-highlights%'
+        OR LOWER(apply_url) LIKE '%/infra.aspx%'
+        OR LOWER(apply_url) LIKE '%/purch_ord%'
+        OR LOWER(apply_url) LIKE '%employeeprofile%'
+        OR LOWER(apply_url) LIKE '%/phd-program/%'
+        OR LOWER(apply_url) LIKE '%/forthcominginterviews%'
+        OR LOWER(apply_url) LIKE '%/forthcomarchive%'
+        OR LOWER(apply_url) LIKE '%/results?%'
+        OR LOWER(apply_url) LIKE '%/syllabus%'
+        OR LOWER(apply_url) LIKE '%/bulletins%'
+        OR LOWER(apply_url) LIKE '%/notice-board%'
+        OR LOWER(apply_url) LIKE '%/old-question-paper%'
+        OR LOWER(apply_url) LIKE '%/marks-information%'
+        OR LOWER(apply_url) LIKE '%questionpaper%'
+        OR LOWER(apply_url) LIKE '%newseventdetail%'
+        OR LOWER(apply_url) LIKE '%/notification?page%'
+        OR LOWER(apply_url) LIKE '%cepqip.iitd.ac.in%'
+        OR LOWER(apply_url) LIKE '%/~%'
+        OR LOWER(apply_url) LIKE '%news.ncbs.res.in%'
+        OR LOWER(apply_url) LIKE '%/admissions/%'
+        OR LOWER(apply_url) LIKE '%/admissions?%'
       RETURNING id
     `)
     res.json({ deleted: result.rows.length, message: `Deleted ${result.rows.length} noisy records from pooja_india_monitor_jobs` })
