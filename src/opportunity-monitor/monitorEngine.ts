@@ -26,6 +26,40 @@ const HARD_FILTER_TERMS = [
   'junior', 'admin', 'administrative', 'coordinator', 'assistant'
 ]
 
+// Noise filter: discard non-job content (events, notices, non-science roles, etc.)
+// These patterns appear in scraped Indian institute pages and should never be stored.
+const NOISE_FILTER_TERMS = [
+  // Event / workshop announcements
+  'workshop', 'seminar', 'conference', 'symposium', 'webinar', 'colloquium',
+  'talk by', 'invited talk', 'lecture by', 'annual meeting',
+  // Exam / result / circular noise
+  'merit list', 'answer key', 'question paper', 'old question', 'previous year',
+  'written test', 'exam schedule', 'interview schedule', 'exam notice',
+  'syllabus for', 'tender', 'e-tender', 'rate contract', 'quotation',
+  // Non-science administrative roles
+  'librarian', 'accountant', 'finance officer', 'accounts officer',
+  'registrar', 'deputy registrar', 'assistant registrar',
+  'store keeper', 'storekeeper', 'purchase officer', 'purchase assistant',
+  'housekeeping', 'sanitation', 'peon', 'multi tasking staff', 'mts ',
+  'computer operator', 'data entry operator', 'data entry', 'typist', 'stenographer',
+  'electrician', 'plumber', 'driver', 'ldc ', 'lower division clerk',
+  'upper division clerk', 'udc ', 'canteen attendant', 'security guard',
+  // Closed/applied status noise
+  'last date extended', 'walk-in interview', 'walk in interview',
+  'applications are invited', 'applications invited',
+  // Admission notices
+  'admission notice', 'admission fee', 'fee structure', 'prospectus',
+]
+
+// URL noise patterns — skip results whose URL suggests non-job content
+const URL_NOISE_PATTERNS = [
+  '.pdf', '/events/', '/event/', '/seminar/', '/workshop/', '/conference/',
+  '/notices/', '/notice/', '/circular/', '/tender/', '/results/', '/result/',
+  '/admissions/', '/admission/', '/exam/', '/syllabus/',
+  'faculty-profile', 'staff-profile', '/people/', '/person/',
+  'profile.aspx', 'profile.php', '/directory/', 'faculty-directory',
+]
+
 // Tier 1 orgs for +1 suitability bonus
 const TIER1_ORG_NAMES = new Set([
   'Harvard Medical School', 'Stanford Medicine', 'MIT Biology', 'UCSF',
@@ -125,6 +159,19 @@ function passesHardFilter(title: string): boolean {
   const t = title.toLowerCase()
   if (t.includes('assistant professor')) return true
   return !HARD_FILTER_TERMS.some(term => t.includes(term))
+}
+
+// Noise filter: rejects event announcements, admin notices, non-science roles
+function passesNoiseFilter(title: string): boolean {
+  const t = title.toLowerCase()
+  return !NOISE_FILTER_TERMS.some(term => t.includes(term))
+}
+
+// URL filter: rejects PDFs, profile pages, event/notice pages
+function passesUrlFilter(url: string): boolean {
+  if (!url) return true
+  const u = url.toLowerCase()
+  return !URL_NOISE_PATTERNS.some(pat => u.includes(pat))
 }
 
 // Pooja suitability scorer (0–5 scale). Jobs must score ≥ 3 to be stored.
@@ -330,9 +377,11 @@ export async function scanViaWebSearch(org: MonitorOrg): Promise<ScannedJob[]> {
 
       // Strict gates for organic (could be news/blog/aggregator)
       if (!isDirectJobUrl(link)) continue
+      if (!passesUrlFilter(link)) continue       // PDF / profile / notice pages
       if (!hasJobLanguage(snippet)) continue
       if (!isRelevant(title, snippet)) continue
       if (!passesHardFilter(title)) continue
+      if (!passesNoiseFilter(title)) continue    // event / admin role / circular noise
       if (isAgencySpam(title, snippet)) continue
 
       const suitability = poojaSuitabilityScore(title, snippet, org.name)
@@ -602,8 +651,59 @@ export async function runFullScan(): Promise<void> {
 
     console.log('[Monitor] Advisory lock acquired, starting full scan...')
 
+    // ── Retroactive DB cleanup — purge noise from all existing records ────────
+    // Runs on every scan cycle so old dirty data is cleared without a manual migration.
+    const purged = await pool.query(`
+      UPDATE monitor_jobs SET is_active = false
+      WHERE is_active = true AND (
+        -- Title: event / workshop / announcement noise
+        title ILIKE '%workshop%' OR title ILIKE '%seminar%'
+        OR title ILIKE '%conference%' OR title ILIKE '%symposium%'
+        OR title ILIKE '%webinar%' OR title ILIKE '%colloquium%'
+        -- Title: exam / result / circular noise
+        OR title ILIKE '%merit list%' OR title ILIKE '%answer key%'
+        OR title ILIKE '%question paper%' OR title ILIKE '%written test%'
+        OR title ILIKE '%tender%' OR title ILIKE '%syllabus for%'
+        OR title ILIKE '%interview schedule%' OR title ILIKE '%exam notice%'
+        OR title ILIKE '%rate contract%' OR title ILIKE '%quotation%'
+        -- Title: non-science administrative roles
+        OR title ILIKE '%librarian%' OR title ILIKE '%accountant%'
+        OR title ILIKE '%finance officer%' OR title ILIKE '%registrar%'
+        OR title ILIKE '%store keeper%' OR title ILIKE '%storekeeper%'
+        OR title ILIKE '%housekeeping%' OR title ILIKE '%sanitation%'
+        OR title ILIKE '% peon %' OR title ILIKE '%peon)'
+        OR title ILIKE '%multi tasking staff%' OR title ILIKE '% mts %'
+        OR title ILIKE '%computer operator%' OR title ILIKE '%data entry%'
+        OR title ILIKE '%stenographer%' OR title ILIKE '%electrician%'
+        OR title ILIKE '%plumber%' OR title ILIKE '% driver%'
+        OR title ILIKE '%lower division clerk%' OR title ILIKE '% ldc %'
+        OR title ILIKE '%security guard%' OR title ILIKE '%canteen%'
+        -- Title: walk-in / admission notices
+        OR title ILIKE '%walk-in interview%' OR title ILIKE '%walk in interview%'
+        OR title ILIKE '%admission notice%' OR title ILIKE '%admission fee%'
+        OR title ILIKE '%last date extended%'
+        -- URL: PDF documents
+        OR apply_url ILIKE '%.pdf'
+        -- URL: event / notice / profile pages
+        OR apply_url ILIKE '%/events/%' OR apply_url ILIKE '%/event/%'
+        OR apply_url ILIKE '%/seminar/%' OR apply_url ILIKE '%/workshop/%'
+        OR apply_url ILIKE '%/notices/%' OR apply_url ILIKE '%/notice/%'
+        OR apply_url ILIKE '%/circular/%' OR apply_url ILIKE '%/tender/%'
+        OR apply_url ILIKE '%/results/%' OR apply_url ILIKE '%/result/%'
+        OR apply_url ILIKE '%/admissions/%' OR apply_url ILIKE '%/admission/%'
+        OR apply_url ILIKE '%faculty-profile%' OR apply_url ILIKE '%/people/%'
+        OR apply_url ILIKE '%/directory/%' OR apply_url ILIKE '%/exam/%'
+        -- Age: listings older than 30 days
+        OR detected_at < NOW() - INTERVAL '30 days'
+      )
+      RETURNING id
+    `)
+    if (purged.rows.length > 0) {
+      console.log(`[Monitor] Retroactive cleanup: deactivated ${purged.rows.length} noisy/stale records`)
+    }
+
     // Cost optimisation: scan 15 orgs per run (oldest-first).
-    // All 85 orgs rotate over ~6 days.
+    // All 85+ orgs rotate over ~6 days.
     const orgs = await pool.query(
       `SELECT id, name FROM monitor_orgs
        WHERE is_active = true

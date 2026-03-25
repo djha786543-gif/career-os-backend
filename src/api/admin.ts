@@ -169,4 +169,53 @@ router.post('/revalidate-academia', (req: Request, res: Response) => {
   res.redirect(307, '/api/admin/revalidate-all')
 })
 
+// POST /api/admin/cleanup-jobs
+// Immediately purges noisy/stale records from monitor_jobs.
+// Equivalent to the cleanup that runs at the start of every scheduled scan.
+router.post('/cleanup-jobs', async (_req: Request, res: Response) => {
+  try {
+    const result = await pool.query(`
+      UPDATE monitor_jobs SET is_active = false
+      WHERE is_active = true AND (
+        title ILIKE '%workshop%' OR title ILIKE '%seminar%'
+        OR title ILIKE '%conference%' OR title ILIKE '%symposium%'
+        OR title ILIKE '%webinar%' OR title ILIKE '%colloquium%'
+        OR title ILIKE '%merit list%' OR title ILIKE '%answer key%'
+        OR title ILIKE '%question paper%' OR title ILIKE '%written test%'
+        OR title ILIKE '%tender%' OR title ILIKE '%syllabus for%'
+        OR title ILIKE '%interview schedule%' OR title ILIKE '%exam notice%'
+        OR title ILIKE '%rate contract%' OR title ILIKE '%quotation%'
+        OR title ILIKE '%librarian%' OR title ILIKE '%accountant%'
+        OR title ILIKE '%finance officer%' OR title ILIKE '%registrar%'
+        OR title ILIKE '%store keeper%' OR title ILIKE '%storekeeper%'
+        OR title ILIKE '%housekeeping%' OR title ILIKE '%sanitation%'
+        OR title ILIKE '% peon %' OR title ILIKE '%peon)'
+        OR title ILIKE '%multi tasking staff%' OR title ILIKE '% mts %'
+        OR title ILIKE '%computer operator%' OR title ILIKE '%data entry%'
+        OR title ILIKE '%stenographer%' OR title ILIKE '%electrician%'
+        OR title ILIKE '%plumber%' OR title ILIKE '% driver%'
+        OR title ILIKE '%lower division clerk%' OR title ILIKE '% ldc %'
+        OR title ILIKE '%security guard%' OR title ILIKE '%canteen%'
+        OR title ILIKE '%walk-in interview%' OR title ILIKE '%walk in interview%'
+        OR title ILIKE '%admission notice%' OR title ILIKE '%admission fee%'
+        OR title ILIKE '%last date extended%'
+        OR apply_url ILIKE '%.pdf'
+        OR apply_url ILIKE '%/events/%' OR apply_url ILIKE '%/event/%'
+        OR apply_url ILIKE '%/seminar/%' OR apply_url ILIKE '%/workshop/%'
+        OR apply_url ILIKE '%/notices/%' OR apply_url ILIKE '%/notice/%'
+        OR apply_url ILIKE '%/circular/%' OR apply_url ILIKE '%/tender/%'
+        OR apply_url ILIKE '%/results/%' OR apply_url ILIKE '%/result/%'
+        OR apply_url ILIKE '%/admissions/%' OR apply_url ILIKE '%/admission/%'
+        OR apply_url ILIKE '%faculty-profile%' OR apply_url ILIKE '%/people/%'
+        OR apply_url ILIKE '%/directory/%' OR apply_url ILIKE '%/exam/%'
+        OR detected_at < NOW() - INTERVAL '30 days'
+      )
+      RETURNING id
+    `)
+    res.json({ purged: result.rows.length, message: `Deactivated ${result.rows.length} noisy/stale records` })
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message })
+  }
+})
+
 export default router
